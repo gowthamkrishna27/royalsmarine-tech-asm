@@ -1,0 +1,118 @@
+export const API_BASE = '/api/v1';
+
+export const ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  ADMIN: 'admin',
+  SALES_MANAGER: 'sales_manager',
+  SALES_EXECUTIVE: 'sales_executive',
+  BACKEND_OPS: 'backend_ops',
+  MANAGEMENT: 'management',
+};
+
+export const OPPORTUNITY_STAGES = [
+  { value: 'identification', label: 'Identification', color: 'gray' },
+  { value: 'qualified', label: 'Qualified', color: 'blue' },
+  { value: 'evaluation', label: 'Evaluation', color: 'purple' },
+  { value: 'quotation_sent', label: 'Quotation Sent', color: 'yellow' },
+  { value: 'negotiation', label: 'Negotiation', color: 'orange' },
+  { value: 'finalization', label: 'Finalization', color: 'indigo' },
+  { value: 'won', label: 'Won', color: 'green' },
+  { value: 'lost', label: 'Lost', color: 'red' },
+];
+
+export const MEETING_TYPES = [
+  { value: 'cold_call', label: 'Cold Call' },
+  { value: 'follow_up', label: 'Follow-up' },
+  { value: 'demo', label: 'Demo' },
+  { value: 'negotiation', label: 'Negotiation' },
+  { value: 'payment_follow_up', label: 'Payment Follow-up' },
+  { value: 'order_discussion', label: 'Order Discussion' },
+  { value: 'other', label: 'Other' },
+];
+
+export const CLIENT_TYPES = [
+  { value: 'existing_client', label: 'Existing Farmer' },
+  { value: 'new_prospect', label: 'New Prospect' },
+  { value: 'retailer', label: 'Retailer' },
+  { value: 'corporate', label: 'Corporate' },
+  { value: 'distributor', label: 'Distributor' },
+  { value: 'government', label: 'Government' },
+  { value: 'other', label: 'Other' },
+];
+
+export const VISIT_APPROVAL = {
+  pending: { label: 'Pending', badge: 'badge-yellow' },
+  approved: { label: 'Approved', badge: 'badge-green' },
+  rejected: { label: 'Rejected', badge: 'badge-red' },
+};
+
+export const FOLLOWUP_PRIORITY = {
+  low: { label: 'Low', badge: 'badge-gray' },
+  medium: { label: 'Medium', badge: 'badge-blue' },
+  high: { label: 'High', badge: 'badge-red' },
+};
+
+export const FOLLOWUP_STATUS = {
+  pending: { label: 'Pending', badge: 'badge-yellow' },
+  completed: { label: 'Completed', badge: 'badge-green' },
+  overdue: { label: 'Overdue', badge: 'badge-red' },
+  cancelled: { label: 'Cancelled', badge: 'badge-gray' },
+};
+
+export const QUOTATION_STATUS = {
+  draft: 'badge-gray',
+  sent: 'badge-blue',
+  under_discussion: 'badge-yellow',
+  accepted: 'badge-green',
+  rejected: 'badge-red',
+  converted: 'badge-purple',
+  lost: 'badge-red',
+};
+
+export const PO_STATUS = {
+  received: 'badge-blue',
+  processing: 'badge-yellow',
+  dispatched: 'badge-purple',
+  completed: 'badge-green',
+  cancelled: 'badge-red',
+};
+
+export const POND_STATUSES = [
+  { value: 'active', label: 'Active', color: 'green' },
+  { value: 'fallow', label: 'Fallow / Empty', color: 'gray' },
+  { value: 'nursery', label: 'Nursery', color: 'blue' },
+  { value: 'harvested', label: 'Harvested', color: 'yellow' },
+  { value: 'inactive', label: 'Inactive', color: 'red' },
+];
+
+export const CULTURE_TYPES = [
+  'Vannamei (Whiteleg Shrimp)',
+  'Black Tiger Shrimp',
+  'Freshwater Prawn (Scampi)',
+  'Fish (Tilapia)',
+  'Fish (Rohu / Catla / Carp)',
+  'Fish (Pangasius / Catfish)',
+  'Fish (Seabass / Bhetki)',
+  'Polyculture',
+  'Other',
+];
+
+export const WATER_TYPES = [
+  'Brackish Water',
+  'Freshwater',
+  'Saline / Sea Water',
+  'Borewell / Ground Water',
+];
+
+export const WATER_SOURCES = [
+  { value: 'bore', label: 'Bore' },
+  { value: 'creek', label: 'Creek' },
+  { value: 'both', label: 'Both' },
+];
+
+export const SOIL_TYPES = [
+  { value: 'loam', label: 'Loam' },
+  { value: 'clay', label: 'Clay' },
+  { value: 'sandy', label: 'Sandy' },
+];
+
