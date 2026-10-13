@@ -309,7 +309,7 @@ export default function VisitForm() {
     };
   }, [partialHarvests, finalHarvest, feedingDetails.cumulative_feed, feedingDetails.seed_quantity]);
 
-  // GPS Capture
+  // GPS Capture helper
   const captureGPS = async () => {
     setGpsLoading(true);
     try {
@@ -321,24 +321,45 @@ export default function VisitForm() {
       setValue('longitude', coords.lng);
       setValue('gps_captured_at', pos.timestamp);
 
-      const addr = await gpsService.reverseGeocode(coords.lat, coords.lng);
-      setValue('gps_address', addr);
-      toast.success('Location captured');
-    } catch {
-      toast.error('Could not get location. Enter denied reason if needed.');
+      gpsService.reverseGeocode(coords.lat, coords.lng).then(addr => {
+        setValue('gps_address', addr);
+      }).catch(() => {});
+
+      return coords;
+    } catch (err) {
+      console.warn('GPS auto-capture:', err?.message || err);
+      return null;
     } finally {
       setGpsLoading(false);
     }
   };
 
+  // Silently initiate background GPS capture on load for new visits
+  useEffect(() => {
+    if (!isEdit && !gpsCoords) {
+      captureGPS();
+    }
+  }, []);
+
   const onSubmit = async (data) => {
-    if (!gpsCoords && !data.gps_denied_reason) {
-      toast.error('Please capture GPS or provide reason');
-      return;
+    setLoading(true);
+
+    // Auto-capture GPS if not already present
+    let activeCoords = gpsCoords;
+    if (!activeCoords) {
+      try {
+        activeCoords = await captureGPS();
+      } catch {
+        activeCoords = null;
+      }
     }
 
     const payload = {
       ...data,
+      latitude: activeCoords?.lat || data.latitude || null,
+      longitude: activeCoords?.lng || data.longitude || null,
+      gps_captured_at: data.gps_captured_at || (activeCoords ? new Date().toISOString() : null),
+      gps_denied_reason: activeCoords ? null : (data.gps_denied_reason || 'Location unavailable'),
       water_quality: showWaterQuality ? waterQuality : null,
       feeding_details: showFeeding ? feedingDetails : null,
       medication_details: showMedication ? medications : null,
@@ -349,7 +370,6 @@ export default function VisitForm() {
       } : null,
     };
 
-    setLoading(true);
     try {
       if (isEdit) {
         await visitApi.update(id, payload);
@@ -427,34 +447,20 @@ export default function VisitForm() {
                 </select>
               </div>
 
-              {/* Inline GPS */}
-              <div className="flex items-center gap-2 self-end">
-                <button
-                  type="button"
-                  onClick={captureGPS}
-                  disabled={gpsLoading}
-                  className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-                >
-                  {gpsLoading ? <Spinner size="xs" /> : <MapPinIcon className="w-3.5 h-3.5 text-gray-500" />}
-                  <span>{gpsCoords ? 'Location Set ✓' : 'Capture GPS'}</span>
-                </button>
-                {gpsCoords && (
-                  <span className="text-xs text-gray-500 font-mono">
-                    {gpsCoords.lat.toFixed(4)}, {gpsCoords.lng.toFixed(4)}
+              {/* Automatic GPS Indicator */}
+              <div className="flex items-center gap-1.5 self-end text-xs text-gray-500">
+                <MapPinIcon className="w-3.5 h-3.5 text-gray-400" />
+                {gpsCoords ? (
+                  <span className="font-mono text-gray-600">
+                    {gpsCoords.lat.toFixed(4)}, {gpsCoords.lng.toFixed(4)} ✓
+                  </span>
+                ) : (
+                  <span className="text-gray-400">
+                    {gpsLoading ? 'Acquiring GPS...' : 'Auto-captured on submit'}
                   </span>
                 )}
               </div>
             </div>
-
-            {!gpsCoords && (
-              <div className="pt-1">
-                <input
-                  {...register('gps_denied_reason')}
-                  className="input text-xs py-1 max-w-sm"
-                  placeholder="Reason if GPS denied..."
-                />
-              </div>
-            )}
           </div>
         </div>
 
