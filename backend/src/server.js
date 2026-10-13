@@ -70,7 +70,7 @@ require('./jobs/followupJob');
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  logger.info(`Rupa CRM API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  logger.info(`Royals Marine API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 });
 
 module.exports = app;

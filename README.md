@@ -1,14 +1,14 @@
-# TurfCRM — Own Your Territory
+# Royals Marine — Aquaculture & Field CRM
 
-**TurfCRM** is a smart, open-source Field Sales CRM built for trading and distribution businesses. Track visits, manage pipelines, automate follow-ups, import Tally billing data, and generate brand-wise reports — all in one place.
+**Royals Marine** is a smart Field Sales and Aquaculture CRM built for hatchery, feed, and distribution businesses. Track visits, farmer tanks, pipelines, follow-ups, billing data, and generate brand-wise reports — all in one place.
 
 > Built for field sales teams that are serious about owning their territory.
 
 ---
 
-## Why TurfCRM?
+## Why Royals Marine?
 
-Most CRMs are built for SaaS companies. TurfCRM is built for **field sales teams** — the ones visiting clients daily, managing distributors, tracking orders, and reporting to brand partners.
+Most CRMs are built for SaaS companies. Royals Marine is built for **field sales and aquaculture teams** — the ones visiting farmers daily, managing distributors, tracking orders, and reporting to brand partners.
 
 - 📍 **GPS visit tracking** — capture exact location on every client visit
 - 📊 **Brand-wise pipeline** — report to each brand partner with real data
@@ -69,7 +69,7 @@ Most CRMs are built for SaaS companies. TurfCRM is built for **field sales teams
 ## Project Structure
 
 ```
-TurfCRM/
+royalsmarine/
 ├── backend/
 │   ├── src/
 │   │   ├── config/          # DB, JWT, Multer config
@@ -146,18 +146,18 @@ Login: `admin@example.com` / `Admin@123`
 
 ```bash
 # 1. Upload project to server
-scp -r TurfCRM/ root@YOUR_VPS_IP:/var/www/
+scp -r royalsmarine/ root@YOUR_VPS_IP:/var/www/
 
 # 2. SSH to server
 ssh root@YOUR_VPS_IP
 
 # 3. Configure environment
-cd /var/www/TurfCRM/backend
+cd /var/www/royalsmarine/backend
 cp .env.example .env
 nano .env   # Set DB password, JWT secrets, domain
 
 # 4. Run full setup
-bash /var/www/TurfCRM/docs/deploy.sh
+bash /var/www/royalsmarine/docs/deploy.sh
 
 # 5. Run migrations
 node src/database/migrate.js
@@ -208,4 +208,4 @@ MIT — free to use, modify and deploy.
 
 ---
 
-*TurfCRM — Own Your Territory* 🎯
+*Royals Marine — Aquaculture & Field CRM* 🌊

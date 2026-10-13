@@ -1,7 +1,7 @@
 {
-  "name": "rupa-crm-backend",
+  "name": "royalsmarine-backend",
   "version": "1.0.0",
-  "description": "Rupa Enterprises CRM Backend API",
+  "description": "Royals Marine CRM Backend API",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
