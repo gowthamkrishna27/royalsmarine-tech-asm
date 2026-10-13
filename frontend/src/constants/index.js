@@ -21,11 +21,14 @@ export const OPPORTUNITY_STAGES = [
 ];
 
 export const MEETING_TYPES = [
-  { value: 'cold_call', label: 'Cold Call' },
+  { value: 'casual', label: 'Casual Visit' },
+  { value: 'water_quality', label: 'Water Quality' },
+  { value: 'feeding_details', label: 'Feeding Details' },
+  { value: 'medication_details', label: 'Medication & Treatments' },
+  { value: 'harvest_details', label: 'Harvest Details' },
+  { value: 'all', label: 'All Details (Full Inspection)' },
   { value: 'follow_up', label: 'Follow-up' },
-  { value: 'demo', label: 'Demo' },
-  { value: 'negotiation', label: 'Negotiation' },
-  { value: 'payment_follow_up', label: 'Payment Follow-up' },
+  { value: 'cold_call', label: 'Cold Call' },
   { value: 'order_discussion', label: 'Order Discussion' },
   { value: 'other', label: 'Other' },
 ];

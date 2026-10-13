@@ -3,7 +3,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { visitApi, clientApi } from '../../services/api';
-import { MEETING_TYPES } from '../../constants';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
 import { MapPinIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -69,10 +68,10 @@ export default function VisitForm() {
     remarks: '',
   });
 
-  // 5. Medication Details state (multiple entries per tank)
+  // 5. Medication Details state
   const [medications, setMedications] = useState([]);
 
-  // 6. Harvest Details state (up to 3 partial + 1 final)
+  // 6. Harvest Details state
   const [partialHarvests, setPartialHarvests] = useState([]);
   const [finalHarvest, setFinalHarvest] = useState({
     date: '',
@@ -86,12 +85,19 @@ export default function VisitForm() {
     defaultValues: {
       visit_date: new Date().toISOString().split('T')[0],
       visit_time: new Date().toTimeString().slice(0, 5),
-      meeting_type: 'follow_up',
+      meeting_type: 'casual',
     }
   });
 
   const clientId = watch('client_id');
   const visitDate = watch('visit_date');
+  const meetingType = watch('meeting_type') || 'casual';
+
+  // Conditional visibility based on meeting/visit type
+  const showWaterQuality = meetingType === 'water_quality' || meetingType === 'all';
+  const showFeeding = meetingType === 'feeding_details' || meetingType === 'all';
+  const showMedication = meetingType === 'medication_details' || meetingType === 'all';
+  const showHarvest = meetingType === 'harvest_details' || meetingType === 'all';
 
   // Load clients
   const { data: clients } = useQuery({
@@ -333,14 +339,14 @@ export default function VisitForm() {
 
     const payload = {
       ...data,
-      water_quality: waterQuality,
-      feeding_details: feedingDetails,
-      medication_details: medications,
-      harvest_details: {
+      water_quality: showWaterQuality ? waterQuality : null,
+      feeding_details: showFeeding ? feedingDetails : null,
+      medication_details: showMedication ? medications : null,
+      harvest_details: showHarvest ? {
         partial_harvests: partialHarvests,
         final_harvest: finalHarvest,
         derived: harvestDerived,
-      },
+      } : null,
     };
 
     setLoading(true);
@@ -405,25 +411,24 @@ export default function VisitForm() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="label text-[11px] mb-1">Meeting Type <span className="text-red-500">*</span></label>
-                <select {...register('meeting_type', { required: true })} className="input text-xs py-1">
-                  {MEETING_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Person Met</label>
-                <input {...register('person_met')} className="input text-xs py-1" placeholder="Name" />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Designation</label>
-                <input {...register('designation_met')} className="input text-xs py-1" placeholder="e.g. Owner" />
-              </div>
             </div>
 
-            {/* Inline GPS Location */}
-            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
+            {/* Meeting Type & GPS Row */}
+            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="w-full sm:w-80">
+                <label className="label text-[11px] mb-1">Meeting / Visit Type</label>
+                <select {...register('meeting_type')} className="input text-xs py-1">
+                  <option value="casual">Casual Visit</option>
+                  <option value="water_quality">Water Quality</option>
+                  <option value="feeding_details">Feeding Details</option>
+                  <option value="medication_details">Medication & Treatments</option>
+                  <option value="harvest_details">Harvest Details</option>
+                  <option value="all">All Details (Full Inspection)</option>
+                </select>
+              </div>
+
+              {/* Inline GPS */}
+              <div className="flex items-center gap-2 self-end">
                 <button
                   type="button"
                   onClick={captureGPS}
@@ -439,496 +444,507 @@ export default function VisitForm() {
                   </span>
                 )}
               </div>
-              {!gpsCoords && (
+            </div>
+
+            {!gpsCoords && (
+              <div className="pt-1">
                 <input
                   {...register('gps_denied_reason')}
-                  className="input text-xs py-1 max-w-xs"
+                  className="input text-xs py-1 max-w-sm"
                   placeholder="Reason if GPS denied..."
                 />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Water Quality (Only displays when selected) */}
+        {showWaterQuality && (
+          <div className="card">
+            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Water Quality</h3></div>
+            <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+              <div>
+                <label className="label text-[11px] mb-1">Test Date</label>
+                <input
+                  type="date"
+                  value={waterQuality.date || ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, date: e.target.value }))}
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">DOC</label>
+                <input
+                  type="number"
+                  value={waterQuality.doc ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, doc: e.target.value }))}
+                  placeholder="DOC"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Salinity (ppt)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={waterQuality.salinity ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, salinity: e.target.value }))}
+                  placeholder="ppt"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">pH</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={waterQuality.ph ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, ph: e.target.value }))}
+                  placeholder="pH"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Alkalinity (ppm)</label>
+                <input
+                  type="number"
+                  value={waterQuality.alkalinity ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, alkalinity: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Hardness (ppm)</label>
+                <input
+                  type="number"
+                  value={waterQuality.hardness ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, hardness: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Ammonia (ppm)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={waterQuality.ammonia ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, ammonia: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Nitrite (ppm)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={waterQuality.nitrite ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, nitrite: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">DO (ppm)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={waterQuality.dissolved_oxygen ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, dissolved_oxygen: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Potassium (K)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={waterQuality.potassium ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, potassium: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">H₂S (ppm)</label>
+                <input
+                  type="number"
+                  step="0.001"
+                  value={waterQuality.hydrogen_sulphide ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, hydrogen_sulphide: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Chlorine (Cl)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={waterQuality.chlorine ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, chlorine: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Iron (Fe)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={waterQuality.iron ?? ''}
+                  onChange={e => setWaterQuality(p => ({ ...p, iron: e.target.value }))}
+                  placeholder="ppm"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Water Colour</label>
+                <select
+                  value={waterQuality.water_colour || 'Light Green'}
+                  onChange={e => setWaterQuality(p => ({ ...p, water_colour: e.target.value }))}
+                  className="input text-xs py-1"
+                >
+                  {WATER_COLOUR_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Feeding Details (Only displays when selected) */}
+        {showFeeding && (
+          <div className="card">
+            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Feeding Details</h3></div>
+            <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
+              <div>
+                <label className="label text-[11px] mb-1">DOC</label>
+                <input
+                  type="number"
+                  value={feedingDetails.doc ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, doc: e.target.value }))}
+                  placeholder="DOC"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Date</label>
+                <input
+                  type="date"
+                  value={feedingDetails.date || ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, date: e.target.value }))}
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Seed Qty (Lakhs)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={feedingDetails.seed_quantity ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, seed_quantity: e.target.value }))}
+                  placeholder="Lakhs"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">ABW (g)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={feedingDetails.abw ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, abw: e.target.value }))}
+                  placeholder="grams"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Daily Feed (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={feedingDetails.daily_feed_quantity ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, daily_feed_quantity: e.target.value }))}
+                  placeholder="kg"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Cumulative Feed (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={feedingDetails.cumulative_feed ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, cumulative_feed: e.target.value }))}
+                  placeholder="kg"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Total Biomass (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={feedingDetails.total_biomass ?? ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, total_biomass: e.target.value }))}
+                  placeholder="kg"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">FCR (Auto)</label>
+                <input
+                  type="text"
+                  readOnly
+                  value={feedingDetails.fcr || '—'}
+                  className="input text-xs py-1 bg-gray-50 text-gray-700 font-mono"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Check-Tray Qty</label>
+                <input
+                  type="text"
+                  value={feedingDetails.check_tray_feed_quantity || ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, check_tray_feed_quantity: e.target.value }))}
+                  placeholder="e.g. 150g"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div>
+                <label className="label text-[11px] mb-1">Check-Tray Obs. Time</label>
+                <input
+                  type="text"
+                  value={feedingDetails.check_tray_observation_time || ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, check_tray_observation_time: e.target.value }))}
+                  placeholder="e.g. 1.5 hrs"
+                  className="input text-xs py-1"
+                />
+              </div>
+              <div className="col-span-2 sm:col-span-4 lg:col-span-5">
+                <input
+                  type="text"
+                  value={feedingDetails.remarks || ''}
+                  onChange={e => setFeedingDetails(p => ({ ...p, remarks: e.target.value }))}
+                  placeholder="Feeding remarks..."
+                  className="input text-xs py-1"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Medication Details (Only displays when selected) */}
+        {showMedication && (
+          <div className="card">
+            <div className="card-header flex items-center justify-between py-2.5 px-4">
+              <h3 className="font-semibold text-gray-900 text-sm">Medication & Treatments</h3>
+              <button
+                type="button"
+                onClick={addMedication}
+                className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
+              >
+                <PlusIcon className="w-3 h-3" />
+                <span>Add Entry</span>
+              </button>
+            </div>
+            <div className="card-body p-4 space-y-2">
+              {medications.length === 0 ? (
+                <p className="text-xs text-gray-400 italic">No medication entries added. Click &quot;Add Entry&quot; to add.</p>
+              ) : (
+                medications.map((med, idx) => (
+                  <div key={med.id || idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-center p-2 rounded-lg bg-gray-50 border border-gray-100">
+                    <select
+                      value={med.treatment_type || 'preventive'}
+                      onChange={e => updateMedication(idx, 'treatment_type', e.target.value)}
+                      className="input text-xs py-1"
+                    >
+                      <option value="preventive">Preventive</option>
+                      <option value="curative">Curative</option>
+                    </select>
+
+                    <select
+                      value={med.category || 'probiotics'}
+                      onChange={e => updateMedication(idx, 'category', e.target.value)}
+                      className="input text-xs py-1"
+                    >
+                      {MEDICATION_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+
+                    <input
+                      type="text"
+                      value={med.product_name || ''}
+                      onChange={e => updateMedication(idx, 'product_name', e.target.value)}
+                      placeholder="Product name"
+                      className="input text-xs py-1"
+                    />
+
+                    <input
+                      type="text"
+                      value={med.dosage || ''}
+                      onChange={e => updateMedication(idx, 'dosage', e.target.value)}
+                      placeholder="Dosage"
+                      className="input text-xs py-1"
+                    />
+
+                    <input
+                      type="text"
+                      value={med.disease_identification || ''}
+                      onChange={e => updateMedication(idx, 'disease_identification', e.target.value)}
+                      placeholder="Disease / target"
+                      className="input text-xs py-1"
+                    />
+
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        value={med.remarks || ''}
+                        onChange={e => updateMedication(idx, 'remarks', e.target.value)}
+                        placeholder="Remarks"
+                        className="input text-xs py-1 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeMedication(idx)}
+                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                      >
+                        <TrashIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Water Quality */}
-        <div className="card">
-          <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Water Quality</h3></div>
-          <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            <div>
-              <label className="label text-[11px] mb-1">Test Date</label>
-              <input
-                type="date"
-                value={waterQuality.date || ''}
-                onChange={e => setWaterQuality(p => ({ ...p, date: e.target.value }))}
-                className="input text-xs py-1"
-              />
+        {/* Harvest Details (Only displays when selected) */}
+        {showHarvest && (
+          <div className="card">
+            <div className="card-header flex items-center justify-between py-2.5 px-4">
+              <h3 className="font-semibold text-gray-900 text-sm">Harvest Details</h3>
+              {partialHarvests.length < 3 && (
+                <button
+                  type="button"
+                  onClick={addPartialHarvest}
+                  className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
+                >
+                  <PlusIcon className="w-3 h-3" />
+                  <span>+ Partial Harvest</span>
+                </button>
+              )}
             </div>
-            <div>
-              <label className="label text-[11px] mb-1">DOC</label>
-              <input
-                type="number"
-                value={waterQuality.doc ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, doc: e.target.value }))}
-                placeholder="DOC"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Salinity (ppt)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={waterQuality.salinity ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, salinity: e.target.value }))}
-                placeholder="ppt"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">pH</label>
-              <input
-                type="number"
-                step="0.01"
-                value={waterQuality.ph ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, ph: e.target.value }))}
-                placeholder="pH"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Alkalinity (ppm)</label>
-              <input
-                type="number"
-                value={waterQuality.alkalinity ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, alkalinity: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Hardness (ppm)</label>
-              <input
-                type="number"
-                value={waterQuality.hardness ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, hardness: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Ammonia (ppm)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={waterQuality.ammonia ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, ammonia: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Nitrite (ppm)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={waterQuality.nitrite ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, nitrite: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">DO (ppm)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={waterQuality.dissolved_oxygen ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, dissolved_oxygen: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Potassium (K)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={waterQuality.potassium ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, potassium: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">H₂S (ppm)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={waterQuality.hydrogen_sulphide ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, hydrogen_sulphide: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Chlorine (Cl)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={waterQuality.chlorine ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, chlorine: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Iron (Fe)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={waterQuality.iron ?? ''}
-                onChange={e => setWaterQuality(p => ({ ...p, iron: e.target.value }))}
-                placeholder="ppm"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Water Colour</label>
-              <select
-                value={waterQuality.water_colour || 'Light Green'}
-                onChange={e => setWaterQuality(p => ({ ...p, water_colour: e.target.value }))}
-                className="input text-xs py-1"
-              >
-                {WATER_COLOUR_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
 
-        {/* Feeding Details */}
-        <div className="card">
-          <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Feeding Details</h3></div>
-          <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
-            <div>
-              <label className="label text-[11px] mb-1">DOC</label>
-              <input
-                type="number"
-                value={feedingDetails.doc ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, doc: e.target.value }))}
-                placeholder="DOC"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Date</label>
-              <input
-                type="date"
-                value={feedingDetails.date || ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, date: e.target.value }))}
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Seed Qty (Lakhs)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={feedingDetails.seed_quantity ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, seed_quantity: e.target.value }))}
-                placeholder="Lakhs"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">ABW (g)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={feedingDetails.abw ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, abw: e.target.value }))}
-                placeholder="grams"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Daily Feed (kg)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={feedingDetails.daily_feed_quantity ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, daily_feed_quantity: e.target.value }))}
-                placeholder="kg"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Cumulative Feed (kg)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={feedingDetails.cumulative_feed ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, cumulative_feed: e.target.value }))}
-                placeholder="kg"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Total Biomass (kg)</label>
-              <input
-                type="number"
-                step="0.1"
-                value={feedingDetails.total_biomass ?? ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, total_biomass: e.target.value }))}
-                placeholder="kg"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">FCR (Auto)</label>
-              <input
-                type="text"
-                readOnly
-                value={feedingDetails.fcr || '—'}
-                className="input text-xs py-1 bg-gray-50 text-gray-700 font-mono"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Check-Tray Qty</label>
-              <input
-                type="text"
-                value={feedingDetails.check_tray_feed_quantity || ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, check_tray_feed_quantity: e.target.value }))}
-                placeholder="e.g. 150g"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div>
-              <label className="label text-[11px] mb-1">Check-Tray Obs. Time</label>
-              <input
-                type="text"
-                value={feedingDetails.check_tray_observation_time || ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, check_tray_observation_time: e.target.value }))}
-                placeholder="e.g. 1.5 hrs"
-                className="input text-xs py-1"
-              />
-            </div>
-            <div className="col-span-2 sm:col-span-4 lg:col-span-5">
-              <input
-                type="text"
-                value={feedingDetails.remarks || ''}
-                onChange={e => setFeedingDetails(p => ({ ...p, remarks: e.target.value }))}
-                placeholder="Feeding remarks..."
-                className="input text-xs py-1"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Medication Details */}
-        <div className="card">
-          <div className="card-header flex items-center justify-between py-2.5 px-4">
-            <h3 className="font-semibold text-gray-900 text-sm">Medication & Treatments</h3>
-            <button
-              type="button"
-              onClick={addMedication}
-              className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-            >
-              <PlusIcon className="w-3 h-3" />
-              <span>Add Entry</span>
-            </button>
-          </div>
-          <div className="card-body p-4 space-y-2">
-            {medications.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No medication entries added.</p>
-            ) : (
-              medications.map((med, idx) => (
-                <div key={med.id || idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-center p-2 rounded-lg bg-gray-50 border border-gray-100">
-                  <select
-                    value={med.treatment_type || 'preventive'}
-                    onChange={e => updateMedication(idx, 'treatment_type', e.target.value)}
-                    className="input text-xs py-1"
-                  >
-                    <option value="preventive">Preventive</option>
-                    <option value="curative">Curative</option>
-                  </select>
-
-                  <select
-                    value={med.category || 'probiotics'}
-                    onChange={e => updateMedication(idx, 'category', e.target.value)}
-                    className="input text-xs py-1"
-                  >
-                    {MEDICATION_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-
-                  <input
-                    type="text"
-                    value={med.product_name || ''}
-                    onChange={e => updateMedication(idx, 'product_name', e.target.value)}
-                    placeholder="Product name"
-                    className="input text-xs py-1"
-                  />
-
-                  <input
-                    type="text"
-                    value={med.dosage || ''}
-                    onChange={e => updateMedication(idx, 'dosage', e.target.value)}
-                    placeholder="Dosage"
-                    className="input text-xs py-1"
-                  />
-
-                  <input
-                    type="text"
-                    value={med.disease_identification || ''}
-                    onChange={e => updateMedication(idx, 'disease_identification', e.target.value)}
-                    placeholder="Disease / target"
-                    className="input text-xs py-1"
-                  />
-
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="text"
-                      value={med.remarks || ''}
-                      onChange={e => updateMedication(idx, 'remarks', e.target.value)}
-                      placeholder="Remarks"
-                      className="input text-xs py-1 flex-1"
-                    />
+            <div className="card-body p-4 space-y-3">
+              {partialHarvests.map((ph, idx) => (
+                <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
+                    <span>Partial Harvest #{idx + 1}</span>
                     <button
                       type="button"
-                      onClick={() => removeMedication(idx)}
-                      className="p-1 text-gray-400 hover:text-red-600 rounded"
+                      onClick={() => removePartialHarvest(idx)}
+                      className="text-gray-400 hover:text-red-600 p-0.5"
                     >
                       <TrashIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    <input
+                      type="date"
+                      value={ph.date || ''}
+                      onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                      className="input text-xs py-1"
+                    />
+                    <input
+                      type="number"
+                      value={ph.doc ?? ''}
+                      onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                      placeholder="DOC"
+                      className="input text-xs py-1"
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={ph.abw ?? ''}
+                      onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                      placeholder="ABW (g)"
+                      className="input text-xs py-1"
+                    />
+                    <input
+                      type="number"
+                      value={ph.harvested_quantity ?? ''}
+                      onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                      placeholder="Qty (pcs)"
+                      className="input text-xs py-1"
+                    />
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={ph.harvested_biomass ?? ''}
+                      onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                      placeholder="Biomass (kg)"
+                      className="input text-xs py-1 font-mono"
+                    />
+                  </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+              ))}
 
-        {/* Harvest Details */}
-        <div className="card">
-          <div className="card-header flex items-center justify-between py-2.5 px-4">
-            <h3 className="font-semibold text-gray-900 text-sm">Harvest Details</h3>
-            {partialHarvests.length < 3 && (
-              <button
-                type="button"
-                onClick={addPartialHarvest}
-                className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-              >
-                <PlusIcon className="w-3 h-3" />
-                <span>+ Partial Harvest</span>
-              </button>
-            )}
-          </div>
-
-          <div className="card-body p-4 space-y-3">
-            {partialHarvests.map((ph, idx) => (
-              <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-                <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
-                  <span>Partial Harvest #{idx + 1}</span>
-                  <button
-                    type="button"
-                    onClick={() => removePartialHarvest(idx)}
-                    className="text-gray-400 hover:text-red-600 p-0.5"
-                  >
-                    <TrashIcon className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              {/* Final Harvest */}
+              <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
+                <span className="text-xs text-gray-600 font-medium block">Final Harvest</span>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                   <input
                     type="date"
-                    value={ph.date || ''}
-                    onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                    value={finalHarvest.date || ''}
+                    onChange={e => updateFinalHarvest('date', e.target.value)}
                     className="input text-xs py-1"
                   />
                   <input
                     type="number"
-                    value={ph.doc ?? ''}
-                    onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                    value={finalHarvest.doc ?? ''}
+                    onChange={e => updateFinalHarvest('doc', e.target.value)}
                     placeholder="DOC"
                     className="input text-xs py-1"
                   />
                   <input
                     type="number"
                     step="0.01"
-                    value={ph.abw ?? ''}
-                    onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                    value={finalHarvest.abw ?? ''}
+                    onChange={e => updateFinalHarvest('abw', e.target.value)}
                     placeholder="ABW (g)"
                     className="input text-xs py-1"
                   />
                   <input
                     type="number"
-                    value={ph.harvested_quantity ?? ''}
-                    onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                    value={finalHarvest.harvested_quantity ?? ''}
+                    onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
                     placeholder="Qty (pcs)"
                     className="input text-xs py-1"
                   />
                   <input
                     type="number"
                     step="0.1"
-                    value={ph.harvested_biomass ?? ''}
-                    onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                    value={finalHarvest.harvested_biomass ?? ''}
+                    onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
                     placeholder="Biomass (kg)"
                     className="input text-xs py-1 font-mono"
                   />
                 </div>
               </div>
-            ))}
 
-            {/* Final Harvest */}
-            <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-              <span className="text-xs text-gray-600 font-medium block">Final Harvest</span>
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                <input
-                  type="date"
-                  value={finalHarvest.date || ''}
-                  onChange={e => updateFinalHarvest('date', e.target.value)}
-                  className="input text-xs py-1"
-                />
-                <input
-                  type="number"
-                  value={finalHarvest.doc ?? ''}
-                  onChange={e => updateFinalHarvest('doc', e.target.value)}
-                  placeholder="DOC"
-                  className="input text-xs py-1"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  value={finalHarvest.abw ?? ''}
-                  onChange={e => updateFinalHarvest('abw', e.target.value)}
-                  placeholder="ABW (g)"
-                  className="input text-xs py-1"
-                />
-                <input
-                  type="number"
-                  value={finalHarvest.harvested_quantity ?? ''}
-                  onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
-                  placeholder="Qty (pcs)"
-                  className="input text-xs py-1"
-                />
-                <input
-                  type="number"
-                  step="0.1"
-                  value={finalHarvest.harvested_biomass ?? ''}
-                  onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
-                  placeholder="Biomass (kg)"
-                  className="input text-xs py-1 font-mono"
-                />
+              {/* Minimal Summary Strip */}
+              <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
+                <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_biomass} kg</span></div>
+                <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_feed} kg</span></div>
+                <div>Overall FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
+                <div>Total Pieces: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_harvest_qty}</span></div>
+                <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival_percentage}</span></div>
               </div>
             </div>
-
-            {/* Minimal Summary Strip */}
-            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
-              <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_biomass} kg</span></div>
-              <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_feed} kg</span></div>
-              <div>Overall FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
-              <div>Total Pieces: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_harvest_qty}</span></div>
-              <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival_percentage}</span></div>
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Meeting Notes */}
         <div className="card">

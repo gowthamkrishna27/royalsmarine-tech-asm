@@ -95,7 +95,6 @@ export default function Visits() {
                       <th>Tank</th>
                       <th>Salesperson</th>
                       <th>Type</th>
-                      <th>Person Met</th>
                       <th>Status</th>
                       <th>Actions</th>
                     </tr>
@@ -119,7 +118,6 @@ export default function Visits() {
                         </td>
                         <td className="text-gray-600">{v.salesperson_name}</td>
                         <td><Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge></td>
-                        <td className="text-gray-600">{v.person_met || '—'}</td>
                         <td>
                           <Badge color={v.approval_status === 'approved' ? 'green' : v.approval_status === 'rejected' ? 'red' : 'yellow'}>
                             {v.approval_status}
@@ -159,7 +157,6 @@ export default function Visits() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge>
                       {v.tank_number && <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded font-medium">{v.tank_number}</span>}
-                      {v.person_met && <span className="text-xs text-gray-500">Met: {v.person_met}</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
                       <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline">View Details</Link>

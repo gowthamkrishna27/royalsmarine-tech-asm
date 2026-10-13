@@ -212,7 +212,7 @@ CREATE TABLE visits (
   gps_denied_reason TEXT,
   person_met VARCHAR(150),
   designation_met VARCHAR(100),
-  meeting_type ENUM('cold_call','follow_up','demo','negotiation','payment_follow_up','order_discussion','other') NOT NULL,
+  meeting_type VARCHAR(100) NOT NULL DEFAULT 'casual',
   meeting_highlights TEXT,
   remarks TEXT,
   visit_outcome TEXT,
