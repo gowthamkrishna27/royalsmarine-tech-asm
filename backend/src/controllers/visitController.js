@@ -40,6 +40,7 @@ const listVisits = async (req, res) => {
     const [visits] = await sequelize.query(
       `SELECT v.id, v.uuid, v.visit_date, v.visit_time, v.meeting_type, v.person_met,
               v.visit_outcome, v.approval_status, v.next_followup_date, v.created_at,
+              v.tank_id, v.tank_number,
               c.company_name, c.city,
               sp.full_name as salesperson_name
        FROM visits v
@@ -62,6 +63,7 @@ const createVisit = async (req, res) => {
     gps_captured_at, gps_denied_reason, person_met, designation_met,
     meeting_type, meeting_highlights, remarks, visit_outcome, next_action,
     next_followup_date, brands, categories,
+    tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
   } = req.body;
 
   const t = await sequelize.transaction();
@@ -69,11 +71,18 @@ const createVisit = async (req, res) => {
     const uuid = uuidv4();
     const formattedGpsCapturedAt = gps_captured_at ? new Date(gps_captured_at).toISOString().slice(0, 19).replace('T', ' ') : null;
 
+    const jsonWaterQuality = water_quality ? JSON.stringify(water_quality) : null;
+    const jsonFeeding = feeding_details ? JSON.stringify(feeding_details) : null;
+    const jsonMedication = medication_details ? JSON.stringify(medication_details) : null;
+    const jsonHarvest = harvest_details ? JSON.stringify(harvest_details) : null;
+
     const [insertResult] = await sequelize.query(
       `INSERT INTO visits (uuid, visit_date, visit_time, salesperson_id, client_id, latitude, longitude,
        gps_address, gps_captured_at, gps_denied_reason, person_met, designation_met, meeting_type,
-       meeting_highlights, remarks, visit_outcome, next_action, next_followup_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       meeting_highlights, remarks, visit_outcome, next_action, next_followup_date,
+       tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
+       created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       {
         replacements: [
           uuid, visit_date, visit_time, req.user.id, client_id,
@@ -81,7 +90,9 @@ const createVisit = async (req, res) => {
           formattedGpsCapturedAt, gps_denied_reason || null,
           person_met || null, designation_met || null, meeting_type,
           meeting_highlights || null, remarks || null, visit_outcome || null,
-          next_action || null, next_followup_date || null, req.user.id,
+          next_action || null, next_followup_date || null,
+          tank_id || null, tank_number || null, jsonWaterQuality, jsonFeeding, jsonMedication, jsonHarvest,
+          req.user.id,
         ],
         transaction: t,
       }
@@ -171,6 +182,16 @@ const getVisit = async (req, res) => {
       { replacements: [req.params.id] }
     );
 
+    const safeParse = (val) => {
+      if (!val) return null;
+      if (typeof val === 'object') return val;
+      try { return JSON.parse(val); } catch { return val; }
+    };
+    visit.water_quality = safeParse(visit.water_quality);
+    visit.feeding_details = safeParse(visit.feeding_details);
+    visit.medication_details = safeParse(visit.medication_details);
+    visit.harvest_details = safeParse(visit.harvest_details);
+
     return sendSuccess(res, 'Visit fetched', { ...visit, brands, categories: cats, attachments });
   } catch (err) {
     return sendError(res, err.message, 500);
@@ -195,14 +216,27 @@ const updateVisit = async (req, res) => {
       visit_date, visit_time, person_met, designation_met, meeting_type,
       meeting_highlights, remarks, visit_outcome, next_action, next_followup_date,
       brands, categories,
+      tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
     } = req.body;
+
+    const jsonWaterQuality = water_quality !== undefined ? (water_quality ? JSON.stringify(water_quality) : null) : undefined;
+    const jsonFeeding = feeding_details !== undefined ? (feeding_details ? JSON.stringify(feeding_details) : null) : undefined;
+    const jsonMedication = medication_details !== undefined ? (medication_details ? JSON.stringify(medication_details) : null) : undefined;
+    const jsonHarvest = harvest_details !== undefined ? (harvest_details ? JSON.stringify(harvest_details) : null) : undefined;
 
     const t = await sequelize.transaction();
     try {
       await sequelize.query(
         `UPDATE visits SET visit_date=?, visit_time=?, person_met=?, designation_met=?,
          meeting_type=?, meeting_highlights=?, remarks=?, visit_outcome=?, next_action=?,
-         next_followup_date=?, updated_at=NOW() WHERE id=?`,
+         next_followup_date=?,
+         tank_id = COALESCE(?, tank_id),
+         tank_number = COALESCE(?, tank_number),
+         water_quality = CASE WHEN ? IS NOT NULL THEN ? ELSE water_quality END,
+         feeding_details = CASE WHEN ? IS NOT NULL THEN ? ELSE feeding_details END,
+         medication_details = CASE WHEN ? IS NOT NULL THEN ? ELSE medication_details END,
+         harvest_details = CASE WHEN ? IS NOT NULL THEN ? ELSE harvest_details END,
+         updated_at=NOW() WHERE id=?`,
         {
           replacements: [
             visit_date || null,
@@ -215,6 +249,12 @@ const updateVisit = async (req, res) => {
             visit_outcome || null,
             next_action || null,
             next_followup_date || null,
+            tank_id || null,
+            tank_number || null,
+            jsonWaterQuality !== undefined ? 1 : null, jsonWaterQuality || null,
+            jsonFeeding !== undefined ? 1 : null, jsonFeeding || null,
+            jsonMedication !== undefined ? 1 : null, jsonMedication || null,
+            jsonHarvest !== undefined ? 1 : null, jsonHarvest || null,
             req.params.id,
           ],
           transaction: t,

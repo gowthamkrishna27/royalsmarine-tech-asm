@@ -92,11 +92,12 @@ export default function Visits() {
                     <tr>
                       <th>Date</th>
                       <th>Farmer</th>
+                      <th>Tank</th>
                       <th>Salesperson</th>
                       <th>Type</th>
                       <th>Person Met</th>
                       <th>Status</th>
-                      {isManager && <th>Actions</th>}
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -109,6 +110,13 @@ export default function Visits() {
                           </Link>
                           {v.city && <p className="text-xs text-gray-400">{v.city}</p>}
                         </td>
+                        <td className="text-gray-600 whitespace-nowrap font-medium text-xs">
+                          {v.tank_number ? (
+                            <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded">
+                              {v.tank_number}
+                            </span>
+                          ) : '—'}
+                        </td>
                         <td className="text-gray-600">{v.salesperson_name}</td>
                         <td><Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge></td>
                         <td className="text-gray-600">{v.person_met || '—'}</td>
@@ -117,23 +125,21 @@ export default function Visits() {
                             {v.approval_status}
                           </Badge>
                         </td>
-                        {isManager && (
-                          <td>
-                            <div className="flex items-center gap-1">
-                              <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline">View</Link>
-                              {v.approval_status === 'pending' && (
-                                <>
-                                  <button onClick={() => handleApprove(v.id)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Approve">
-                                    <CheckIcon className="w-4 h-4" />
-                                  </button>
-                                  <button onClick={() => setRejectModal(v.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Reject">
-                                    <XMarkIcon className="w-4 h-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        )}
+                        <td>
+                          <div className="flex items-center gap-1.5">
+                            <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline">View</Link>
+                            {isManager && v.approval_status === 'pending' && (
+                              <>
+                                <button onClick={() => handleApprove(v.id)} className="p-1 text-green-600 hover:bg-green-50 rounded" title="Approve">
+                                  <CheckIcon className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => setRejectModal(v.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Reject">
+                                  <XMarkIcon className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -152,6 +158,7 @@ export default function Visits() {
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge>
+                      {v.tank_number && <span className="bg-gray-100 text-gray-700 text-xs px-2 py-0.5 rounded font-medium">{v.tank_number}</span>}
                       {v.person_met && <span className="text-xs text-gray-500">Met: {v.person_met}</span>}
                     </div>
                     <div className="flex items-center gap-2 mt-2">
