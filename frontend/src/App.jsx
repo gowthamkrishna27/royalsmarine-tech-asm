@@ -27,6 +27,8 @@ import BillingImport from './pages/billing/BillingImport';
 import QuotationsPage from './pages/quotations/Quotations';
 import PurchaseOrdersPage from './pages/purchaseOrders/PurchaseOrders';
 import ProfilePage from './pages/profile/Profile';
+import TanksPage from './pages/tanks/Tanks';
+import TeamListPage from './pages/team/TeamList';
 
 const MapPage = lazy(() => import('./pages/map/Map'));
 
@@ -48,6 +50,10 @@ export default function App() {
             <Route path="clients/new" element={<ClientForm />} />
             <Route path="clients/:id" element={<ClientDetail />} />
             <Route path="clients/:id/edit" element={<ClientForm />} />
+
+            <Route path="tanks" element={<TanksPage />} />
+            <Route path="team/asms" element={<TeamListPage defaultRole="sales_manager" />} />
+            <Route path="team/technical-executives" element={<TeamListPage defaultRole="sales_executive" />} />
 
             <Route path="visits" element={<Visits />} />
             <Route path="visits/new" element={<VisitForm />} />

@@ -75,3 +75,4 @@ export const dashboardApi = { get: () => api.get('/dashboard') };
 export const reportApi = reportService;
 export const notificationApi = notificationService;
 export const userApi = userService;
+export const tankApi = { list: (params) => api.get('/tanks', { params }) };

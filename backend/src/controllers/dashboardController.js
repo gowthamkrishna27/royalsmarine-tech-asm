@@ -65,6 +65,28 @@ const getSalesManagerDashboard = async (userId) => {
 };
 
 const getManagementDashboard = async () => {
+  const [farmerRows] = await sequelize.query(
+    "SELECT (SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL) + (SELECT COUNT(*) FROM farmers) as count"
+  );
+  const [pondStats] = await sequelize.query(
+    `SELECT COUNT(*) as total,
+            COALESCE(SUM(CASE WHEN LOWER(status) = 'active' THEN 1 ELSE 0 END), 0) as active,
+            COALESCE(SUM(CASE WHEN LOWER(status) = 'harvested' THEN 1 ELSE 0 END), 0) as harvested
+     FROM ponds WHERE deleted_at IS NULL`
+  );
+  const [tankStats] = await sequelize.query(
+    `SELECT COUNT(*) as total,
+            COALESCE(SUM(CASE WHEN LOWER(status) = 'active' THEN 1 ELSE 0 END), 0) as active,
+            COALESCE(SUM(CASE WHEN LOWER(status) = 'harvested' THEN 1 ELSE 0 END), 0) as harvested,
+            ROUND(AVG(CASE WHEN abw IS NOT NULL AND TRIM(abw) != '' AND CAST(abw AS DECIMAL(10,2)) > 0 THEN CAST(abw AS DECIMAL(10,2)) ELSE NULL END), 2) as avg_abw
+     FROM tanks`
+  );
+  const [asmRows] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'sales_manager' AND u.deleted_at IS NULL"
+  );
+  const [techExecRows] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL"
+  );
   const [pipelineTotal] = await sequelize.query(
     "SELECT COALESCE(SUM(estimated_value),0) as total_pipeline, COUNT(*) as total_opportunities FROM opportunities WHERE current_stage NOT IN ('won','lost') AND deleted_at IS NULL"
   );
@@ -78,7 +100,19 @@ const getManagementDashboard = async () => {
     "SELECT COALESCE(SUM(invoice_amount),0) as total_billed, COALESCE(SUM(outstanding_amount),0) as total_outstanding FROM billing_records WHERE MONTH(invoice_date)=MONTH(NOW())"
   );
 
+  const totalTanks = Number(pondStats[0]?.total || 0) + Number(tankStats[0]?.total || 0);
+  const activeTanks = Number(pondStats[0]?.active || 0) + Number(tankStats[0]?.active || 0);
+  const harvestedTanks = Number(pondStats[0]?.harvested || 0) + Number(tankStats[0]?.harvested || 0);
+  const averageAbw = tankStats[0]?.avg_abw !== null && tankStats[0]?.avg_abw !== undefined ? Number(tankStats[0].avg_abw) : 0;
+
   return {
+    total_farmers: Number(farmerRows[0]?.count || 0),
+    total_tanks: totalTanks,
+    active_tanks: activeTanks,
+    harvested_tanks: harvestedTanks,
+    average_abw: averageAbw,
+    total_asms: Number(asmRows[0]?.count || 0),
+    total_technical_executives: Number(techExecRows[0]?.count || 0),
     pipeline_total: pipelineTotal[0],
     brand_pipeline: brandPipeline,
     salesperson_performance: salespersonPerf,

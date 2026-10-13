@@ -19,7 +19,7 @@ const login = async (req, res) => {
 
   try {
     const [users] = await sequelize.query(
-      `SELECT u.*, r.name as role_name FROM users u
+      `SELECT u.*, r.name as role_name, r.display_name as role_display FROM users u
        JOIN roles r ON u.role_id = r.id
        WHERE u.email = ? AND u.deleted_at IS NULL LIMIT 1`,
       { replacements: [email] }
@@ -51,6 +51,7 @@ const login = async (req, res) => {
         email: user.email,
         mobile: user.mobile,
         role: user.role_name,
+        role_display: user.role_display,
       },
     });
   } catch (err) {

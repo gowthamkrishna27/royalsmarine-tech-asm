@@ -6,6 +6,8 @@ import StatCard from '../../components/common/StatCard';
 import {
   MapPinIcon, BellIcon, ChartBarIcon, CheckCircleIcon,
   ClockIcon, ExclamationTriangleIcon, CurrencyRupeeIcon, UsersIcon,
+  BuildingOfficeIcon, CircleStackIcon, ArchiveBoxIcon, ScaleIcon,
+  BriefcaseIcon, WrenchScrewdriverIcon,
 } from '@heroicons/react/24/outline';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import Badge from '../../components/common/Badge';
@@ -99,41 +101,52 @@ function ManagerDashboard({ data }) {
 function ManagementDashboard({ data }) {
   return (
     <div className="fade-in space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Pipeline" value={`₹${Number(data.pipeline_total?.total_pipeline || 0).toLocaleString('en-IN')}`} icon={CurrencyRupeeIcon} color="blue" />
-        <StatCard label="Active Opportunities" value={data.pipeline_total?.total_opportunities} icon={ChartBarIcon} color="purple" />
-        <StatCard label="Month Billed" value={`₹${Number(data.month_billing?.total_billed || 0).toLocaleString('en-IN')}`} icon={CheckCircleIcon} color="green" />
-        <StatCard label="Outstanding" value={`₹${Number(data.month_billing?.total_outstanding || 0).toLocaleString('en-IN')}`} icon={ExclamationTriangleIcon} color="red" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
+        <StatCard label="Total Farmers" value={data.total_farmers ?? 0} icon={BuildingOfficeIcon} color="blue" to="/clients" />
+        <StatCard label="Total Tanks" value={data.total_tanks ?? 0} icon={CircleStackIcon} color="purple" to="/tanks" />
+        <StatCard label="Active Tanks" value={data.active_tanks ?? 0} icon={CheckCircleIcon} color="green" to="/tanks?status=active" />
+        <StatCard label="Harvested Tanks" value={data.harvested_tanks ?? 0} icon={ArchiveBoxIcon} color="yellow" to="/tanks?status=harvested" />
+        <StatCard label="Average ABW" value={data.average_abw ? `${Number(data.average_abw).toFixed(1)} g` : '0 g'} icon={ScaleIcon} color="indigo" to="/tanks?view=abw" />
+        <StatCard label="Total ASM's" value={data.total_asms ?? 0} icon={BriefcaseIcon} color="blue" to="/team/asms" />
+        <StatCard label="Total Technical Executives" value={data.total_technical_executives ?? 0} icon={WrenchScrewdriverIcon} color="green" to="/team/technical-executives" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <div className="card-header"><h3 className="font-semibold text-gray-900">Brand-wise Pipeline</h3></div>
           <div className="p-4 space-y-3">
-            {data.brand_pipeline?.slice(0, 8).map(b => (
-              <div key={b.name} className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{b.name || 'Untagged'}</span>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-gray-400">{b.count} opps</span>
-                  <span className="text-sm font-semibold text-gray-900">₹{Number(b.value).toLocaleString('en-IN')}</span>
+            {!data.brand_pipeline || data.brand_pipeline.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">No brand pipeline recorded</p>
+            ) : (
+              data.brand_pipeline.slice(0, 8).map(b => (
+                <div key={b.name} className="flex items-center justify-between py-1">
+                  <span className="text-sm font-medium text-gray-700">{b.name || 'Untagged'}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400">{b.count} opps</span>
+                    <span className="text-sm font-semibold text-gray-900">₹{Number(b.value).toLocaleString('en-IN')}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 
         <div className="card">
-          <div className="card-header"><h3 className="font-semibold text-gray-900">Salesperson Performance</h3></div>
+          <div className="card-header"><h3 className="font-semibold text-gray-900">Technical Executive Performance</h3></div>
           <div className="p-4">
-            {data.salesperson_performance?.slice(0, 8).map(sp => (
-              <div key={sp.full_name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{sp.full_name}</p>
-                  <p className="text-xs text-gray-400">{sp.visits} visits · {sp.won_opps} won</p>
+            {!data.salesperson_performance || data.salesperson_performance.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-6">No performance records found</p>
+            ) : (
+              data.salesperson_performance.slice(0, 8).map(sp => (
+                <div key={sp.full_name} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{sp.full_name}</p>
+                    <p className="text-xs text-gray-400">{sp.visits} visits · {sp.won_opps} won</p>
+                  </div>
+                  <span className="text-sm font-bold text-green-600">₹{Number(sp.won_value).toLocaleString('en-IN')}</span>
                 </div>
-                <span className="text-sm font-bold text-green-600">₹{Number(sp.won_value).toLocaleString('en-IN')}</span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>

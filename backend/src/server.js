@@ -44,6 +44,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use(`${API}/auth`, require('./routes/auth'));
 app.use(`${API}/users`, require('./routes/users'));
 app.use(`${API}/clients`, require('./routes/clients'));
+app.use(`${API}/tanks`, require('./routes/tanks'));
 app.use(`${API}/visits`, require('./routes/visits'));
 app.use(`${API}/followups`, require('./routes/followups'));
 app.use(`${API}/opportunities`, require('./routes/opportunities'));

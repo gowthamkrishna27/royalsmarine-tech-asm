@@ -34,7 +34,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <p className="text-lg font-semibold text-gray-900">{user?.full_name}</p>
-              <p className="text-sm text-gray-500 capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+              <p className="text-sm text-gray-500 capitalize">{user?.role_display || (user?.role === 'sales_manager' ? 'ASM' : user?.role === 'sales_executive' ? 'Technical Executive' : user?.role?.replace(/_/g, ' '))}</p>
             </div>
           </div>
           {[['Email', user?.email], ['Mobile', user?.mobile], ['Department', user?.department || '—']].map(([label, val]) => (

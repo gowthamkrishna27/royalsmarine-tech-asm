@@ -568,8 +568,8 @@ CREATE TABLE settings (
 INSERT INTO roles (name, display_name, description) VALUES
 ('super_admin', 'Super Admin', 'Full system access'),
 ('admin', 'Admin', 'Manage users, clients, brands, reports'),
-('sales_manager', 'Sales Manager', 'View team, monitor pipeline, approve visits'),
-('sales_executive', 'Sales Executive', 'Add visits, clients, opportunities'),
+('sales_manager', 'ASM', 'View team, monitor pipeline, approve visits'),
+('sales_executive', 'Technical Executive', 'Add visits, clients, opportunities'),
 ('backend_ops', 'Backend / Operations', 'Manage quotations, POs, billing imports'),
 ('management', 'Management / Viewer', 'View-only dashboards and reports');
 

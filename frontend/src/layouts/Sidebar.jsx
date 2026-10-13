@@ -77,7 +77,7 @@ export default function Sidebar({ open, onClose }) {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.full_name}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+              <p className="text-xs text-gray-500 capitalize">{user?.role_display || (user?.role === 'sales_manager' ? 'ASM' : user?.role === 'sales_executive' ? 'Technical Executive' : user?.role?.replace(/_/g, ' '))}</p>
             </div>
           </div>
         </div>
