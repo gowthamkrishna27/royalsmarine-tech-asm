@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
-import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
+import FilterBar, { SelectFilter, DateFilter } from '../../components/common/FilterBar';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import { MapPinIcon, PlusIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -75,8 +75,8 @@ export default function Visits() {
           { value: 'pending', label: 'Pending' }, { value: 'approved', label: 'Approved' }, { value: 'rejected', label: 'Rejected' }
         ]} />
         <SelectFilter label="Meeting Type" value={meetingType} onChange={setMeetingType} options={MEETING_TYPES} />
-        <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="input flex-shrink-0" placeholder="From" />
-        <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="input flex-shrink-0" placeholder="To" />
+        <DateFilter label="From:" value={fromDate} onChange={setFromDate} max={toDate || undefined} />
+        <DateFilter label="To:" value={toDate} onChange={setToDate} min={fromDate || undefined} />
       </FilterBar>
 
       {isLoading ? <PageSpinner /> : (

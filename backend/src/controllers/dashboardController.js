@@ -56,17 +56,23 @@ const getSalesManagerDashboard = async (userId) => {
     "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) AND followup_date<CURDATE() AND status IN ('pending','overdue') AND deleted_at IS NULL",
     { replacements: [userId] }
   );
-  const [pipeline] = await sequelize.query(
-    "SELECT current_stage, COUNT(*) as count, COALESCE(SUM(estimated_value),0) as value FROM opportunities WHERE (assigned_manager_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND current_stage NOT IN ('won','lost') AND deleted_at IS NULL GROUP BY current_stage",
-    { replacements: [userId, userId] }
-  );
+  let pipeline = [];
+  try {
+    const [p] = await sequelize.query(
+      "SELECT current_stage, COUNT(*) as count, COALESCE(SUM(estimated_value),0) as value FROM opportunities WHERE (assigned_manager_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND current_stage NOT IN ('won','lost') AND deleted_at IS NULL GROUP BY current_stage",
+      { replacements: [userId, userId] }
+    );
+    pipeline = p;
+  } catch (err) {
+    pipeline = [];
+  }
 
-  return { pending_approvals: pendingApprovals[0].count, team_visits: teamVisits, overdue_followups: overdueFollowups[0].count, pipeline };
+  return { pending_approvals: pendingApprovals[0]?.count || 0, team_visits: teamVisits, overdue_followups: overdueFollowups[0]?.count || 0, pipeline };
 };
 
 const getManagementDashboard = async () => {
   const [farmerRows] = await sequelize.query(
-    "SELECT (SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL) + (SELECT COUNT(*) FROM farmers) as count"
+    "SELECT (SELECT COUNT(*) FROM clients WHERE deleted_at IS NULL) as total_farmers, (SELECT COUNT(*) FROM clients WHERE LOWER(status) = 'active' AND deleted_at IS NULL) as active_farmers"
   );
   const [pondStats] = await sequelize.query(
     `SELECT COUNT(*) as total,
@@ -87,18 +93,53 @@ const getManagementDashboard = async () => {
   const [techExecRows] = await sequelize.query(
     "SELECT COUNT(*) as count FROM users u JOIN roles r ON u.role_id = r.id WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL"
   );
-  const [pipelineTotal] = await sequelize.query(
-    "SELECT COALESCE(SUM(estimated_value),0) as total_pipeline, COUNT(*) as total_opportunities FROM opportunities WHERE current_stage NOT IN ('won','lost') AND deleted_at IS NULL"
-  );
-  const [brandPipeline] = await sequelize.query(
-    "SELECT b.name, COUNT(o.id) as count, COALESCE(SUM(o.estimated_value),0) as value FROM opportunities o LEFT JOIN brands b ON o.brand_id=b.id WHERE o.current_stage NOT IN ('won','lost') AND o.deleted_at IS NULL GROUP BY b.id, b.name ORDER BY value DESC"
-  );
-  const [salespersonPerf] = await sequelize.query(
-    "SELECT u.full_name, COUNT(v.id) as visits, SUM(CASE WHEN o.current_stage='won' THEN 1 ELSE 0 END) as won_opps, COALESCE(SUM(CASE WHEN o.current_stage='won' THEN o.won_value ELSE 0 END),0) as won_value FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND v.deleted_at IS NULL LEFT JOIN opportunities o ON o.assigned_salesperson_id=u.id AND MONTH(o.updated_at)=MONTH(NOW()) AND o.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY won_value DESC"
-  );
-  const [monthBilling] = await sequelize.query(
-    "SELECT COALESCE(SUM(invoice_amount),0) as total_billed, COALESCE(SUM(outstanding_amount),0) as total_outstanding FROM billing_records WHERE MONTH(invoice_date)=MONTH(NOW())"
-  );
+
+  let pipelineTotal = [{ total_pipeline: 0, total_opportunities: 0 }];
+  try {
+    const [pt] = await sequelize.query(
+      "SELECT COALESCE(SUM(estimated_value),0) as total_pipeline, COUNT(*) as total_opportunities FROM opportunities WHERE current_stage NOT IN ('won','lost') AND deleted_at IS NULL"
+    );
+    pipelineTotal = pt;
+  } catch (e) {
+    pipelineTotal = [{ total_pipeline: 0, total_opportunities: 0 }];
+  }
+
+  let brandPipeline = [];
+  try {
+    const [bp] = await sequelize.query(
+      "SELECT b.name, COUNT(o.id) as count, COALESCE(SUM(o.estimated_value),0) as value FROM opportunities o LEFT JOIN brands b ON o.brand_id=b.id WHERE o.current_stage NOT IN ('won','lost') AND o.deleted_at IS NULL GROUP BY b.id, b.name ORDER BY value DESC"
+    );
+    brandPipeline = bp;
+  } catch (e) {
+    brandPipeline = [];
+  }
+
+  let salespersonPerf = [];
+  try {
+    const [sp] = await sequelize.query(
+      "SELECT u.full_name, COUNT(v.id) as visits, SUM(CASE WHEN o.current_stage='won' THEN 1 ELSE 0 END) as won_opps, COALESCE(SUM(CASE WHEN o.current_stage='won' THEN o.won_value ELSE 0 END),0) as won_value FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND v.deleted_at IS NULL LEFT JOIN opportunities o ON o.assigned_salesperson_id=u.id AND MONTH(o.updated_at)=MONTH(NOW()) AND o.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY visits DESC, won_value DESC"
+    );
+    salespersonPerf = sp;
+  } catch (e) {
+    try {
+      const [sp] = await sequelize.query(
+        "SELECT u.full_name, COUNT(v.id) as visits, 0 as won_opps, 0 as won_value FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND v.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY visits DESC"
+      );
+      salespersonPerf = sp;
+    } catch {
+      salespersonPerf = [];
+    }
+  }
+
+  let monthBilling = [{ total_billed: 0, total_outstanding: 0 }];
+  try {
+    const [mb] = await sequelize.query(
+      "SELECT COALESCE(SUM(invoice_amount),0) as total_billed, COALESCE(SUM(outstanding_amount),0) as total_outstanding FROM billing_records WHERE MONTH(invoice_date)=MONTH(NOW())"
+    );
+    monthBilling = mb;
+  } catch (e) {
+    monthBilling = [{ total_billed: 0, total_outstanding: 0 }];
+  }
 
   const totalTanks = Number(pondStats[0]?.total || 0) + Number(tankStats[0]?.total || 0);
   const activeTanks = Number(pondStats[0]?.active || 0) + Number(tankStats[0]?.active || 0);
@@ -106,7 +147,8 @@ const getManagementDashboard = async () => {
   const averageAbw = tankStats[0]?.avg_abw !== null && tankStats[0]?.avg_abw !== undefined ? Number(tankStats[0].avg_abw) : 0;
 
   return {
-    total_farmers: Number(farmerRows[0]?.count || 0),
+    total_farmers: Number(farmerRows[0]?.total_farmers || 0),
+    active_farmers: Number(farmerRows[0]?.active_farmers || 0),
     total_tanks: totalTanks,
     active_tanks: activeTanks,
     harvested_tanks: harvestedTanks,

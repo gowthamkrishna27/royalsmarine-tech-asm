@@ -13,19 +13,19 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
 
   const content = (
     <>
-      <div className="flex items-start justify-between gap-2.5">
+      <div className="flex items-start justify-between gap-2">
         <p className="text-xs sm:text-sm font-medium text-gray-500 leading-snug group-hover:text-blue-600 transition-colors">{label}</p>
         {Icon && (
-          <div className={`p-2 sm:p-2.5 rounded-xl flex-shrink-0 transition-transform group-hover:scale-105 ${colors[color]}`}>
-            <Icon className="w-5 h-5" />
+          <div className={`p-1.5 sm:p-2 rounded-xl flex-shrink-0 transition-transform group-hover:scale-105 ${colors[color]}`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         )}
       </div>
-      <div className="mt-3 sm:mt-4">
-        <div className="flex items-baseline justify-between">
-          <p className="text-2xl font-bold text-gray-900 tracking-tight group-hover:text-blue-700 transition-colors">{value ?? '—'}</p>
+      <div className="mt-auto pt-3">
+        <div className="flex items-baseline justify-between gap-1">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight group-hover:text-blue-700 transition-colors">{value ?? '—'}</p>
           {to && (
-            <span className="text-xs font-semibold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity">
+            <span className="text-xs font-semibold text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               View →
             </span>
           )}
@@ -40,11 +40,11 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
     </>
   );
 
-  const baseClassName = "card p-4 sm:p-5 h-full flex flex-col justify-between transition-all duration-150 hover:shadow-md hover:border-blue-300 group";
+  const baseClassName = "card p-3 sm:p-4 h-full flex flex-col justify-between transition-all duration-150 hover:shadow-md hover:border-blue-300 group";
 
   if (to) {
     return (
-      <Link to={to} className={`${baseClassName} cursor-pointer block no-underline`}>
+      <Link to={to} className={`${baseClassName} cursor-pointer no-underline`}>
         {content}
       </Link>
     );

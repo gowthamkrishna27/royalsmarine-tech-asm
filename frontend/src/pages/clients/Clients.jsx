@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -17,15 +17,30 @@ const CLIENT_TYPE_COLOR = { existing_client: 'green', new_prospect: 'blue', reta
 
 export default function Clients() {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [clientType, setClientType] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
   const [importModal, setImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const fileRef = useRef();
+
+  useEffect(() => {
+    const urlStatus = searchParams.get('status') || '';
+    setStatus(urlStatus);
+    setPage(1);
+  }, [searchParams]);
+
+  const handleStatusChange = (newStatus) => {
+    setStatus(newStatus);
+    setPage(1);
+    const params = {};
+    if (newStatus) params.status = newStatus;
+    setSearchParams(params);
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['clients', page, search, clientType, status],
@@ -61,7 +76,7 @@ export default function Clients() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Farmers</h1>
-          <p className="text-sm text-gray-500">{data?.pagination?.total || 0} total farmers</p>
+          <p className="text-sm text-gray-500">{data?.pagination?.total || 0} {status ? `${status} farmers` : 'total farmers'}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleExport} className="btn-secondary btn-sm">
@@ -76,9 +91,9 @@ export default function Clients() {
         </div>
       </div>
 
-      <FilterBar onSearch={setSearch} searchValue={search} onReset={() => { setSearch(''); setClientType(''); setStatus(''); }}>
+      <FilterBar onSearch={setSearch} searchValue={search} onReset={() => { setSearch(''); setClientType(''); handleStatusChange(''); }}>
         <SelectFilter label="All Types" value={clientType} onChange={setClientType} options={CLIENT_TYPES} />
-        <SelectFilter label="All Status" value={status} onChange={setStatus} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
+        <SelectFilter label="All Status" value={status} onChange={handleStatusChange} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
       </FilterBar>
 
       {isLoading ? <PageSpinner /> : (

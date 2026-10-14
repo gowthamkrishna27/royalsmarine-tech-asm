@@ -4,7 +4,7 @@ const { getPagination, buildMeta } = require('../utils/pagination');
 
 const listAllTanks = async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { status, search, view } = req.query;
+  const { status, search, view, doc, doc_op, sort } = req.query;
 
   try {
     let whereConditions = [];
@@ -17,6 +17,22 @@ const listAllTanks = async (req, res) => {
 
     if (view === 'abw') {
       whereConditions.push('t.abw > 0');
+    }
+
+    if (doc !== undefined && doc !== null && doc !== '') {
+      const docVal = parseInt(doc, 10);
+      if (!isNaN(docVal)) {
+        if (doc_op === 'lte') {
+          whereConditions.push('t.doc <= ?');
+          replacements.push(docVal);
+        } else if (doc_op === 'gte') {
+          whereConditions.push('t.doc >= ?');
+          replacements.push(docVal);
+        } else {
+          whereConditions.push('t.doc = ?');
+          replacements.push(docVal);
+        }
+      }
     }
 
     if (search && search.trim()) {
@@ -105,7 +121,14 @@ const listAllTanks = async (req, res) => {
     const countSql = `SELECT COUNT(*) as total FROM (${baseSql}) as count_tbl`;
     const [[{ total }]] = await sequelize.query(countSql, { replacements });
 
-    const orderClause = view === 'abw' ? 'ORDER BY t.abw DESC, t.created_at DESC' : 'ORDER BY t.created_at DESC, t.id DESC';
+    let orderClause = 'ORDER BY COALESCE(t.doc, 0) DESC, t.created_at DESC';
+    if (sort === 'doc_asc') {
+      orderClause = 'ORDER BY t.doc ASC, t.id ASC';
+    } else if (sort === 'created_desc') {
+      orderClause = 'ORDER BY t.created_at DESC, t.id DESC';
+    } else if (view === 'abw' || sort === 'abw') {
+      orderClause = 'ORDER BY t.abw DESC, t.created_at DESC';
+    }
     const dataSql = `${baseSql} ${orderClause} LIMIT ? OFFSET ?`;
     const [tanks] = await sequelize.query(dataSql, { replacements: [...replacements, limit, offset] });
 

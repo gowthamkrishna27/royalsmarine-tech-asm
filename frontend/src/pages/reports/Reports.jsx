@@ -5,6 +5,7 @@ import { PageSpinner } from '../../components/common/Spinner';
 import { downloadBlob } from '../../hooks/useApi';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import Badge from '../../components/common/Badge';
+import { DateFilter } from '../../components/common/FilterBar';
 import toast from 'react-hot-toast';
 
 const TABS = ['visits', 'opportunities', 'followups', 'billing', 'brand', 'mom'];
@@ -86,21 +87,21 @@ export default function Reports() {
 
       {/* Filters */}
       {tab !== 'mom' && (
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {tab !== 'brand' && (
-            <select value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className="input w-auto">
-              <option value="">All Salespeople</option>
+            <select value={salespersonId} onChange={e => setSalespersonId(e.target.value)} className="input h-10 w-auto sm:w-48">
+              <option value="">All Technical Executives</option>
               {salespeople?.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
             </select>
           )}
           {(tab === 'brand') && (
-            <select value={brandId} onChange={e => setBrandId(e.target.value)} className="input w-auto">
+            <select value={brandId} onChange={e => setBrandId(e.target.value)} className="input h-10 w-auto sm:w-48">
               <option value="">All Brands</option>
               {brands?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           )}
-          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="input w-auto" />
-          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="input w-auto" />
+          <DateFilter label="From:" value={fromDate} onChange={setFromDate} max={toDate || undefined} />
+          <DateFilter label="To:" value={toDate} onChange={setToDate} min={fromDate || undefined} />
         </div>
       )}
 
