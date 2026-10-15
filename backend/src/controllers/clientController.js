@@ -664,7 +664,58 @@ const getMapLocations = async (req, res) => {
       ponds = pondRows;
     }
 
-    return sendSuccess(res, 'Map locations fetched', { clients, ponds });
+    let tests = [];
+    try {
+      const [testRows] = await sequelize.query(`
+        SELECT 
+          s.id,
+          'test_submission' as source,
+          s.agent_id,
+          s.user_id,
+          COALESCE(s.user_name, u.full_name, 'Field Executive') as submitter_name,
+          COALESCE(s.role, r.display_name, r.name, 'Technical Executive') as submitter_role,
+          CASE 
+            WHEN LOWER(COALESCE(s.role, r.display_name, r.name, '')) LIKE '%asm%' 
+              OR LOWER(COALESCE(s.role, r.name, '')) LIKE '%sales_manager%' 
+              OR LOWER(COALESCE(s.role, r.display_name, '')) LIKE '%area sales manager%'
+            THEN 'asm'
+            ELSE 'agent'
+          END as submitter_type,
+          s.farmer_id,
+          COALESCE(c.company_name, f.name, 'Farmer') as farmer_name,
+          COALESCE(c.mobile, f.phone, '—') as farmer_mobile,
+          COALESCE(s.locality, c.village, c.city, f.district, 'Local') as locality,
+          s.tank_id,
+          COALESCE(p.pond_name, t.name, CONCAT('Tank #', s.tank_id)) as tank_name,
+          COALESCE(s.test_type, 'Water Quality Analysis') as test_type,
+          s.date,
+          s.submission_time,
+          UPPER(COALESCE(s.status, 'PENDING_VERIFICATION')) as status,
+          s.data as parameters,
+          s.latitude,
+          s.longitude,
+          s.accuracy,
+          s.review_notes as notes,
+          s.created_at
+        FROM submissions s
+        LEFT JOIN users u ON u.id = CAST(NULLIF(s.user_id, '') AS UNSIGNED)
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN clients c ON c.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+        LEFT JOIN farmers f ON f.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+        LEFT JOIN ponds p ON p.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+        LEFT JOIN tanks t ON t.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+        WHERE s.latitude IS NOT NULL 
+          AND s.longitude IS NOT NULL
+          AND s.latitude != 0 
+          AND s.longitude != 0
+        ORDER BY s.created_at DESC
+      `);
+      tests = testRows;
+    } catch (testErr) {
+      console.error('Error fetching test submissions for map:', testErr);
+    }
+
+    return sendSuccess(res, 'Map locations fetched', { clients, ponds, tests });
   } catch (err) {
     return sendError(res, err.message, 500);
   }

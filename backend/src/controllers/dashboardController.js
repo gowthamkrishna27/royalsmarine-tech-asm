@@ -186,4 +186,90 @@ const getDashboard = async (req, res) => {
   }
 };
 
-module.exports = { getDashboard };
+const getLiveSubmissions = async (req, res) => {
+  try {
+    const sql = `
+      SELECT * FROM (
+        SELECT 
+          s.id,
+          'test_submission' as source,
+          COALESCE(s.test_type, 'Field Test') as submission_type,
+          s.user_id,
+          COALESCE(s.user_name, u.full_name, 'Field Executive') as submitter_name,
+          COALESCE(s.role, r.name, 'technical_executive') as submitter_role,
+          s.farmer_id,
+          COALESCE(c.company_name, f.name, 'Farmer') as farmer_name,
+          COALESCE(c.mobile, f.phone, '—') as farmer_mobile,
+          COALESCE(s.locality, c.village, c.city, f.district, 'Local') as locality,
+          s.tank_id,
+          COALESCE(p.pond_name, t.name, CONCAT('Tank #', s.tank_id)) as tank_name,
+          s.submission_time,
+          s.date,
+          UPPER(s.status) as status,
+          s.data as parameters,
+          s.latitude,
+          s.longitude,
+          s.accuracy,
+          s.review_notes as notes,
+          s.created_at
+        FROM submissions s
+        LEFT JOIN users u ON u.id = CAST(NULLIF(s.user_id, '') AS UNSIGNED)
+        LEFT JOIN roles r ON u.role_id = r.id
+        LEFT JOIN clients c ON c.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+        LEFT JOIN farmers f ON f.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+        LEFT JOIN ponds p ON p.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+        LEFT JOIN tanks t ON t.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+        WHERE (s.date = CURDATE() OR DATE(s.created_at) = CURDATE() OR s.date = DATE_FORMAT(CURDATE(), '%Y-%m-%d'))
+
+        UNION ALL
+
+        SELECT
+          CONCAT('VST-', v.id) as id,
+          'visit' as source,
+          CONCAT(REPLACE(REPLACE(v.meeting_type, '_', ' '), 'casual', 'Routine'), ' Visit') as submission_type,
+          v.salesperson_id as user_id,
+          u.full_name as submitter_name,
+          r.name as submitter_role,
+          v.client_id as farmer_id,
+          c.company_name as farmer_name,
+          c.mobile as farmer_mobile,
+          COALESCE(v.gps_address, c.city, 'Local') as locality,
+          v.tank_id,
+          COALESCE(p.pond_name, v.tank_number, 'Main Pond') as tank_name,
+          TIME_FORMAT(v.visit_time, '%h:%i %p') as submission_time,
+          v.visit_date as date,
+          UPPER(v.approval_status) as status,
+          v.water_quality as parameters,
+          v.latitude,
+          v.longitude,
+          NULL as accuracy,
+          COALESCE(v.meeting_highlights, v.remarks) as notes,
+          v.created_at
+        FROM visits v
+        JOIN users u ON v.salesperson_id = u.id
+        JOIN roles r ON u.role_id = r.id
+        JOIN clients c ON v.client_id = c.id
+        LEFT JOIN ponds p ON p.id = v.tank_id
+        WHERE (v.visit_date = CURDATE() OR DATE(v.created_at) = CURDATE()) AND v.deleted_at IS NULL
+      ) combined
+      ORDER BY combined.created_at DESC, combined.submission_time DESC
+    `;
+
+    const [submissions] = await sequelize.query(sql);
+
+    const totalToday = submissions.length;
+    const verifiedCount = submissions.filter(s => ['VERIFIED', 'APPROVED'].includes(s.status)).length;
+    const pendingCount = submissions.filter(s => ['PENDING', 'PENDING_VERIFICATION'].includes(s.status)).length;
+
+    return sendSuccess(res, "Today's live submissions fetched", {
+      total_today: totalToday,
+      verified_count: verifiedCount,
+      pending_count: pendingCount,
+      submissions,
+    });
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+module.exports = { getDashboard, getLiveSubmissions };

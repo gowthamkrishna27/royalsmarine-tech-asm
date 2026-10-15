@@ -29,6 +29,7 @@ import PurchaseOrdersPage from './pages/purchaseOrders/PurchaseOrders';
 import ProfilePage from './pages/profile/Profile';
 import TanksPage from './pages/tanks/Tanks';
 import TeamListPage from './pages/team/TeamList';
+import SettingsPage from './pages/settings/Settings';
 
 const MapPage = lazy(() => import('./pages/map/Map'));
 
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="brands" element={<Brands />} />
             <Route path="users" element={<PrivateRoute roles={['super_admin','admin']}><Users /></PrivateRoute>} />
+            <Route path="settings" element={<PrivateRoute roles={['super_admin','admin']}><SettingsPage /></PrivateRoute>} />
             <Route path="profile" element={<ProfilePage />} />
           </Route>
 

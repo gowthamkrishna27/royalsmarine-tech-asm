@@ -14,6 +14,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import Badge from '../../components/common/Badge';
 import { OPPORTUNITY_STAGES } from '../../constants';
 import { Link } from 'react-router-dom';
+import { LiveSubmissionsWidget, LiveSubmissionsDrawer } from '../../components/dashboard/LiveSubmissionsDrawer';
 
 const STAGE_COLORS = { identification: '#94a3b8', qualified: '#3b82f6', evaluation: '#8b5cf6', quotation_sent: '#f59e0b', negotiation: '#f97316', finalization: '#6366f1', won: '#22c55e', lost: '#ef4444' };
 
@@ -432,6 +433,7 @@ function ManagementDashboard({ data }) {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [showLiveSubmissions, setShowLiveSubmissions] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', user?.id],
     queryFn: () => dashboardApi.get().then(r => r.data.data),
@@ -448,7 +450,16 @@ export default function Dashboard() {
           <h1 className="page-title">Dashboard</h1>
           <p className="text-sm text-gray-500">Welcome back, {user?.full_name}</p>
         </div>
+
+        {/* Live Submissions Trigger Display */}
+        <LiveSubmissionsWidget onClick={() => setShowLiveSubmissions(true)} />
       </div>
+
+      {/* Today's Live Submissions Slide-Over Drawer */}
+      <LiveSubmissionsDrawer
+        isOpen={showLiveSubmissions}
+        onClose={() => setShowLiveSubmissions(false)}
+      />
 
       {(role === 'sales_executive') && data && <SalesExecDashboard data={data} />}
       {(role === 'sales_manager') && data && <ManagerDashboard data={data} />}

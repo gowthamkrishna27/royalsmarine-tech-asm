@@ -9,7 +9,7 @@ import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import EmptyState from '../../components/common/EmptyState';
 import {
   CircleStackIcon, ArrowLeftIcon, CheckCircleIcon,
-  ArchiveBoxIcon, ScaleIcon, MapPinIcon,
+  ArchiveBoxIcon, MapPinIcon,
 } from '@heroicons/react/24/outline';
 
 const STATUS_OPTIONS = [
@@ -24,23 +24,20 @@ const STATUS_OPTIONS = [
 export default function TanksPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialStatus = searchParams.get('status') || '';
-  const initialView = searchParams.get('view') || '';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState(initialStatus);
-  const [view, setView] = useState(initialView);
 
   // Sync state if URL query params change
   useEffect(() => {
     setStatus(searchParams.get('status') || '');
-    setView(searchParams.get('view') || '');
     setPage(1);
   }, [searchParams]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['tanks-list', page, search, status, view],
-    queryFn: () => tankApi.list({ page, limit: 20, search, status, view }).then(r => r.data),
+    queryKey: ['tanks-list', page, search, status],
+    queryFn: () => tankApi.list({ page, limit: 20, search, status }).then(r => r.data),
   });
 
   const tanks = data?.data || [];
@@ -48,19 +45,16 @@ export default function TanksPage() {
   const stats = meta?.stats || {};
 
   const getPageTitle = () => {
-    if (view === 'abw') return 'Average ABW & Tank Metrics';
     if (status === 'active') return 'Active Tanks';
     if (status === 'harvested') return 'Harvested Tanks';
     return 'Total Tanks Overview';
   };
 
-  const setTab = (newStatus, newView = '') => {
+  const setTab = (newStatus) => {
     setStatus(newStatus);
-    setView(newView);
     setPage(1);
     const params = {};
     if (newStatus) params.status = newStatus;
-    if (newView) params.view = newView;
     setSearchParams(params);
   };
 
@@ -84,10 +78,10 @@ export default function TanksPage() {
       </div>
 
       {/* Summary KPI Pills */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <button
-          onClick={() => setTab('', '')}
-          className={`card p-4 text-left transition-all ${status === '' && view === '' ? 'ring-2 ring-blue-500 bg-blue-50/30' : 'hover:bg-gray-50'}`}
+          onClick={() => setTab('')}
+          className={`card p-4 text-left transition-all ${status === '' ? 'ring-2 ring-blue-500 bg-blue-50/30' : 'hover:bg-gray-50'}`}
         >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-blue-50 text-blue-600">
@@ -101,8 +95,8 @@ export default function TanksPage() {
         </button>
 
         <button
-          onClick={() => setTab('active', '')}
-          className={`card p-4 text-left transition-all ${status === 'active' && view === '' ? 'ring-2 ring-green-500 bg-green-50/30' : 'hover:bg-gray-50'}`}
+          onClick={() => setTab('active')}
+          className={`card p-4 text-left transition-all ${status === 'active' ? 'ring-2 ring-green-500 bg-green-50/30' : 'hover:bg-gray-50'}`}
         >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-green-50 text-green-600">
@@ -116,8 +110,8 @@ export default function TanksPage() {
         </button>
 
         <button
-          onClick={() => setTab('harvested', '')}
-          className={`card p-4 text-left transition-all ${status === 'harvested' && view === '' ? 'ring-2 ring-yellow-500 bg-yellow-50/30' : 'hover:bg-gray-50'}`}
+          onClick={() => setTab('harvested')}
+          className={`card p-4 text-left transition-all ${status === 'harvested' ? 'ring-2 ring-yellow-500 bg-yellow-50/30' : 'hover:bg-gray-50'}`}
         >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-yellow-50 text-yellow-600">
@@ -126,21 +120,6 @@ export default function TanksPage() {
             <div>
               <p className="text-xs font-medium text-gray-500">Harvested Tanks</p>
               <p className="text-xl font-bold text-gray-900">{stats.harvested_tanks ?? 0}</p>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setTab('', 'abw')}
-          className={`card p-4 text-left transition-all ${view === 'abw' ? 'ring-2 ring-indigo-500 bg-indigo-50/30' : 'hover:bg-gray-50'}`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
-              <ScaleIcon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500">Average ABW</p>
-              <p className="text-xl font-bold text-gray-900">{stats.avg_abw ? `${stats.avg_abw} g` : '0 g'}</p>
             </div>
           </div>
         </button>
@@ -153,7 +132,6 @@ export default function TanksPage() {
         onReset={() => {
           setSearch('');
           setStatus('');
-          setView('');
           setSearchParams({});
         }}
       >
@@ -165,16 +143,11 @@ export default function TanksPage() {
             setPage(1);
             const params = {};
             if (val) params.status = val;
-            if (view) params.view = view;
             setSearchParams(params);
           }}
           options={STATUS_OPTIONS}
           className="sm:w-48"
         />
-        {view === 'abw' && (
-          <span className="inline-flex items-center gap-1.5 h-10 px-3 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold border border-indigo-200/70 flex-shrink-0 whitespace-nowrap">
-            <ScaleIcon className="w-4 h-4 text-indigo-600" /></span>
-        )}
       </FilterBar>
 
       {/* Table Content */}

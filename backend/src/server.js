@@ -11,6 +11,7 @@ const errorHandler = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
 
 const app = express();
+const PORT = process.env.PORT || 5000;
 const API = process.env.API_PREFIX || '/api/v1';
 
 // Security & middleware
@@ -56,6 +57,9 @@ app.use(`${API}/dashboard`, require('./routes/dashboard'));
 app.use(`${API}/reports`, require('./routes/reports'));
 app.use(`${API}/notifications`, require('./routes/notifications'));
 app.use(`${API}/audit-logs`, require('./routes/auditLogs'));
+app.use(`${API}/settings`, require('./routes/settings'));
+app.use(`${API}/submissions`, require('./routes/submissions'));
+app.use('/api/submissions', require('./routes/submissions'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
@@ -69,9 +73,10 @@ app.use(errorHandler);
 // Cron jobs
 require('./jobs/followupJob');
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  logger.info(`Royals Marine API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info(`Royals Marine API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  });
+}
 
 module.exports = app;

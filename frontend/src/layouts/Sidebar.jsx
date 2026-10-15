@@ -2,8 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
-  ChartBarIcon, DocumentTextIcon, ShoppingCartIcon, CloudArrowUpIcon,
-  TagIcon, CubeIcon, Cog6ToothIcon, XMarkIcon, MapIcon,
+  ChartBarIcon, Cog6ToothIcon, XMarkIcon, MapIcon,
 } from '@heroicons/react/24/outline';
 
 const navItems = [
@@ -11,14 +10,9 @@ const navItems = [
   { to: '/clients', label: 'Farmers', icon: BuildingOfficeIcon, roles: ['*'] },
   { to: '/visits', label: 'Visits', icon: MapPinIcon, roles: ['super_admin','admin','sales_manager','sales_executive'] },
   { to: '/followups', label: 'Follow-ups', icon: BellIcon, roles: ['super_admin','admin','sales_manager','sales_executive'] },
-  { to: '/opportunities', label: 'Opportunities', icon: ChartBarIcon, roles: ['super_admin','admin','sales_manager','management'] },
   { to: '/map', label: 'Map', icon: MapIcon, roles: ['super_admin','admin','backend_ops','sales_manager','sales_executive','management'] },
-  { to: '/purchase-orders', label: 'Purchase Orders', icon: ShoppingCartIcon, roles: ['super_admin','admin','backend_ops','sales_manager'] },
-  { to: '/billing', label: 'Billing Import', icon: CloudArrowUpIcon, roles: ['super_admin','admin','backend_ops'] },
   { to: '/reports', label: 'Reports', icon: ChartBarIcon, roles: ['super_admin','admin','sales_manager','management'] },
   { divider: true, label: 'Master Data', roles: ['super_admin','admin'] },
-  { to: '/brands', label: 'Brands & Categories', icon: TagIcon, roles: ['super_admin','admin'] },
-  { to: '/products', label: 'Products', icon: CubeIcon, roles: ['super_admin','admin'] },
   { to: '/users', label: 'Users', icon: UsersIcon, roles: ['super_admin','admin'] },
   { to: '/settings', label: 'Settings', icon: Cog6ToothIcon, roles: ['super_admin','admin'] },
 ];

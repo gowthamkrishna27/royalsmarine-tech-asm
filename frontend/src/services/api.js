@@ -62,6 +62,8 @@ import { userService } from './userService';
 import { masterService } from './masterService';
 import { notificationService } from './notificationService';
 
+import { submissionService } from './submissionService';
+
 export const authApi = authService;
 export const clientApi = clientService;
 export const visitApi = visitService;
@@ -71,8 +73,16 @@ export const masterApi = masterService;
 export const quotationApi = quotationService;
 export const poApi = purchaseOrderService;
 export const billingApi = billingService;
-export const dashboardApi = { get: () => api.get('/dashboard') };
+export const dashboardApi = {
+  get: () => api.get('/dashboard'),
+  getLiveSubmissions: (params) => api.get('/dashboard/live-submissions', { params }),
+};
 export const reportApi = reportService;
 export const notificationApi = notificationService;
 export const userApi = userService;
 export const tankApi = { list: (params) => api.get('/tanks', { params }) };
+export const submissionApi = submissionService;
+export const settingsApi = {
+  get: () => api.get('/settings'),
+  update: (data) => api.put('/settings', data),
+};
