@@ -71,6 +71,7 @@ export default function ClientForm() {
           hatchery_name: p.hatchery_name || '',
           brooder: p.brooder || '',
           seed_date: p.seed_date ? p.seed_date.substring(0, 10) : '',
+          doc: p.doc ?? '',
           stocking_quantity_lakhs: p.stocking_quantity_lakhs ?? '',
           feed_type: p.feed_type || '',
         }));
@@ -95,6 +96,7 @@ export default function ClientForm() {
           hatchery_name: '',
           brooder: '',
           seed_date: '',
+          doc: '',
           stocking_quantity_lakhs: '',
           feed_type: '',
           status: 'active',
@@ -151,6 +153,7 @@ export default function ClientForm() {
               hatchery_name: '',
               brooder: '',
               seed_date: '',
+              doc: '',
               stocking_quantity_lakhs: '',
               feed_type: '',
               status: 'active',
@@ -180,6 +183,7 @@ export default function ClientForm() {
         pond_name: t.tank_number || t.pond_name,
         area_acres: t.tank_size || t.area_acres || null,
         tank_size: t.tank_size || t.area_acres || null,
+        doc: t.doc !== '' && t.doc !== undefined && t.doc !== null ? parseInt(t.doc, 10) : null,
       })),
     };
 
@@ -454,11 +458,24 @@ export default function ClientForm() {
 
                     {/* Seed Date */}
                     <div>
-                      <label className="label text-xs">Seed Date</label>
+                      <label className="label text-xs">Seed Date (Stocking Date)</label>
                       <input
                         type="date"
                         value={tank.seed_date || ''}
                         onChange={(e) => updateTankField(idx, 'seed_date', e.target.value)}
+                        className="input py-1.5 text-sm"
+                      />
+                    </div>
+
+                    {/* DOC */}
+                    <div>
+                      <label className="label text-xs">DOC (Days of Culture)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={tank.doc ?? ''}
+                        onChange={(e) => updateTankField(idx, 'doc', e.target.value)}
+                        placeholder="e.g. 45 (or auto from Seed Date)"
                         className="input py-1.5 text-sm"
                       />
                     </div>

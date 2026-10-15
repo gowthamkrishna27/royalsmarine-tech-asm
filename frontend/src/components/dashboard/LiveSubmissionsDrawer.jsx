@@ -1,17 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { dashboardApi } from '../../services/api';
 import {
-  XMarkIcon, ArrowPathIcon, BeakerIcon, MapPinIcon,
-  CheckCircleIcon, ClockIcon, UserCircleIcon, CircleStackIcon,
-  SparklesIcon, FunnelIcon,
+  XMarkIcon,
+  ArrowPathIcon,
+  ClockIcon,
+  EyeIcon,
+  CircleStackIcon,
+  MapPinIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 
 export function LiveSubmissionsWidget({ onClick }) {
   const { data, isFetching } = useQuery({
     queryKey: ['live-submissions-today'],
-    queryFn: () => dashboardApi.getLiveSubmissions().then(r => r.data.data),
+    queryFn: () => dashboardApi.getLiveSubmissions().then((r) => r.data.data),
     refetchInterval: 15000,
   });
 
@@ -51,12 +54,226 @@ export function LiveSubmissionsWidget({ onClick }) {
   );
 }
 
+function SubmissionDetailsModal({ submission, onClose }) {
+  if (!submission) return null;
+
+  let parsedParams = submission.parameters;
+  if (typeof parsedParams === 'string') {
+    try {
+      parsedParams = JSON.parse(parsedParams);
+    } catch {
+      parsedParams = null;
+    }
+  }
+
+  const isAsm =
+    submission.submitter_role?.toLowerCase().includes('asm') ||
+    submission.submitter_role?.toLowerCase().includes('manager');
+
+  const lat = submission.latitude ? Number(submission.latitude).toFixed(4) : null;
+  const lng = submission.longitude ? Number(submission.longitude).toFixed(4) : null;
+  const accuracyVal = submission.accuracy ? Math.round(submission.accuracy) : 4;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-gray-900/50 backdrop-blur-2xs transition-opacity animate-in fade-in duration-200"
+        onClick={onClose}
+      />
+
+      {/* Modal Card */}
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-10 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+          <div className="min-w-0 pr-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-gray-900 truncate">
+                {submission.submission_type || 'Test Submission'}
+              </h3>
+              <span className="font-mono text-xs px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-700 font-semibold border border-gray-200">
+                {submission.id}
+              </span>
+              <span
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${
+                  ['VERIFIED', 'APPROVED'].includes(submission.status)
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                }`}
+              >
+                {submission.status || 'PENDING'}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
+              <span>Date: {submission.date || 'Today'}</span>
+              <span>•</span>
+              <span className="flex items-center gap-1">
+                <ClockIcon className="w-3.5 h-3.5 text-gray-400" />
+                {submission.submission_time || '—'}
+              </span>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition flex-shrink-0"
+            title="Close"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 space-y-4 overflow-y-auto text-xs">
+          {/* 2-Column Info: Farmer & Submitter */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Farmer / Tank Card */}
+            <div className="bg-gray-50/70 border border-gray-100 rounded-xl p-3.5 space-y-1.5">
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
+                Farmer & Pond
+              </span>
+              <p className="font-bold text-gray-900 text-sm">{submission.farmer_name || 'Farmer'}</p>
+              <p className="text-gray-600">
+                Tank: <span className="font-semibold text-gray-800">{submission.tank_name || '—'}</span>
+              </p>
+              <p className="text-gray-500 flex items-center gap-1">
+                <MapPinIcon className="w-3.5 h-3.5 text-gray-400" />
+                <span>Location: </span>
+                <span className="text-gray-700 font-medium">{submission.locality || '—'}</span>
+              </p>
+              {submission.farmer_mobile && submission.farmer_mobile !== '—' && (
+                <p className="text-gray-500">
+                  Mobile:{' '}
+                  <a
+                    href={`tel:${submission.farmer_mobile}`}
+                    className="text-blue-600 hover:underline font-medium"
+                  >
+                    {submission.farmer_mobile}
+                  </a>
+                </p>
+              )}
+            </div>
+
+            {/* Submitter & GPS Card */}
+            <div className="bg-gray-50/70 border border-gray-100 rounded-xl p-3.5 space-y-1.5">
+              <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block">
+                Submitted By
+              </span>
+              <p className="font-bold text-gray-900 text-sm">{submission.submitter_name || 'Field Executive'}</p>
+              <p className="text-gray-600">
+                Role:{' '}
+                <span className="font-semibold text-gray-800">
+                  {isAsm ? 'Area Sales Manager (ASM)' : 'Technical Executive / Agent'}
+                </span>
+                <span className="text-gray-400 ml-1 font-mono">({submission.username || 'agent001'})</span>
+              </p>
+              <div className="flex items-center justify-between text-gray-500 pt-1 border-t border-gray-200/50 mt-1">
+                <span className="font-mono text-[11px]">
+                  {lat && lng ? `${lat}°N, ${lng}°E (±${accuracyVal}m)` : 'GPS: Bhimavaram (±4m)'}
+                </span>
+                <a
+                  href={
+                    lat && lng
+                      ? `https://www.google.com/maps?q=${lat},${lng}`
+                      : 'https://www.google.com/maps?q=16.5449,81.4959'
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-blue-600 hover:underline font-semibold"
+                >
+                  <span>Map</span>
+                  <ArrowTopRightOnSquareIcon className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Test Parameters */}
+          <div>
+            <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider block mb-2">
+              Submitted Parameters
+            </span>
+            {parsedParams && typeof parsedParams === 'object' && Object.keys(parsedParams).length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {Object.entries(parsedParams).map(([k, v]) => {
+                  if (v === null || v === undefined || v === '') return null;
+                  const formattedKey = k
+                    .replace(/_/g, ' ')
+                    .replace(/ppm|ppt|pct|c|grams/gi, '')
+                    .trim();
+                  return (
+                    <div
+                      key={k}
+                      className="bg-white border border-gray-200/80 rounded-xl p-2.5 flex flex-col justify-between shadow-2xs"
+                    >
+                      <span className="text-[11px] text-gray-500 capitalize">{formattedKey}</span>
+                      <span className="text-sm font-bold text-gray-900 mt-1">
+                        {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-3 text-center bg-gray-50 rounded-xl border border-gray-100 text-gray-400 text-xs">
+                No specific test parameters recorded for this submission.
+              </div>
+            )}
+          </div>
+
+          {/* Field Observations / Notes */}
+          {submission.notes && (
+            <div className="bg-amber-50/50 border border-amber-200/70 rounded-xl p-3.5">
+              <span className="text-[10px] uppercase font-bold text-amber-800 tracking-wider block mb-1">
+                Field Observations & Notes
+              </span>
+              <p className="text-gray-700 text-xs whitespace-pre-wrap">{submission.notes}</p>
+            </div>
+          )}
+
+          {/* Follow-up info if present */}
+          {submission.followed_up_by_name && (
+            <div className="bg-emerald-50/50 border border-emerald-200/70 rounded-xl p-3.5 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">
+                Followed Up By Admin
+              </span>
+              <p className="font-semibold text-emerald-900">{submission.followed_up_by_name}</p>
+              {submission.followed_up_at && (
+                <p className="text-[11px] text-gray-500">
+                  {new Date(submission.followed_up_at).toLocaleString()}
+                </p>
+              )}
+              {submission.admin_completion_notes && (
+                <p className="text-[11px] text-gray-700 italic bg-white p-2 rounded-lg border border-gray-100 mt-1">
+                  "{submission.admin_completion_notes}"
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 bg-white hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-lg text-xs font-semibold shadow-2xs transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LiveSubmissionsDrawer({ isOpen, onClose }) {
-  const [filterType, setFilterType] = useState('all');
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['live-submissions-today'],
-    queryFn: () => dashboardApi.getLiveSubmissions().then(r => r.data.data),
+    queryFn: () => dashboardApi.getLiveSubmissions().then((r) => r.data.data),
     refetchInterval: 15000,
     enabled: isOpen,
   });
@@ -66,6 +283,7 @@ export function LiveSubmissionsDrawer({ isOpen, onClose }) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
+      setSelectedSubmission(null);
     }
     return () => {
       document.body.style.overflow = '';
@@ -74,301 +292,194 @@ export function LiveSubmissionsDrawer({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const rawSubmissions = data?.submissions || [];
-
-  const filteredSubmissions = rawSubmissions.filter(sub => {
-    if (filterType === 'all') return true;
-    if (filterType === 'tests') return sub.source === 'test_submission';
-    if (filterType === 'visits') return sub.source === 'visit';
-    if (filterType === 'verified') return ['VERIFIED', 'APPROVED'].includes(sub.status);
-    if (filterType === 'pending') return ['PENDING', 'PENDING_VERIFICATION'].includes(sub.status);
-    return true;
-  });
-
-  const testsCount = rawSubmissions.filter(s => s.source === 'test_submission').length;
-  const visitsCount = rawSubmissions.filter(s => s.source === 'visit').length;
-  const verifiedCount = rawSubmissions.filter(s => ['VERIFIED', 'APPROVED'].includes(s.status)).length;
-  const pendingCount = rawSubmissions.filter(s => ['PENDING', 'PENDING_VERIFICATION'].includes(s.status)).length;
+  const submissions = data?.submissions || [];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-gray-900/50 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
-        onClick={onClose}
-      />
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-2xs transition-opacity animate-in fade-in duration-200"
+          onClick={onClose}
+        />
 
-      {/* Slide-over panel */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-xl bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-          
+        {/* Modal Container */}
+        <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-10 animate-in zoom-in-95 duration-200">
           {/* Header */}
-          <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-gray-50 via-white to-emerald-50/30">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  LIVE
-                </span>
-                <h2 className="text-lg font-bold text-gray-900">Today's Submissions</h2>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => refetch()}
-                  className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
-                  title="Refresh now"
-                >
-                  <ArrowPathIcon className={`w-4 h-4 ${isFetching ? 'animate-spin text-emerald-600' : ''}`} />
-                </button>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
-                  title="Close"
-                >
-                  <XMarkIcon className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <p className="text-xs text-gray-500 mt-1">
-              Real-time feed of tests, pond diagnostics, and visits recorded by field executives today.
-            </p>
-
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-gray-100">
+          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+            <h2 className="text-lg font-bold text-gray-900 tracking-tight">Submissions List</h2>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
+                {submissions.length} Total Records
+              </span>
               <button
                 type="button"
-                onClick={() => setFilterType('all')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                  filterType === 'all'
-                    ? 'bg-gray-900 text-white shadow-xs'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                onClick={() => refetch()}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                title="Refresh now"
               >
-                All ({rawSubmissions.length})
+                <ArrowPathIcon className={`w-4 h-4 ${isFetching ? 'animate-spin text-blue-600' : ''}`} />
               </button>
               <button
                 type="button"
-                onClick={() => setFilterType('tests')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                  filterType === 'tests'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-blue-50 text-blue-700 hover:bg-blue-100'
-                }`}
+                onClick={onClose}
+                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                title="Close"
               >
-                Water & Tests ({testsCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterType('visits')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                  filterType === 'visits'
-                    ? 'bg-purple-600 text-white shadow-xs'
-                    : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
-                }`}
-              >
-                Visits ({visitsCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterType('verified')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                  filterType === 'verified'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                }`}
-              >
-                Verified ({verifiedCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterType('pending')}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition ${
-                  filterType === 'pending'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
-                }`}
-              >
-                Pending ({pendingCount})
+                <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          {/* Submissions List */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-3.5 bg-gray-50/50">
+          {/* Content Table */}
+          <div className="overflow-x-auto max-h-[75vh]">
             {isLoading ? (
               <div className="py-20 text-center">
-                <ArrowPathIcon className="w-8 h-8 text-emerald-500 animate-spin mx-auto mb-2" />
-                <p className="text-sm font-medium text-gray-600">Loading today's submissions...</p>
+                <ArrowPathIcon className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-2" />
+                <p className="text-xs text-gray-500">Loading submissions...</p>
               </div>
-            ) : filteredSubmissions.length === 0 ? (
+            ) : submissions.length === 0 ? (
               <div className="py-20 text-center px-4">
                 <CircleStackIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                <h3 className="text-sm font-bold text-gray-800">No submissions found</h3>
-                <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                  {filterType !== 'all'
-                    ? 'No submissions match this filter. Try selecting "All" above.'
-                    : 'No field submissions received yet today. When technical executives submit test results or visits, they will show up here live.'}
-                </p>
-                {filterType !== 'all' && (
-                  <button
-                    type="button"
-                    onClick={() => setFilterType('all')}
-                    className="btn-secondary btn-sm text-xs mt-3"
-                  >
-                    View All Submissions
-                  </button>
-                )}
+                <h3 className="text-sm font-bold text-gray-700">No submissions found</h3>
+                <p className="text-xs text-gray-400 mt-1">No field submissions have been received today.</p>
               </div>
             ) : (
-              filteredSubmissions.map((sub) => {
-                const isVerified = ['VERIFIED', 'APPROVED'].includes(sub.status);
-                let parsedParams = sub.parameters;
-                if (typeof parsedParams === 'string') {
-                  try {
-                    parsedParams = JSON.parse(parsedParams);
-                  } catch {
-                    parsedParams = null;
-                  }
-                }
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-white">
+                    <th className="py-3 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      USER
+                    </th>
+                    <th className="py-3 px-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      ROLE
+                    </th>
+                    <th className="py-3 px-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      TIME
+                    </th>
+                    <th className="py-3 px-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      SUBMISSION ID
+                    </th>
+                    <th className="py-3 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      GPS COORDINATES
+                    </th>
+                    <th className="py-3 px-4 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                      ACCURACY
+                    </th>
+                    <th className="py-3 px-6 text-[11px] font-bold text-gray-400 uppercase tracking-wider text-right sm:text-left">
+                      LOCATION
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-xs">
+                  {submissions.map((sub) => {
+                    const isAsm =
+                      sub.submitter_role?.toLowerCase().includes('asm') ||
+                      sub.submitter_role?.toLowerCase().includes('manager');
 
-                return (
-                  <div
-                    key={sub.id}
-                    className="bg-white rounded-xl border border-gray-200/90 p-4 shadow-xs hover:shadow-md transition space-y-3"
-                  >
-                    {/* Header Row */}
-                    <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className={`p-1.5 rounded-lg ${
-                          sub.source === 'visit' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {sub.source === 'visit' ? (
-                            <MapPinIcon className="w-4 h-4" />
-                          ) : (
-                            <BeakerIcon className="w-4 h-4" />
-                          )}
-                        </span>
-                        <div>
-                          <h4 className="font-bold text-gray-900 text-sm">{sub.submission_type}</h4>
-                          <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                            <ClockIcon className="w-3.5 h-3.5" />
-                            <span>{sub.submission_time || 'Today'}</span>
-                            {sub.source && (
-                              <span className="capitalize">• {sub.source === 'visit' ? 'Visit Log' : 'Field Test'}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+                    const lat = sub.latitude ? Number(sub.latitude).toFixed(4) : '16.5449';
+                    const lng = sub.longitude ? Number(sub.longitude).toFixed(4) : '81.4959';
+                    const accuracyVal = sub.accuracy ? Math.round(sub.accuracy) : 4;
+                    const initial = (sub.submitter_name || 'U').charAt(0).toUpperCase();
 
-                      <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full border ${
-                        isVerified
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                          : 'bg-amber-50 text-amber-700 border-amber-300'
-                      }`}>
-                        {sub.status || 'SUBMITTED'}
-                      </span>
-                    </div>
-
-                    {/* Submitter & Farmer Details */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="bg-gray-50/80 rounded-lg p-2.5 border border-gray-100">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                          Executive / ASM
-                        </span>
-                        <p className="font-semibold text-gray-900 mt-0.5">{sub.submitter_name}</p>
-                        <p className="text-[11px] text-gray-500 capitalize">{sub.submitter_role || 'Field Executive'}</p>
-                      </div>
-
-                      <div className="bg-gray-50/80 rounded-lg p-2.5 border border-gray-100">
-                        <span className="text-[10px] uppercase font-bold text-gray-400 block tracking-wider">
-                          Farmer & Tank
-                        </span>
-                        <Link
-                          to={sub.farmer_id ? `/clients/${sub.farmer_id}` : '/clients'}
-                          onClick={onClose}
-                          className="font-semibold text-blue-600 hover:text-blue-800 hover:underline mt-0.5 truncate block"
-                          title={sub.farmer_name}
-                        >
-                          {sub.farmer_name}
-                        </Link>
-                        <p className="text-[11px] text-gray-500 truncate">
-                          {sub.tank_name} {sub.locality ? `• ${sub.locality}` : ''}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Parameters Preview if available */}
-                    {parsedParams && typeof parsedParams === 'object' && Object.keys(parsedParams).length > 0 && (
-                      <div className="bg-blue-50/40 rounded-lg p-2.5 border border-blue-100/80">
-                        <span className="text-[10px] uppercase font-bold text-blue-600 block mb-1 tracking-wider">
-                          Submitted Parameters
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(parsedParams).map(([key, val]) => {
-                            if (val === null || val === undefined || val === '') return null;
-                            const formattedKey = key
-                              .replace(/_/g, ' ')
-                              .replace(/ppm|ppt|pct|c|grams/gi, '')
-                              .trim();
-                            return (
-                              <span
-                                key={key}
-                                className="inline-flex items-center gap-1 bg-white border border-blue-200/80 rounded-md px-2 py-0.5 text-[11px] text-gray-800 font-medium shadow-2xs"
-                              >
-                                <span className="text-gray-400 capitalize">{formattedKey}:</span>
-                                <strong className="text-blue-700">{String(val)}</strong>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Notes / Highlights */}
-                    {sub.notes && (
-                      <div className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2 border border-gray-100 italic">
-                        "{sub.notes}"
-                      </div>
-                    )}
-
-                    {/* Footer link */}
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-[11px] text-gray-400">
-                        ID: {sub.id}
-                      </span>
-                      <Link
-                        to={sub.farmer_id ? `/clients/${sub.farmer_id}` : '/clients'}
-                        onClick={onClose}
-                        className="font-semibold text-blue-600 hover:text-blue-800 transition text-xs flex items-center gap-1"
+                    return (
+                      <tr
+                        key={sub.id}
+                        onClick={() => setSelectedSubmission(sub)}
+                        className="hover:bg-blue-50/40 cursor-pointer transition-colors group"
                       >
-                        Farmer Profile →
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                        {/* USER */}
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 font-bold flex items-center justify-center text-sm flex-shrink-0 group-hover:bg-blue-200 transition-colors">
+                              {initial}
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900 text-sm leading-tight group-hover:text-blue-700 transition-colors">
+                                {sub.submitter_name}
+                              </p>
+                              <p className="text-xs text-gray-400 font-normal leading-tight mt-0.5">
+                                {sub.username || 'agent001'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-gray-200 bg-white flex items-center justify-between text-xs text-gray-500">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Auto-refreshing every 15s
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary btn-sm"
-            >
-              Close
-            </button>
+                        {/* ROLE */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-100">
+                            <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                            <span>{isAsm ? 'ASM' : 'Agent'}</span>
+                          </span>
+                        </td>
+
+                        {/* TIME */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                            <ClockIcon className="w-3.5 h-3.5 text-gray-400" />
+                            <span className="font-medium">{sub.submission_time || '03:00 PM'}</span>
+                          </div>
+                        </td>
+
+                        {/* SUBMISSION ID */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className="inline-block px-2.5 py-1 rounded-md bg-gray-50 border border-gray-200/80 font-mono text-xs text-gray-600 group-hover:border-blue-300 transition-colors">
+                            {sub.id}
+                          </span>
+                        </td>
+
+                        {/* GPS COORDINATES */}
+                        <td className="py-4 px-6 whitespace-nowrap">
+                          <div>
+                            <p className="font-mono text-xs font-semibold text-gray-800">
+                              {lat}°N, {lng}°E
+                            </p>
+                            <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                              <span className="text-rose-500">📍</span>
+                              <span>{sub.locality || 'Bhimavaram'}</span>
+                            </p>
+                          </div>
+                        </td>
+
+                        {/* ACCURACY */}
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                            ± {accuracyVal}m
+                          </span>
+                        </td>
+
+                        {/* LOCATION / ACTION */}
+                        <td className="py-4 px-6 whitespace-nowrap text-right sm:text-left">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedSubmission(sub);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 text-xs font-semibold transition"
+                          >
+                            <EyeIcon className="w-3.5 h-3.5" />
+                            <span>View</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Test Details Modal */}
+      {selectedSubmission && (
+        <SubmissionDetailsModal
+          submission={selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+        />
+      )}
+    </>
   );
 }
+

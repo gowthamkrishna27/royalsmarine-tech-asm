@@ -174,6 +174,11 @@ export default function ClientDetail() {
                             {p.salinity} ppt
                           </span>
                         )}
+                        {p.doc !== null && p.doc !== undefined && (
+                          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                            DOC {p.doc}
+                          </span>
+                        )}
                       </div>
                       <Badge color={p.status === 'active' ? 'green' : 'gray'}>
                         {p.status || 'Active'}
@@ -204,6 +209,12 @@ export default function ClientDetail() {
                         <div>
                           <span className="text-gray-400">Seed Date:</span>{' '}
                           <span className="font-medium text-gray-800">{p.seed_date.substring(0, 10)}</span>
+                        </div>
+                      )}
+                      {p.doc !== null && p.doc !== undefined && (
+                        <div>
+                          <span className="text-gray-400">DOC:</span>{' '}
+                          <span className="font-semibold text-blue-700">Day {p.doc}</span>
                         </div>
                       )}
                       {p.stocking_quantity_lakhs !== null && p.stocking_quantity_lakhs !== undefined && (

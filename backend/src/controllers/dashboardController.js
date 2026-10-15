@@ -146,6 +146,76 @@ const getManagementDashboard = async () => {
   const harvestedTanks = Number(pondStats[0]?.harvested || 0) + Number(tankStats[0]?.harvested || 0);
   const averageAbw = tankStats[0]?.avg_abw !== null && tankStats[0]?.avg_abw !== undefined ? Number(tankStats[0].avg_abw) : 0;
 
+  // Followed-up tests by admins for Admin Dashboard display
+  let followedUpTests = [];
+  let testFollowupStats = { due: 0, overdue: 0, completed: 0 };
+  try {
+    const [tests] = await sequelize.query(`
+      SELECT 
+        s.id,
+        s.test_type,
+        s.date as test_date,
+        COALESCE(s.due_date, s.date) as due_date,
+        s.submission_time,
+        s.followup_status,
+        s.followed_up_by_id,
+        s.followed_up_by_name,
+        s.followed_up_at,
+        s.admin_completion_notes,
+        s.user_id,
+        COALESCE(s.user_name, u.full_name, 'Field Executive') as submitter_name,
+        COALESCE(s.role, r.display_name, r.name, 'Technical Executive') as submitter_role,
+        CASE 
+          WHEN LOWER(COALESCE(s.role, r.display_name, r.name, '')) LIKE '%asm%' 
+            OR LOWER(COALESCE(s.role, r.name, '')) LIKE '%sales_manager%' 
+            OR LOWER(COALESCE(s.role, r.display_name, '')) LIKE '%area sales manager%'
+          THEN 'asm'
+          ELSE 'agent'
+        END as submitter_type,
+        s.farmer_id,
+        COALESCE(c.company_name, f.name, 'Farmer') as farmer_name,
+        COALESCE(c.mobile, f.phone, '—') as farmer_mobile,
+        s.tank_id,
+        COALESCE(p.pond_name, t.name, CONCAT('Tank #', s.tank_id)) as tank_name,
+        COALESCE(s.locality, c.village, c.city, f.district, 'Local') as locality,
+        s.data as parameters,
+        n.is_read as notification_is_read,
+        n.read_at as notification_read_at
+      FROM submissions s
+      LEFT JOIN users u ON u.id = CAST(NULLIF(s.user_id, '') AS UNSIGNED)
+      LEFT JOIN roles r ON u.role_id = r.id
+      LEFT JOIN clients c ON c.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+      LEFT JOIN farmers f ON f.id = CAST(NULLIF(s.farmer_id, '') AS UNSIGNED)
+      LEFT JOIN ponds p ON p.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+      LEFT JOIN tanks t ON t.id = CAST(NULLIF(s.tank_id, '') AS UNSIGNED)
+      LEFT JOIN (
+        SELECT reference_id, MAX(is_read) as is_read, MAX(read_at) as read_at
+        FROM notifications 
+        WHERE reference_type = 'test_submission'
+        GROUP BY reference_id
+      ) n ON n.reference_id = s.id
+      WHERE s.followup_status = 'completed' AND s.followed_up_by_name IS NOT NULL
+      ORDER BY s.followed_up_at DESC
+      LIMIT 25
+    `);
+    followedUpTests = tests;
+
+    const [[stats]] = await sequelize.query(`
+      SELECT 
+        SUM(CASE WHEN followup_status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN followup_status != 'completed' AND COALESCE(due_date, date) < CURDATE() THEN 1 ELSE 0 END) as overdue,
+        SUM(CASE WHEN followup_status != 'completed' AND COALESCE(due_date, date) >= CURDATE() THEN 1 ELSE 0 END) as due
+      FROM submissions
+    `);
+    testFollowupStats = {
+      completed: Number(stats?.completed || 0),
+      overdue: Number(stats?.overdue || 0),
+      due: Number(stats?.due || 0)
+    };
+  } catch (err) {
+    console.error('Error fetching followed-up tests for dashboard:', err);
+  }
+
   return {
     total_farmers: Number(farmerRows[0]?.total_farmers || 0),
     active_farmers: Number(farmerRows[0]?.active_farmers || 0),
@@ -159,6 +229,8 @@ const getManagementDashboard = async () => {
     brand_pipeline: brandPipeline,
     salesperson_performance: salespersonPerf,
     month_billing: monthBilling[0],
+    followed_up_tests: followedUpTests,
+    test_followup_stats: testFollowupStats,
   };
 };
 
@@ -196,6 +268,7 @@ const getLiveSubmissions = async (req, res) => {
           COALESCE(s.test_type, 'Field Test') as submission_type,
           s.user_id,
           COALESCE(s.user_name, u.full_name, 'Field Executive') as submitter_name,
+          COALESCE(u.username, u.email, CONCAT('agent', LPAD(COALESCE(s.user_id, '1'), 3, '0'))) as username,
           COALESCE(s.role, r.name, 'technical_executive') as submitter_role,
           s.farmer_id,
           COALESCE(c.company_name, f.name, 'Farmer') as farmer_name,
@@ -211,6 +284,11 @@ const getLiveSubmissions = async (req, res) => {
           s.longitude,
           s.accuracy,
           s.review_notes as notes,
+          s.followed_up_by_id,
+          s.followed_up_by_name,
+          s.followed_up_at,
+          s.admin_completion_notes,
+          s.followup_status,
           s.created_at
         FROM submissions s
         LEFT JOIN users u ON u.id = CAST(NULLIF(s.user_id, '') AS UNSIGNED)
@@ -229,6 +307,7 @@ const getLiveSubmissions = async (req, res) => {
           CONCAT(REPLACE(REPLACE(v.meeting_type, '_', ' '), 'casual', 'Routine'), ' Visit') as submission_type,
           v.salesperson_id as user_id,
           u.full_name as submitter_name,
+          COALESCE(u.username, u.email, CONCAT('agent', LPAD(v.salesperson_id, 3, '0'))) as username,
           r.name as submitter_role,
           v.client_id as farmer_id,
           c.company_name as farmer_name,
@@ -244,6 +323,11 @@ const getLiveSubmissions = async (req, res) => {
           v.longitude,
           NULL as accuracy,
           COALESCE(v.meeting_highlights, v.remarks) as notes,
+          NULL as followed_up_by_id,
+          NULL as followed_up_by_name,
+          NULL as followed_up_at,
+          NULL as admin_completion_notes,
+          NULL as followup_status,
           v.created_at
         FROM visits v
         JOIN users u ON v.salesperson_id = u.id

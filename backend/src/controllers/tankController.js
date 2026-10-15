@@ -1,6 +1,7 @@
 const sequelize = require('../config/database');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
+const { getDocSqlExpression } = require('../utils/docCalculator');
 
 const listAllTanks = async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
@@ -61,7 +62,9 @@ const listAllTanks = async (req, res) => {
           p.culture_type,
           p.water_source as water_type,
           LOWER(p.status) as status,
-          p.doc,
+          ${getDocSqlExpression({ seedDateCol: 'p.seed_date', docCol: 'p.doc', createdAtCol: 'p.created_at', statusCol: 'p.status' })} as doc,
+          p.doc as baseline_doc,
+          p.fcr,
           p.remarks,
           p.latitude,
           p.longitude,
@@ -97,7 +100,9 @@ const listAllTanks = async (req, res) => {
           t.culture_type,
           t.water_source as water_type,
           LOWER(t.status) as status,
-          t.doc,
+          ${getDocSqlExpression({ seedDateCol: 't.stocking_date', docCol: 't.doc', createdAtCol: 't.created_at', statusCol: 't.status', isDateString: true })} as doc,
+          t.doc as baseline_doc,
+          t.fcr as fcr,
           NULL as remarks,
           NULL as latitude,
           NULL as longitude,

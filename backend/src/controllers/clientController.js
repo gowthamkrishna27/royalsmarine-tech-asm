@@ -4,6 +4,7 @@ const sequelize = require('../config/database');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
+const { getDocSqlExpression } = require('../utils/docCalculator');
 
 const buildClientWhere = (query, userId, role) => {
   let where = 'c.deleted_at IS NULL';
@@ -141,11 +142,12 @@ const createClient = async (req, res) => {
         if (!pondName) continue;
         const pondUuid = uuidv4();
         const tankSize = p.tank_size !== undefined && p.tank_size !== '' ? parseFloat(p.tank_size) : (p.area_acres ? parseFloat(p.area_acres) : null);
+        const baselineDoc = p.doc !== undefined && p.doc !== null && p.doc !== '' && !isNaN(Number(p.doc)) ? parseInt(p.doc, 10) : (p.seed_date ? 0 : null);
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
            salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by, doc)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -158,7 +160,8 @@ const createClient = async (req, res) => {
               p.feed_type || null,
               p.culture_type || null, p.water_type || null,
               p.latitude || null, p.longitude || null, p.gps_address || null,
-              p.status || 'active', p.remarks || null, req.user.id
+              p.status || 'active', p.remarks || null, req.user.id,
+              baselineDoc
             ],
             transaction: t,
           }
@@ -205,7 +208,7 @@ const getClient = async (req, res) => {
       { replacements: [req.params.id] }
     );
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
+      `SELECT *, COALESCE(area_acres, area) as area_acres, doc as baseline_doc, ${getDocSqlExpression()} as doc FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
 
@@ -291,13 +294,15 @@ const updateClient = async (req, res) => {
         if (!pondName) continue;
         const tankSize = p.tank_size !== undefined && p.tank_size !== '' ? parseFloat(p.tank_size) : (p.area_acres ? parseFloat(p.area_acres) : null);
 
+        const tankDocVal = p.doc !== undefined && p.doc !== null && p.doc !== '' && !isNaN(Number(p.doc)) ? parseInt(p.doc, 10) : null;
         if (p.id) {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
              salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?,
-             latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
+             latitude=?, longitude=?, gps_address=?, status=?, remarks=?,
+             doc=COALESCE(?, doc), updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
               replacements: [
@@ -311,7 +316,9 @@ const updateClient = async (req, res) => {
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || null,
                 p.latitude || null, p.longitude || null, p.gps_address || null,
-                p.status || 'active', p.remarks || null, p.id, req.params.id, req.params.id
+                p.status || 'active', p.remarks || null,
+                tankDocVal,
+                p.id, req.params.id, req.params.id
               ],
               transaction: t,
             }
@@ -321,8 +328,8 @@ const updateClient = async (req, res) => {
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
              salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by, doc)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -335,7 +342,8 @@ const updateClient = async (req, res) => {
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || null,
                 p.latitude || null, p.longitude || null, p.gps_address || null,
-                p.status || 'active', p.remarks || null, req.user.id
+                p.status || 'active', p.remarks || null, req.user.id,
+                tankDocVal !== null ? tankDocVal : (p.seed_date ? 0 : null)
               ],
               transaction: t,
             }
@@ -395,7 +403,7 @@ const getClientProfile = async (req, res) => {
     );
 
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
+      `SELECT *, COALESCE(area_acres, area) as area_acres, doc as baseline_doc, ${getDocSqlExpression()} as doc FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [clientId, clientId] }
     );
     const total_acres = ponds.reduce((acc, p) => acc + (parseFloat(p.area_acres) || 0), 0);
@@ -496,7 +504,7 @@ const importClients = async (req, res) => {
 const listPonds = async (req, res) => {
   try {
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
+      `SELECT *, COALESCE(area_acres, area) as area_acres, doc as baseline_doc, ${getDocSqlExpression()} as doc FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
     return sendSuccess(res, 'Ponds fetched', ponds);
@@ -509,7 +517,7 @@ const createPond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
     hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-    culture_type, water_type, latitude, longitude, gps_address, status, remarks
+    culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc
   } = req.body;
   const finalName = tank_number || pond_name;
   if (!finalName) return sendError(res, 'Tank number or name is required', 400);
@@ -527,11 +535,12 @@ const createPond = async (req, res) => {
 
     const uuid = uuidv4();
     const finalSize = tank_size !== undefined && tank_size !== '' ? parseFloat(tank_size) : (area_acres ? parseFloat(area_acres) : null);
+    const parsedDoc = doc !== undefined && doc !== null && doc !== '' && !isNaN(Number(doc)) ? parseInt(doc, 10) : (seed_date ? 0 : null);
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
        salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by, doc)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -543,7 +552,8 @@ const createPond = async (req, res) => {
           stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' ? parseFloat(stocking_quantity_lakhs) : null,
           feed_type || null,
           culture_type || null, water_type || null,
-          latitude || null, longitude || null, gps_address || null, status || 'active', remarks || null, req.user.id
+          latitude || null, longitude || null, gps_address || null, status || 'active', remarks || null, req.user.id,
+          parsedDoc
         ]
       }
     );
@@ -558,7 +568,7 @@ const updatePond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
     hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-    culture_type, water_type, latitude, longitude, gps_address, status, remarks
+    culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc
   } = req.body;
   try {
     const [clientRows] = await sequelize.query(
@@ -579,12 +589,14 @@ const updatePond = async (req, res) => {
 
     const finalName = tank_number || pond_name || existing[0].pond_name;
     const finalSize = tank_size !== undefined && tank_size !== '' ? parseFloat(tank_size) : (area_acres ? parseFloat(area_acres) : null);
+    const parsedDoc = doc !== undefined && doc !== null && doc !== '' && !isNaN(Number(doc)) ? parseInt(doc, 10) : null;
 
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
        salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
        stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?,
-       latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
+       latitude=?, longitude=?, gps_address=?, status=?, remarks=?,
+       doc=COALESCE(?, doc), updated_at=NOW()
        WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
       {
         replacements: [
@@ -598,7 +610,9 @@ const updatePond = async (req, res) => {
           feed_type || null,
           culture_type || null, water_type || null,
           latitude || null, longitude || null, gps_address || null, status || 'active',
-          remarks || null, req.params.pondId, req.params.id, req.params.id
+          remarks || null,
+          parsedDoc,
+          req.params.pondId, req.params.id, req.params.id
         ]
       }
     );

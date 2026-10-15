@@ -384,31 +384,33 @@ export default function MapPage() {
           : 'linear-gradient(135deg, #ea580c, #f59e0b)';
         const shadowColor = isAsm ? 'rgba(124, 58, 237, 0.45)' : 'rgba(234, 88, 12, 0.45)';
         const badgeLabel = isAsm ? 'ASM Test' : 'Agent Test';
-        const roleColor = isAsm ? 'background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe;' : 'background: #fef3c7; color: #92400e; border: 1px solid #fde68a;';
+        const badgeStyle = isAsm
+          ? 'background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe;'
+          : 'background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa;';
 
         icon = L.divIcon({
           className: `custom-pin-test-${item.submitterCategory}`,
           html: `<div style="
             background: ${pinBg};
-            width: 34px;
-            height: 34px;
+            width: 32px;
+            height: 32px;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
-            border: 2.5px solid #ffffff;
-            box-shadow: 0 4px 10px ${shadowColor};
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 8px ${shadowColor};
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
           ">
-            <span style="transform: rotate(45deg); font-size: 14px; line-height: 1;">🧪</span>
+            <span style="transform: rotate(45deg); font-size: 13px; line-height: 1;">🧪</span>
           </div>`,
-          iconSize: [34, 34],
-          iconAnchor: [17, 34],
-          popupAnchor: [0, -34],
+          iconSize: [32, 32],
+          iconAnchor: [16, 32],
+          popupAnchor: [0, -32],
         });
 
-        // Format test parameters badges
+        // Format test parameters as subtle minimal pills
         let paramsHtml = '';
         if (item.parameters && typeof item.parameters === 'object' && Object.keys(item.parameters).length > 0) {
           const badges = Object.entries(item.parameters)
@@ -418,99 +420,68 @@ export default function MapPage() {
                 .replace(/_/g, ' ')
                 .replace(/ppm|ppt|pct|c|grams/gi, '')
                 .trim();
-              return `<span style="display: inline-block; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 2px 6px; font-size: 11px; margin: 2px 2px 2px 0;">
-                <span style="color: #4b5563; text-transform: capitalize;">${formattedKey}:</span> 
-                <strong style="color: #1e40af;">${v}</strong>
+              return `<span style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 2px 6px; font-size: 11px; color: #334155; display: inline-flex; gap: 3px;">
+                <span style="color: #64748b; text-transform: capitalize;">${formattedKey}:</span>
+                <strong style="color: #0f172a;">${v}</strong>
               </span>`;
             })
             .join('');
 
           if (badges) {
             paramsHtml = `
-              <div style="margin: 6px 0; padding: 6px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
-                <span style="font-size: 9px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 3px;">
-                  Test Parameters:
-                </span>
-                <div style="display: flex; flex-wrap: wrap;">${badges}</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px;">
+                ${badges}
               </div>
             `;
           }
         }
 
         popupContent = `
-          <div style="font-family: inherit; font-size: 13px; min-width: 250px; max-width: 320px; padding: 4px;">
-            {/* Header */}
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; gap: 4px;">
-              <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 2px 8px; border-radius: 6px; ${roleColor}">
+          <div style="font-family: inherit; font-size: 13px; min-width: 230px; max-width: 290px; padding: 2px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px;">
+              <span style="font-size: 10px; font-weight: 600; text-transform: uppercase; padding: 1.5px 6px; border-radius: 4px; ${badgeStyle}">
                 ${badgeLabel}
               </span>
-              <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; ${
+              <span style="font-size: 10px; font-weight: 600; padding: 1.5px 6px; border-radius: 4px; ${
                 isVerified
-                  ? 'background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;'
-                  : 'background: #fffbeb; color: #b45309; border: 1px solid #fde68a;'
+                  ? 'background: #ecfdf5; color: #047857; border: 1px solid #d1fae5;'
+                  : 'background: #fffbeb; color: #b45309; border: 1px solid #fef3c7;'
               }">
-                ${item.status}
+                ${isVerified ? 'Verified' : 'Pending'}
               </span>
             </div>
 
-            {/* Test Type & ID */}
-            <p style="font-weight: 800; font-size: 14px; color: #111827; margin: 0 0 2px 0;">
+            <div style="font-weight: 700; font-size: 14px; color: #0f172a; margin-top: 4px; line-height: 1.3;">
               ${item.testType}
-            </p>
-            <p style="color: #9ca3af; font-size: 10px; margin: 0 0 8px 0; font-family: monospace;">
-              ID: ${item.rawId}
-            </p>
-
-            {/* Submitter Details */}
-            <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px;">
-              <span style="font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; display: block;">
-                Submitted By
-              </span>
-              <p style="font-weight: 700; color: #111827; font-size: 12px; margin: 1px 0 0 0;">
-                ${item.submitterName}
-              </p>
-              <p style="color: #6b7280; font-size: 11px; margin: 0;">
-                ${item.submitterRole} ${item.agentId ? `· ID: ${item.agentId}` : ''}
-              </p>
             </div>
 
-            {/* Farmer & Tank */}
-            <p style="color: #374151; font-size: 12px; margin: 0 0 3px 0;">
-              🌾 <strong>${item.farmerName}</strong> · 💧 ${item.tankName}
-            </p>
+            <div style="font-size: 12px; color: #475569; margin-top: 2px;">
+              ${item.farmerName} <span style="color: #cbd5e1;">·</span> ${item.tankName}
+            </div>
 
-            {/* Submission Location & Accuracy */}
-            <p style="color: #4b5563; font-size: 11px; margin: 0 0 3px 0;">
-              📍 <strong>Location:</strong> ${item.locality}
-            </p>
-            <p style="color: #6b7280; font-size: 10px; margin: 0 0 4px 0; font-family: monospace;">
-              Coords: ${item.latitude.toFixed(6)}, ${item.longitude.toFixed(6)} ${item.accuracy ? `(±${Math.round(item.accuracy)}m)` : ''}
-            </p>
+            <div style="font-size: 11px; color: #64748b; margin-top: 6px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <span>${item.submitterName} (${isAsm ? 'ASM' : 'Agent'})</span>
+              <span style="color: #cbd5e1;">•</span>
+              <span>${item.date || ''}</span>
+              ${item.locality ? `<span style="color: #cbd5e1;">•</span><span>${item.locality}</span>` : ''}
+            </div>
 
-            {/* Timestamp */}
-            <p style="color: #6b7280; font-size: 11px; margin: 0 0 6px 0;">
-              🕒 <strong>Submitted:</strong> ${item.date || ''} ${item.submissionTime || ''}
-            </p>
-
-            {/* Test Parameters */}
             ${paramsHtml}
 
-            {/* Notes */}
             ${item.notes ? `
-              <div style="background: #fff; border-left: 3px solid ${isAsm ? '#7c3aed' : '#ea580c'}; padding: 4px 8px; font-size: 11px; color: #4b5563; margin: 6px 0; font-style: italic;">
+              <div style="background: #f8fafc; border-left: 2px solid ${isAsm ? '#a855f7' : '#f97316'}; padding: 4px 8px; font-size: 11px; color: #64748b; margin-top: 8px; border-radius: 2px; font-style: italic;">
                 "${item.notes}"
               </div>
             ` : ''}
 
-            {/* Bottom Actions */}
-            <div style="margin-top: 8px; padding-top: 6px; border-top: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between;">
+            <div style="margin-top: 10px; padding-top: 6px; border-top: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between;">
               <a href="https://www.google.com/maps/dir/?api=1&destination=${item.latitude},${item.longitude}" 
                  target="_blank" rel="noreferrer" 
-                 style="font-size: 11px; color: ${isAsm ? '#7c3aed' : '#ea580c'}; font-weight: 700; text-decoration: none;">
-                Navigate Here ↗
+                 style="font-size: 11px; color: #2563eb; font-weight: 600; text-decoration: none;">
+                Directions ↗
               </a>
               ${item.farmerId ? `
-                <a href="/clients/${item.farmerId}" style="font-size: 11px; color: #2563eb; font-weight: 600; text-decoration: none;">
+                <a href="/clients/${item.farmerId}" style="font-size: 11px; color: #64748b; font-weight: 500; text-decoration: none;">
                   Farmer Profile →
                 </a>
               ` : ''}
@@ -561,7 +532,7 @@ export default function MapPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="page-title">Maps & Field Locations</h1>
+            <h1 className="page-title">Maps</h1>
             {isFetching && (
               <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                 <ArrowPathIcon className="w-3 h-3 animate-spin" />
@@ -569,9 +540,7 @@ export default function MapPage() {
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Real-time map showing farmers, ponds, and test submission locations captured by Agents & ASMs.
-          </p>
+          <p className="text-xs text-gray-500 mt-0.5"></p>
         </div>
 
         {/* Action Buttons */}
@@ -586,24 +555,15 @@ export default function MapPage() {
             <ArrowPathIcon className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-blue-600' : ''}`} />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={() => setShowSubmitModal(true)}
-            className="btn-primary text-xs flex items-center gap-1.5 shadow-sm shadow-blue-500/20"
-          >
-            <PlusIcon className="w-4 h-4 stroke-[2.5]" />
-            Submit Test & Pin
-          </button>
         </div>
       </div>
 
       {/* Summary KPI Badges */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div 
+        <div
           onClick={() => setTypeFilter(typeFilter === 'farmer' ? '' : 'farmer')}
-          className={`p-3 rounded-xl border cursor-pointer transition ${
-            typeFilter === 'farmer' ? 'bg-blue-50 border-blue-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
-          }`}
+          className={`p-3 rounded-xl border cursor-pointer transition ${typeFilter === 'farmer' ? 'bg-blue-50 border-blue-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500">Farmers Mapped</span>
@@ -612,11 +572,10 @@ export default function MapPage() {
           <p className="text-xl font-bold text-gray-900 mt-1">{farmersCount}</p>
         </div>
 
-        <div 
+        <div
           onClick={() => setTypeFilter(typeFilter === 'pond' ? '' : 'pond')}
-          className={`p-3 rounded-xl border cursor-pointer transition ${
-            typeFilter === 'pond' ? 'bg-emerald-50 border-emerald-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
-          }`}
+          className={`p-3 rounded-xl border cursor-pointer transition ${typeFilter === 'pond' ? 'bg-emerald-50 border-emerald-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-500">Ponds Mapped</span>
@@ -625,11 +584,10 @@ export default function MapPage() {
           <p className="text-xl font-bold text-gray-900 mt-1">{pondsCount}</p>
         </div>
 
-        <div 
+        <div
           onClick={() => setTypeFilter(typeFilter === 'agent' ? '' : 'agent')}
-          className={`p-3 rounded-xl border cursor-pointer transition ${
-            typeFilter === 'agent' ? 'bg-amber-50 border-amber-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
-          }`}
+          className={`p-3 rounded-xl border cursor-pointer transition ${typeFilter === 'agent' ? 'bg-amber-50 border-amber-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-amber-700">Agent Tests</span>
@@ -638,11 +596,10 @@ export default function MapPage() {
           <p className="text-xl font-bold text-gray-900 mt-1">{agentTestsCount}</p>
         </div>
 
-        <div 
+        <div
           onClick={() => setTypeFilter(typeFilter === 'asm' ? '' : 'asm')}
-          className={`p-3 rounded-xl border cursor-pointer transition ${
-            typeFilter === 'asm' ? 'bg-purple-50 border-purple-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
-          }`}
+          className={`p-3 rounded-xl border cursor-pointer transition ${typeFilter === 'asm' ? 'bg-purple-50 border-purple-400 shadow-xs' : 'bg-white border-gray-200 hover:border-gray-300'
+            }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-purple-700">ASM Tests</span>
@@ -711,7 +668,7 @@ export default function MapPage() {
             Map Legend ({filtered.length} visible)
           </span>
           <div className="flex flex-col gap-1.5">
-            <div 
+            <div
               onClick={() => setTypeFilter(typeFilter === 'farmer' ? '' : 'farmer')}
               className={`flex items-center gap-2 cursor-pointer hover:opacity-80 transition ${typeFilter === 'farmer' ? 'font-bold text-blue-700' : 'text-gray-700'}`}
             >
@@ -719,7 +676,7 @@ export default function MapPage() {
               <span>Farmers ({farmersCount})</span>
             </div>
 
-            <div 
+            <div
               onClick={() => setTypeFilter(typeFilter === 'pond' ? '' : 'pond')}
               className={`flex items-center gap-2 cursor-pointer hover:opacity-80 transition ${typeFilter === 'pond' ? 'font-bold text-emerald-700' : 'text-gray-700'}`}
             >
@@ -727,7 +684,7 @@ export default function MapPage() {
               <span>Ponds ({pondsCount})</span>
             </div>
 
-            <div 
+            <div
               onClick={() => setTypeFilter(typeFilter === 'agent' ? '' : 'agent')}
               className={`flex items-center gap-2 cursor-pointer hover:opacity-80 transition ${typeFilter === 'agent' ? 'font-bold text-amber-700' : 'text-gray-700'}`}
             >
@@ -735,7 +692,7 @@ export default function MapPage() {
               <span>Agent Test Locations ({agentTestsCount})</span>
             </div>
 
-            <div 
+            <div
               onClick={() => setTypeFilter(typeFilter === 'asm' ? '' : 'asm')}
               className={`flex items-center gap-2 cursor-pointer hover:opacity-80 transition ${typeFilter === 'asm' ? 'font-bold text-purple-700' : 'text-gray-700'}`}
             >
