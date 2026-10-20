@@ -46,16 +46,6 @@ module.exports = {
     fileFilter: fileFilter(ALL_ALLOWED),
     limits: { fileSize: maxSize },
   }),
-  quotationUpload: multer({
-    storage: storage('quotations'),
-    fileFilter: fileFilter(ALL_ALLOWED),
-    limits: { fileSize: maxSize },
-  }),
-  poUpload: multer({
-    storage: storage('purchase-orders'),
-    fileFilter: fileFilter(ALL_ALLOWED),
-    limits: { fileSize: maxSize },
-  }),
   billingUpload: multer({
     storage: storage('billing'),
     fileFilter: fileFilter([...ALLOWED_TYPES.document]),

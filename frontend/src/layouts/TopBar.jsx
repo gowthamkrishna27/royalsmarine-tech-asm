@@ -1,24 +1,22 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Bars3Icon, BellIcon, ArrowRightOnRectangleIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import {
+  ArrowLeftIcon,
+  ArrowRightOnRectangleIcon,
+  UserCircleIcon,
+  Cog6ToothIcon,
+  ChartBarIcon,
+  TagIcon,
+  UsersIcon,
+} from '@heroicons/react/24/outline';
 import { useAuth } from '../context/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { notificationApi } from '../services/api';
 import toast from 'react-hot-toast';
 
-export default function TopBar({ onMenuClick }) {
+export default function TopBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
-  const [showNotifs, setShowNotifs] = useState(false);
-
-  const { data: notifData } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => notificationApi.list().then(r => r.data.data),
-    refetchInterval: 60000,
-  });
-
-  const unread = notifData?.filter(n => !n.is_read).length || 0;
 
   const handleLogout = async () => {
     await logout();
@@ -26,71 +24,117 @@ export default function TopBar({ onMenuClick }) {
     navigate('/login');
   };
 
+  const isAdmin = ['super_admin', 'admin'].includes(user?.role);
+  const isRoot = location.pathname === '/dashboard' || location.pathname === '/';
+
+  const handleBack = () => {
+    if (window.history.state && window.history.state.idx > 0) {
+      navigate(-1);
+    } else {
+      navigate('/dashboard');
+    }
+  };
+
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center px-4 gap-3 sticky top-0 z-10">
-      <button onClick={onMenuClick} className="p-2 rounded-lg hover:bg-gray-100 lg:hidden">
-        <Bars3Icon className="w-6 h-6 text-gray-600" />
-      </button>
-
-      <div className="flex-1" />
-
-      {/* Notifications */}
-      <div className="relative">
-        <button
-          onClick={() => setShowNotifs(!showNotifs)}
-          className="relative p-2 rounded-lg hover:bg-gray-100 transition"
-        >
-          <BellIcon className="w-5 h-5 text-gray-600" />
-          {unread > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-              {unread > 9 ? '9+' : unread}
-            </span>
-          )}
-        </button>
-        {showNotifs && (
-          <div className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <span className="font-semibold text-sm">Notifications</span>
-              {unread > 0 && (
-                <button onClick={() => notificationApi.readAll()} className="text-xs text-blue-600 hover:underline">
-                  Mark all read
-                </button>
-              )}
-            </div>
-            {(notifData?.length === 0) && (
-              <p className="text-sm text-gray-500 text-center py-8">No notifications</p>
-            )}
-            {notifData?.map(n => (
-              <div key={n.id} className={`px-4 py-3 border-b border-gray-50 hover:bg-gray-50 ${!n.is_read ? 'bg-blue-50/50' : ''}`}>
-                <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{n.message}</p>
-              </div>
-            ))}
-          </div>
+    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-20 relative">
+      {/* Left Back button on mobile where the hamburger was */}
+      <div className="flex items-center lg:hidden">
+        {!isRoot ? (
+          <button
+            onClick={handleBack}
+            aria-label="Back"
+            title="Go back"
+            className="w-10 h-10 rounded-xl text-gray-700 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition flex items-center justify-center -ml-1"
+          >
+            <ArrowLeftIcon className="w-5 h-5 stroke-[2.5]" />
+          </button>
+        ) : (
+          <div className="w-10 h-10" />
         )}
       </div>
 
-      {/* User menu */}
-      <div className="relative">
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
-        >
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
-            {user?.full_name?.[0]}
-          </div>
-          <span className="text-sm font-medium text-gray-700 hidden sm:block">{user?.full_name?.split(' ')[0]}</span>
-        </button>
-        {showMenu && (
-          <div className="absolute right-0 top-12 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-50">
-            <Link to="/profile" onClick={() => setShowMenu(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-              <UserCircleIcon className="w-4 h-4" /> Profile
-            </Link>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left">
-              <ArrowRightOnRectangleIcon className="w-4 h-4" /> Logout
-            </button>
-          </div>
-        )}
+      {/* Middle Logo */}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
+        <Link to="/dashboard" className="flex items-center">
+          <img
+            src="/topnavlogo.png"
+            alt="Logo"
+            className="h-10 sm:h-12 w-auto max-w-[190px] sm:max-w-[250px] object-contain"
+          />
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {/* Settings menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            aria-label="Settings"
+            title="Settings & Menu"
+            className="p-2 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition flex items-center justify-center focus:outline-none"
+          >
+            <Cog6ToothIcon className="w-6 h-6 text-gray-600 hover:text-gray-900 transition-transform active:rotate-45" />
+          </button>
+          {showMenu && (
+            <>
+              {/* Backdrop dismiss */}
+              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-12 w-56 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 fade-in">
+                <div className="px-4 py-2.5 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{user?.full_name}</p>
+                  <p className="text-xs text-gray-500 capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+                </div>
+
+                <div className="py-1">
+                  {/* Reports link (especially convenient on mobile) */}
+                  <Link
+                    to="/reports"
+                    onClick={() => setShowMenu(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    <ChartBarIcon className="w-4 h-4 text-gray-500" /> Reports & Analytics
+                  </Link>
+
+                  {/* Admin links if applicable */}
+                  {isAdmin && (
+                    <>
+                      <Link
+                        to="/brands"
+                        onClick={() => setShowMenu(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        <TagIcon className="w-4 h-4 text-gray-500" /> Brands & Categories
+                      </Link>
+                      <Link
+                        to="/users"
+                        onClick={() => setShowMenu(false)}
+                        className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        <UsersIcon className="w-4 h-4 text-gray-500" /> User Management
+                      </Link>
+                    </>
+                  )}
+
+                  <Link
+                    to="/profile"
+                    onClick={() => setShowMenu(false)}
+                    className="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                  >
+                    <UserCircleIcon className="w-4 h-4 text-gray-500" /> Profile & Settings
+                  </Link>
+                </div>
+
+                <div className="border-t border-gray-100 my-1" />
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 w-full text-left transition"
+                >
+                  <ArrowRightOnRectangleIcon className="w-4 h-4" /> Logout
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

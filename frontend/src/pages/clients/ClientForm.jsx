@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
-import { clientApi } from '../../services/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../context/AuthContext';
+import { clientApi, userApi } from '../../services/api';
 import { CLIENT_TYPES, SOIL_TYPES, POND_STATUSES } from '../../constants';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
@@ -12,9 +13,18 @@ import { MapPinIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 export default function ClientForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const isManagerOrAdmin = ['super_admin', 'admin', 'sales_manager'].includes(user?.role);
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
   const [mapTarget, setMapTarget] = useState(null); // null | { type: 'farm' } | { type: 'tank', index: number }
+
+  const { data: teamUsers } = useQuery({
+    queryKey: ['team-users'],
+    queryFn: () => userApi.list({ limit: 100, status: 'active' }).then(r => r.data.data),
+    enabled: isManagerOrAdmin,
+  });
   const [tanks, setTanks] = useState(
     isEdit
       ? []
@@ -186,9 +196,19 @@ export default function ClientForm() {
     try {
       if (isEdit) {
         await clientApi.update(id, payload);
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['clients'] }),
+          qc.invalidateQueries({ queryKey: ['clients-list'] }),
+          qc.invalidateQueries({ queryKey: ['client', id] }),
+          qc.invalidateQueries({ queryKey: ['client-profile', id] }),
+        ]);
         toast.success('Farmer updated successfully');
       } else {
         const res = await clientApi.create(payload);
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ['clients'] }),
+          qc.invalidateQueries({ queryKey: ['clients-list'] }),
+        ]);
         toast.success('Farmer created successfully');
         navigate(`/clients/${res.data.data.id}`);
         return;
@@ -302,6 +322,40 @@ export default function ClientForm() {
                 className="input"
               />
             </div>
+
+            {/* Farmer Type */}
+            <div>
+              <label className="label">Farmer Type</label>
+              <select {...register('client_type')} className="input">
+                {CLIENT_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="label">Status</label>
+              <select {...register('status')} className="input">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+
+            {/* Assigned Salesperson (Visible to Managers and Admins) */}
+            {isManagerOrAdmin && (
+              <div>
+                <label className="label">Assigned Salesperson</label>
+                <select {...register('assigned_salesperson_id')} className="input">
+                  <option value="">Self / Default ({user?.full_name || 'Current User'})</option>
+                  {teamUsers?.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name} ({u.role?.replace('_', ' ')})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* GPS Location Capture */}
             <div className="sm:col-span-2 lg:col-span-3 flex items-center justify-between pt-2 border-t border-gray-100">

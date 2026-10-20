@@ -1,4 +1,6 @@
 export const API_BASE = '/api/v1';
+export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
+export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
 export const ROLES = {
   SUPER_ADMIN: 'super_admin',
@@ -9,16 +11,7 @@ export const ROLES = {
   MANAGEMENT: 'management',
 };
 
-export const OPPORTUNITY_STAGES = [
-  { value: 'identification', label: 'Identification', color: 'gray' },
-  { value: 'qualified', label: 'Qualified', color: 'blue' },
-  { value: 'evaluation', label: 'Evaluation', color: 'purple' },
-  { value: 'quotation_sent', label: 'Quotation Sent', color: 'yellow' },
-  { value: 'negotiation', label: 'Negotiation', color: 'orange' },
-  { value: 'finalization', label: 'Finalization', color: 'indigo' },
-  { value: 'won', label: 'Won', color: 'green' },
-  { value: 'lost', label: 'Lost', color: 'red' },
-];
+
 
 export const MEETING_TYPES = [
   { value: 'casual', label: 'Casual Visit' },
@@ -62,23 +55,6 @@ export const FOLLOWUP_STATUS = {
   cancelled: { label: 'Cancelled', badge: 'badge-gray' },
 };
 
-export const QUOTATION_STATUS = {
-  draft: 'badge-gray',
-  sent: 'badge-blue',
-  under_discussion: 'badge-yellow',
-  accepted: 'badge-green',
-  rejected: 'badge-red',
-  converted: 'badge-purple',
-  lost: 'badge-red',
-};
-
-export const PO_STATUS = {
-  received: 'badge-blue',
-  processing: 'badge-yellow',
-  dispatched: 'badge-purple',
-  completed: 'badge-green',
-  cancelled: 'badge-red',
-};
 
 export const POND_STATUSES = [
   { value: 'active', label: 'Active', color: 'green' },

@@ -29,14 +29,11 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8 flex justify-center">
-          <div className="bg-white/95 backdrop-blur-sm p-3.5 rounded-2xl shadow-xl inline-flex items-center justify-center">
-            <img src="/topnavlogo.png" alt="Logo" className="h-12 w-auto max-w-[220px] object-contain" />
-          </div>
-        </div>
-
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Sign in to your account</h2>
+          <div className="text-center mb-6">
+            <img src="/topnavlogo.png" alt="Logo" className="h-12 w-auto max-w-[200px] object-contain mx-auto mb-4" />
+            <h2 className="text-xl font-bold text-gray-900">Sign in to your account</h2>
+          </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>

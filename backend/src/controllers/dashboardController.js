@@ -2,6 +2,18 @@ const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const getSalesExecutiveDashboard = async (userId) => {
+  const [farmersCount] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM clients WHERE (assigned_salesperson_id=? OR created_by=?) AND deleted_at IS NULL",
+    { replacements: [userId, userId] }
+  );
+  const [submissionsCount] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM visits WHERE salesperson_id=? AND deleted_at IS NULL",
+    { replacements: [userId] }
+  );
+  const [dueFollowups] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id=? AND status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL",
+    { replacements: [userId] }
+  );
   const [todayFollowups] = await sequelize.query(
     "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id=? AND followup_date=CURDATE() AND status='pending' AND deleted_at IS NULL",
     { replacements: [userId] }
@@ -14,15 +26,14 @@ const getSalesExecutiveDashboard = async (userId) => {
     "SELECT COUNT(*) as count FROM visits WHERE salesperson_id=? AND MONTH(visit_date)=MONTH(NOW()) AND YEAR(visit_date)=YEAR(NOW()) AND deleted_at IS NULL",
     { replacements: [userId] }
   );
-  const [pendingVisits] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM visits WHERE salesperson_id=? AND approval_status='pending' AND deleted_at IS NULL",
-    { replacements: [userId] }
-  );
   const [recentVisits] = await sequelize.query(
-    `SELECT v.id, v.visit_date, v.visit_time, v.meeting_type, v.approval_status, c.company_name, c.city
-     FROM visits v JOIN clients c ON v.client_id = c.id
+    `SELECT v.id, v.client_id, v.visit_date, v.visit_time, v.meeting_type,
+            v.tank_number, c.company_name, c.city, sp.full_name as salesperson_name
+     FROM visits v
+     JOIN clients c ON v.client_id = c.id
+     JOIN users sp ON v.salesperson_id = sp.id
      WHERE v.salesperson_id=? AND v.deleted_at IS NULL
-     ORDER BY v.visit_date DESC, v.visit_time DESC LIMIT 5`,
+     ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`,
     { replacements: [userId] }
   );
   const [recentFollowups] = await sequelize.query(
@@ -34,55 +45,110 @@ const getSalesExecutiveDashboard = async (userId) => {
   );
 
   return {
-    today_followups: todayFollowups[0].count,
-    overdue_followups: overdueFollowups[0].count,
-    month_visits: monthVisits[0].count,
-    pending_visits: pendingVisits[0].count,
+    total_farmers: farmersCount[0]?.count || 0,
+    total_clients: farmersCount[0]?.count || 0,
+    total_submissions: submissionsCount[0]?.count || 0,
+    due_followups: dueFollowups[0]?.count || 0,
+    today_followups: todayFollowups[0]?.count || 0,
+    overdue_followups: overdueFollowups[0]?.count || 0,
+    month_visits: monthVisits[0]?.count || 0,
     recent_visits: recentVisits,
     recent_followups: recentFollowups,
   };
 };
 
 const getSalesManagerDashboard = async (userId) => {
-  const [pendingApprovals] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM visits WHERE salesperson_id IN (SELECT id FROM users WHERE manager_id=?) AND approval_status='pending' AND deleted_at IS NULL",
-    { replacements: [userId] }
+  const [farmersCount] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM clients WHERE (assigned_manager_id=? OR assigned_salesperson_id=? OR created_by=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) OR created_by IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL",
+    { replacements: [userId, userId, userId, userId, userId] }
+  );
+  const [submissionsCount] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM visits WHERE (salesperson_id=? OR salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL",
+    { replacements: [userId, userId] }
+  );
+  const [dueFollowups] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM followups WHERE (assigned_salesperson_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL",
+    { replacements: [userId, userId] }
   );
   const [teamVisits] = await sequelize.query(
-    "SELECT u.full_name, COUNT(v.id) as visit_count FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND v.deleted_at IS NULL WHERE u.manager_id=? GROUP BY u.id, u.full_name",
+    "SELECT u.full_name, COUNT(v.id) as visit_count FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.manager_id=? GROUP BY u.id, u.full_name",
+    { replacements: [userId] }
+  );
+  const [teamVisitsMonth] = await sequelize.query(
+    "SELECT COUNT(v.id) as count FROM visits v JOIN users u ON v.salesperson_id=u.id WHERE u.manager_id=? AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL",
     { replacements: [userId] }
   );
   const [overdueFollowups] = await sequelize.query(
     "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) AND followup_date<CURDATE() AND status IN ('pending','overdue') AND deleted_at IS NULL",
     { replacements: [userId] }
   );
-  const [pipeline] = await sequelize.query(
-    "SELECT current_stage, COUNT(*) as count, COALESCE(SUM(estimated_value),0) as value FROM opportunities WHERE (assigned_manager_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND current_stage NOT IN ('won','lost') AND deleted_at IS NULL GROUP BY current_stage",
+  const [teamMembers] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM users WHERE manager_id=? AND deleted_at IS NULL",
+    { replacements: [userId] }
+  );
+  const [recentVisits] = await sequelize.query(
+    `SELECT v.id, v.client_id, v.visit_date, v.visit_time, v.meeting_type,
+            v.tank_number, c.company_name, c.city, sp.full_name as salesperson_name
+     FROM visits v
+     JOIN clients c ON v.client_id = c.id
+     JOIN users sp ON v.salesperson_id = sp.id
+     WHERE (v.salesperson_id=? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id=?))
+       AND v.deleted_at IS NULL
+     ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`,
     { replacements: [userId, userId] }
   );
 
-  return { pending_approvals: pendingApprovals[0].count, team_visits: teamVisits, overdue_followups: overdueFollowups[0].count, pipeline };
+  return {
+    total_farmers: farmersCount[0]?.count || 0,
+    total_clients: farmersCount[0]?.count || 0,
+    total_submissions: submissionsCount[0]?.count || 0,
+    due_followups: dueFollowups[0]?.count || 0,
+    team_visits_month: teamVisitsMonth[0]?.count || 0,
+    overdue_followups: overdueFollowups[0]?.count || 0,
+    team_members: teamMembers[0]?.count || teamVisits.length,
+    team_visits: teamVisits,
+    recent_visits: recentVisits,
+  };
 };
 
 const getManagementDashboard = async () => {
-  const [pipelineTotal] = await sequelize.query(
-    "SELECT COALESCE(SUM(estimated_value),0) as total_pipeline, COUNT(*) as total_opportunities FROM opportunities WHERE current_stage NOT IN ('won','lost') AND deleted_at IS NULL"
+  const [farmersCount] = await sequelize.query(
+    "SELECT COUNT(*) as total FROM clients WHERE deleted_at IS NULL"
   );
-  const [brandPipeline] = await sequelize.query(
-    "SELECT b.name, COUNT(o.id) as count, COALESCE(SUM(o.estimated_value),0) as value FROM opportunities o LEFT JOIN brands b ON o.brand_id=b.id WHERE o.current_stage NOT IN ('won','lost') AND o.deleted_at IS NULL GROUP BY b.id, b.name ORDER BY value DESC"
+  const [submissionsCount] = await sequelize.query(
+    "SELECT COUNT(*) as total FROM visits WHERE deleted_at IS NULL"
+  );
+  const [dueFollowups] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM followups WHERE status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL"
   );
   const [salespersonPerf] = await sequelize.query(
-    "SELECT u.full_name, COUNT(v.id) as visits, SUM(CASE WHEN o.current_stage='won' THEN 1 ELSE 0 END) as won_opps, COALESCE(SUM(CASE WHEN o.current_stage='won' THEN o.won_value ELSE 0 END),0) as won_value FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND v.deleted_at IS NULL LEFT JOIN opportunities o ON o.assigned_salesperson_id=u.id AND MONTH(o.updated_at)=MONTH(NOW()) AND o.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY won_value DESC"
+    "SELECT u.full_name, COUNT(v.id) as visits FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY visits DESC"
   );
-  const [monthBilling] = await sequelize.query(
-    "SELECT COALESCE(SUM(invoice_amount),0) as total_billed, COALESCE(SUM(outstanding_amount),0) as total_outstanding FROM billing_records WHERE MONTH(invoice_date)=MONTH(NOW())"
+  const [monthVisits] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM visits WHERE MONTH(visit_date)=MONTH(NOW()) AND YEAR(visit_date)=YEAR(NOW()) AND deleted_at IS NULL"
+  );
+  const [executivesCount] = await sequelize.query(
+    "SELECT COUNT(*) as count FROM users WHERE role_id=(SELECT id FROM roles WHERE name='sales_executive') AND deleted_at IS NULL"
+  );
+  const [recentVisits] = await sequelize.query(
+    `SELECT v.id, v.client_id, v.visit_date, v.visit_time, v.meeting_type,
+            v.tank_number, c.company_name, c.city, sp.full_name as salesperson_name
+     FROM visits v
+     JOIN clients c ON v.client_id = c.id
+     JOIN users sp ON v.salesperson_id = sp.id
+     WHERE v.deleted_at IS NULL
+     ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`
   );
 
   return {
-    pipeline_total: pipelineTotal[0],
-    brand_pipeline: brandPipeline,
+    total_farmers: farmersCount[0]?.total || 0,
+    total_clients: farmersCount[0]?.total || 0,
+    total_submissions: submissionsCount[0]?.total || 0,
+    due_followups: dueFollowups[0]?.count || 0,
+    month_visits: monthVisits[0]?.count || 0,
+    field_executives: executivesCount[0]?.count || salespersonPerf.length,
     salesperson_performance: salespersonPerf,
-    month_billing: monthBilling[0],
+    recent_visits: recentVisits,
   };
 };
 
@@ -98,10 +164,7 @@ const getDashboard = async (req, res) => {
     } else if (['management', 'super_admin', 'admin'].includes(role)) {
       data = await getManagementDashboard();
     } else if (role === 'backend_ops') {
-      const [pendingQuotations] = await sequelize.query("SELECT COUNT(*) as count FROM quotations WHERE status IN ('draft','sent','under_discussion') AND deleted_at IS NULL");
-      const [pendingPOs] = await sequelize.query("SELECT COUNT(*) as count FROM purchase_orders WHERE order_status IN ('received','processing') AND deleted_at IS NULL");
-      const [pendingBilling] = await sequelize.query("SELECT COUNT(*) as count FROM billing_records WHERE is_matched=0");
-      data = { pending_quotations: pendingQuotations[0].count, pending_pos: pendingPOs[0].count, unmatched_billing: pendingBilling[0].count };
+      data = await getManagementDashboard();
     }
 
     return sendSuccess(res, 'Dashboard fetched', data);

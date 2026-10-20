@@ -8,7 +8,7 @@ import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import { BellIcon, PlusIcon, CheckCircleIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
-import { FOLLOWUP_PRIORITY, FOLLOWUP_STATUS } from '../../constants';
+import { FOLLOWUP_STATUS } from '../../constants';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 

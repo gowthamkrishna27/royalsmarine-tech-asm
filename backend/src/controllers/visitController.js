@@ -209,7 +209,6 @@ const updateVisit = async (req, res) => {
     const visit = visits[0];
     if (req.user.role === 'sales_executive') {
       if (visit.salesperson_id !== req.user.id) return sendError(res, 'Access denied: not your visit', 403);
-      if (visit.approval_status !== 'pending') return sendError(res, 'Cannot edit approved or rejected visit', 400);
     }
 
     const {

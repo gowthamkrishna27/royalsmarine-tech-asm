@@ -17,15 +17,9 @@ import ClientForm from './pages/clients/ClientForm';
 import Visits from './pages/visits/Visits';
 import VisitForm from './pages/visits/VisitForm';
 import Followups from './pages/followups/Followups';
-import Opportunities from './pages/opportunities/Opportunities';
-import OpportunityDetail from './pages/opportunities/OpportunityDetail';
-import OpportunityForm from './pages/opportunities/OpportunityForm';
 import Users from './pages/users/Users';
 import Brands from './pages/brands/Brands';
 import Reports from './pages/reports/Reports';
-import BillingImport from './pages/billing/BillingImport';
-import QuotationsPage from './pages/quotations/Quotations';
-import PurchaseOrdersPage from './pages/purchaseOrders/PurchaseOrders';
 import ProfilePage from './pages/profile/Profile';
 
 const MapPage = lazy(() => import('./pages/map/Map'));
@@ -55,18 +49,12 @@ export default function App() {
 
             <Route path="followups" element={<Followups />} />
 
-            <Route path="opportunities" element={<PrivateRoute roles={['super_admin','admin','sales_manager','management']}><Opportunities /></PrivateRoute>} />
-            <Route path="opportunities/new" element={<PrivateRoute roles={['super_admin','admin','sales_manager','management']}><OpportunityForm /></PrivateRoute>} />
-            <Route path="opportunities/:id" element={<PrivateRoute roles={['super_admin','admin','sales_manager','management']}><OpportunityDetail /></PrivateRoute>} />
-
             <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
-            <Route path="quotations" element={<Navigate to="/map" replace />} />
-            <Route path="purchase-orders" element={<PurchaseOrdersPage />} />
-            <Route path="billing" element={<BillingImport />} />
             <Route path="reports" element={<Reports />} />
             <Route path="brands" element={<Brands />} />
             <Route path="users" element={<PrivateRoute roles={['super_admin','admin']}><Users /></PrivateRoute>} />
             <Route path="profile" element={<ProfilePage />} />
+            <Route path="settings" element={<ProfilePage />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

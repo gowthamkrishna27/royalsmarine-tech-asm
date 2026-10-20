@@ -5,6 +5,7 @@ const jwtConfig = require('../config/jwt');
 const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 const { log } = require('../utils/audit');
+const logger = require('../utils/logger');
 
 const generateTokens = (user) => {
   const payload = { id: user.id, uuid: user.uuid, email: user.email, role: user.role_name };
@@ -54,6 +55,7 @@ const login = async (req, res) => {
       },
     });
   } catch (err) {
+    logger.error('Login error:', err);
     return sendError(res, err.message, 500);
   }
 };

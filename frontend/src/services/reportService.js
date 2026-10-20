@@ -2,7 +2,6 @@ import api from './api';
 
 export const reportService = {
   visits: (params) => api.get('/reports/visits', { params }),
-  opportunities: (params) => api.get('/reports/opportunities', { params }),
   followups: (params) => api.get('/reports/followups', { params }),
   billing: (params) => api.get('/reports/billing', { params }),
   brand: (params) => api.get('/reports/brand', { params }),

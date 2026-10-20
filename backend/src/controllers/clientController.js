@@ -10,11 +10,11 @@ const buildClientWhere = (query, userId, role) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND c.assigned_salesperson_id = ?';
-    replacements.push(userId);
-  } else if (role === 'sales_manager') {
-    where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += ' AND (c.assigned_salesperson_id = ? OR c.created_by = ?)';
     replacements.push(userId, userId);
+  } else if (role === 'sales_manager') {
+    where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ?))';
+    replacements.push(userId, userId, userId, userId, userId);
   }
 
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
@@ -51,7 +51,7 @@ const listClients = async (req, res) => {
        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
        LEFT JOIN users m ON c.assigned_manager_id = m.id
        WHERE ${where}
-       ORDER BY c.company_name ASC LIMIT ? OFFSET ?`,
+       ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
     );
 
@@ -64,7 +64,8 @@ const listClients = async (req, res) => {
 const createClient = async (req, res) => {
   const {
     company_name, contact_person, designation, mobile, alternate_mobile, email,
-    address, city, state, pincode, latitude, longitude, gps_address,
+    address, city, district, state, pincode, latitude, longitude, gps_address,
+    area, mandal, village, farm_extent_acres, number_of_tanks, water_source,
     industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
     notes, brands, categories, ponds,
   } = req.body;
@@ -72,7 +73,7 @@ const createClient = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const [existing] = await sequelize.query(
-      `SELECT id FROM clients WHERE (company_name = ? OR mobile = ? OR email = ?) AND deleted_at IS NULL LIMIT 1`,
+      `SELECT id FROM clients WHERE (company_name = ? OR (mobile = ? AND mobile != '') OR (email = ? AND email != '')) AND deleted_at IS NULL LIMIT 1`,
       { replacements: [company_name, mobile || '', email || ''], transaction: t }
     );
     if (existing[0]) {
@@ -81,15 +82,26 @@ const createClient = async (req, res) => {
     }
 
     const uuid = uuidv4();
-    const salespersonId = req.user.role === 'sales_executive' ? req.user.id : (assigned_salesperson_id || req.user.id);
+    let salespersonId = assigned_salesperson_id ? parseInt(assigned_salesperson_id, 10) : null;
+    let managerId = assigned_manager_id ? parseInt(assigned_manager_id, 10) : null;
 
-    const {
-      company_name, contact_person, designation, mobile, alternate_mobile, email,
-      address, city, state, pincode, latitude, longitude, gps_address,
-      area, village, farm_extent_acres, number_of_tanks, water_source,
-      industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
-      notes, brands, categories, ponds,
-    } = req.body;
+    if (!salespersonId) {
+      salespersonId = req.user.id;
+    }
+
+    if (!managerId) {
+      if (req.user.role === 'sales_manager') {
+        managerId = req.user.id;
+      } else {
+        const [u] = await sequelize.query('SELECT manager_id FROM users WHERE id = ?', {
+          replacements: [salespersonId || req.user.id],
+          transaction: t
+        });
+        if (u[0]?.manager_id) {
+          managerId = u[0].manager_id;
+        }
+      }
+    }
 
     const [result] = await sequelize.query(
       `INSERT INTO clients (uuid, company_name, contact_person, designation, mobile, alternate_mobile, email,
@@ -108,7 +120,7 @@ const createClient = async (req, res) => {
           number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0),
           water_source || 'bore',
           industry_type || null, client_type || 'new_prospect',
-          salespersonId, assigned_manager_id || null,
+          salespersonId, managerId,
           notes || null, req.user.id,
         ],
         transaction: t,
@@ -140,30 +152,78 @@ const createClient = async (req, res) => {
         const pondName = p.tank_number || p.pond_name;
         if (!pondName) continue;
         const pondUuid = uuidv4();
-        const tankSize = p.tank_size !== undefined && p.tank_size !== '' ? parseFloat(p.tank_size) : (p.area_acres ? parseFloat(p.area_acres) : null);
+        const tankSize = (p.tank_size !== undefined && p.tank_size !== '' && !isNaN(p.tank_size)) ? parseFloat(p.tank_size) : ((p.area_acres && !isNaN(p.area_acres)) ? parseFloat(p.area_acres) : null);
+        const seedDate = (p.seed_date && String(p.seed_date).trim()) ? String(p.seed_date).trim().substring(0, 10) : null;
+        const salinityVal = (p.salinity !== undefined && p.salinity !== '' && !isNaN(p.salinity)) ? parseFloat(p.salinity) : null;
+        const stockQty = (p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' && !isNaN(p.stocking_quantity_lakhs)) ? parseFloat(p.stocking_quantity_lakhs) : null;
+        const latVal = (p.latitude !== undefined && p.latitude !== '' && !isNaN(p.latitude)) ? parseFloat(p.latitude) : null;
+        const lngVal = (p.longitude !== undefined && p.longitude !== '' && !isNaN(p.longitude)) ? parseFloat(p.longitude) : null;
+
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
            salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
-              p.salinity !== undefined && p.salinity !== '' ? parseFloat(p.salinity) : null,
+              salinityVal,
               p.soil_type || null,
               p.hatchery_name || null,
               p.brooder || null,
-              p.seed_date || null,
-              p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' ? parseFloat(p.stocking_quantity_lakhs) : null,
+              seedDate,
+              stockQty,
               p.feed_type || null,
-              p.culture_type || null, p.water_type || null,
-              p.latitude || null, p.longitude || null, p.gps_address || null,
+              p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
+              latVal, lngVal, p.gps_address || null,
               p.status || 'active', p.remarks || null, req.user.id
             ],
             transaction: t,
           }
         );
       }
+    }
+
+    // Save in farmers table as well
+    try {
+      await sequelize.query(
+        `INSERT INTO farmers (
+          id, farmer_code, name, phone, alternate_phone, address, village, mandal, district, state,
+          location, latitude, longitude, acres, total_acres, water_source, assigned_to, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name), phone = VALUES(phone), alternate_phone = VALUES(alternate_phone),
+          address = VALUES(address), village = VALUES(village), mandal = VALUES(mandal),
+          district = VALUES(district), state = VALUES(state), location = VALUES(location),
+          latitude = VALUES(latitude), longitude = VALUES(longitude), acres = VALUES(acres),
+          total_acres = VALUES(total_acres), water_source = VALUES(water_source),
+          assigned_to = VALUES(assigned_to), status = VALUES(status), updated_at = NOW()`,
+        {
+          replacements: [
+            String(clientId),
+            `FARM-${clientId}`,
+            company_name,
+            mobile || null,
+            alternate_mobile || null,
+            address || null,
+            village || null,
+            mandal || area || null,
+            district || city || null,
+            state || null,
+            gps_address || city || village || null,
+            latitude ? parseFloat(latitude) : null,
+            longitude ? parseFloat(longitude) : null,
+            farm_extent_acres ? parseFloat(farm_extent_acres) : null,
+            farm_extent_acres ? parseFloat(farm_extent_acres) : null,
+            water_source || 'bore',
+            salespersonId ? String(salespersonId) : null,
+            status || 'active',
+          ],
+          transaction: t,
+        }
+      );
+    } catch (farmerErr) {
+      console.warn('Warning saving to farmers table:', farmerErr.message);
     }
 
     await t.commit();
@@ -192,7 +252,7 @@ const getClient = async (req, res) => {
     const client = clients[0];
 
     // Data isolation
-    if (req.user.role === 'sales_executive' && client.assigned_salesperson_id && client.assigned_salesperson_id !== req.user.id) {
+    if (req.user.role === 'sales_executive' && client.assigned_salesperson_id && client.assigned_salesperson_id !== req.user.id && client.created_by !== req.user.id) {
       return sendError(res, 'Access denied: not your client', 403);
     }
 
@@ -218,8 +278,8 @@ const getClient = async (req, res) => {
 const updateClient = async (req, res) => {
   const {
     company_name, contact_person, designation, mobile, alternate_mobile, email,
-    address, city, state, pincode, latitude, longitude, gps_address,
-    area, village, farm_extent_acres, number_of_tanks, water_source,
+    address, city, district, state, pincode, latitude, longitude, gps_address,
+    area, mandal, village, farm_extent_acres, number_of_tanks, water_source,
     industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
     status, notes, brands, categories, ponds,
   } = req.body;
@@ -227,7 +287,7 @@ const updateClient = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const [existing] = await sequelize.query(
-      'SELECT id, assigned_salesperson_id FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, assigned_salesperson_id, assigned_manager_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id], transaction: t }
     );
     if (!existing[0]) {
@@ -235,12 +295,29 @@ const updateClient = async (req, res) => {
       return sendError(res, 'Client not found', 404);
     }
 
-    if (req.user.role === 'sales_executive' && existing[0].assigned_salesperson_id && existing[0].assigned_salesperson_id !== req.user.id) {
+    if (req.user.role === 'sales_executive' && existing[0].assigned_salesperson_id && existing[0].assigned_salesperson_id !== req.user.id && existing[0].created_by !== req.user.id) {
       await t.rollback();
       return sendError(res, 'Access denied: not your client', 403);
     }
 
-    const salespersonId = req.user.role === 'sales_executive' ? existing[0].assigned_salesperson_id : (assigned_salesperson_id || null);
+    // Preserve existing assignments if not explicitly passed
+    const salespersonId = (assigned_salesperson_id !== undefined && assigned_salesperson_id !== null && assigned_salesperson_id !== '')
+      ? parseInt(assigned_salesperson_id, 10)
+      : existing[0].assigned_salesperson_id;
+
+    let managerId = (assigned_manager_id !== undefined && assigned_manager_id !== null && assigned_manager_id !== '')
+      ? parseInt(assigned_manager_id, 10)
+      : existing[0].assigned_manager_id;
+
+    if (!managerId && salespersonId) {
+      const [u] = await sequelize.query('SELECT manager_id FROM users WHERE id = ?', {
+        replacements: [salespersonId],
+        transaction: t,
+      });
+      if (u[0]?.manager_id) {
+        managerId = u[0].manager_id;
+      }
+    }
 
     await sequelize.query(
       `UPDATE clients SET company_name=?, contact_person=?, designation=?, mobile=?, alternate_mobile=?,
@@ -258,7 +335,7 @@ const updateClient = async (req, res) => {
           number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0),
           water_source || 'bore',
           industry_type || null, client_type, salespersonId,
-          assigned_manager_id || null, status, notes || null, req.params.id,
+          managerId, status || 'active', notes || null, req.params.id,
         ],
         transaction: t,
       }
@@ -289,28 +366,33 @@ const updateClient = async (req, res) => {
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
         if (!pondName) continue;
-        const tankSize = p.tank_size !== undefined && p.tank_size !== '' ? parseFloat(p.tank_size) : (p.area_acres ? parseFloat(p.area_acres) : null);
+        const tankSize = (p.tank_size !== undefined && p.tank_size !== '' && !isNaN(p.tank_size)) ? parseFloat(p.tank_size) : ((p.area_acres && !isNaN(p.area_acres)) ? parseFloat(p.area_acres) : null);
+        const seedDate = (p.seed_date && String(p.seed_date).trim()) ? String(p.seed_date).trim().substring(0, 10) : null;
+        const salinityVal = (p.salinity !== undefined && p.salinity !== '' && !isNaN(p.salinity)) ? parseFloat(p.salinity) : null;
+        const stockQty = (p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' && !isNaN(p.stocking_quantity_lakhs)) ? parseFloat(p.stocking_quantity_lakhs) : null;
+        const latVal = (p.latitude !== undefined && p.latitude !== '' && !isNaN(p.latitude)) ? parseFloat(p.latitude) : null;
+        const lngVal = (p.longitude !== undefined && p.longitude !== '' && !isNaN(p.longitude)) ? parseFloat(p.longitude) : null;
 
         if (p.id) {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
              salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
-             stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?,
+             stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
              latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
               replacements: [
                 pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
-                p.salinity !== undefined && p.salinity !== '' ? parseFloat(p.salinity) : null,
+                salinityVal,
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
-                p.seed_date || null,
-                p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' ? parseFloat(p.stocking_quantity_lakhs) : null,
+                seedDate,
+                stockQty,
                 p.feed_type || null,
-                p.culture_type || null, p.water_type || null,
-                p.latitude || null, p.longitude || null, p.gps_address || null,
+                p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
+                latVal, lngVal, p.gps_address || null,
                 p.status || 'active', p.remarks || null, p.id, req.params.id, req.params.id
               ],
               transaction: t,
@@ -321,20 +403,20 @@ const updateClient = async (req, res) => {
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
              salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
-                p.salinity !== undefined && p.salinity !== '' ? parseFloat(p.salinity) : null,
+                salinityVal,
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
-                p.seed_date || null,
-                p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' ? parseFloat(p.stocking_quantity_lakhs) : null,
+                seedDate,
+                stockQty,
                 p.feed_type || null,
-                p.culture_type || null, p.water_type || null,
-                p.latitude || null, p.longitude || null, p.gps_address || null,
+                p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
+                latVal, lngVal, p.gps_address || null,
                 p.status || 'active', p.remarks || null, req.user.id
               ],
               transaction: t,
@@ -356,6 +438,48 @@ const updateClient = async (req, res) => {
           { replacements: [req.params.id, req.params.id], transaction: t }
         );
       }
+    }
+
+    // Update in farmers table as well
+    try {
+      await sequelize.query(
+        `INSERT INTO farmers (
+          id, farmer_code, name, phone, alternate_phone, address, village, mandal, district, state,
+          location, latitude, longitude, acres, total_acres, water_source, assigned_to, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name), phone = VALUES(phone), alternate_phone = VALUES(alternate_phone),
+          address = VALUES(address), village = VALUES(village), mandal = VALUES(mandal),
+          district = VALUES(district), state = VALUES(state), location = VALUES(location),
+          latitude = VALUES(latitude), longitude = VALUES(longitude), acres = VALUES(acres),
+          total_acres = VALUES(total_acres), water_source = VALUES(water_source),
+          assigned_to = VALUES(assigned_to), status = VALUES(status), updated_at = NOW()`,
+        {
+          replacements: [
+            String(req.params.id),
+            `FARM-${req.params.id}`,
+            company_name,
+            mobile || null,
+            alternate_mobile || null,
+            address || null,
+            village || null,
+            mandal || area || null,
+            district || city || null,
+            state || null,
+            gps_address || city || village || null,
+            latitude ? parseFloat(latitude) : null,
+            longitude ? parseFloat(longitude) : null,
+            farm_extent_acres ? parseFloat(farm_extent_acres) : null,
+            farm_extent_acres ? parseFloat(farm_extent_acres) : null,
+            water_source || 'bore',
+            salespersonId ? String(salespersonId) : null,
+            status || 'active',
+          ],
+          transaction: t,
+        }
+      );
+    } catch (farmerErr) {
+      console.warn('Warning updating farmers table:', farmerErr.message);
     }
 
     await t.commit();
@@ -385,10 +509,7 @@ const getClientProfile = async (req, res) => {
       'SELECT COUNT(*) as visit_count FROM visits WHERE client_id = ? AND deleted_at IS NULL',
       { replacements: [clientId] }
     );
-    const [[{ opp_count }]] = await sequelize.query(
-      'SELECT COUNT(*) as opp_count FROM opportunities WHERE client_id = ? AND deleted_at IS NULL',
-      { replacements: [clientId] }
-    );
+    const opp_count = 0;
     const [[{ pending_followups }]] = await sequelize.query(
       "SELECT COUNT(*) as pending_followups FROM followups WHERE client_id = ? AND status IN ('pending','overdue') AND deleted_at IS NULL",
       { replacements: [clientId] }
@@ -516,34 +637,40 @@ const createPond = async (req, res) => {
 
   try {
     const [clientRows] = await sequelize.query(
-      'SELECT id, assigned_salesperson_id FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id] }
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id) {
+    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
       return sendError(res, 'Access denied: not your client', 403);
     }
 
     const uuid = uuidv4();
-    const finalSize = tank_size !== undefined && tank_size !== '' ? parseFloat(tank_size) : (area_acres ? parseFloat(area_acres) : null);
+    const finalSize = (tank_size !== undefined && tank_size !== '' && !isNaN(tank_size)) ? parseFloat(tank_size) : ((area_acres && !isNaN(area_acres)) ? parseFloat(area_acres) : null);
+    const seedDate = (seed_date && String(seed_date).trim()) ? String(seed_date).trim().substring(0, 10) : null;
+    const salinityVal = (salinity !== undefined && salinity !== '' && !isNaN(salinity)) ? parseFloat(salinity) : null;
+    const stockQty = (stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' && !isNaN(stocking_quantity_lakhs)) ? parseFloat(stocking_quantity_lakhs) : null;
+    const latVal = (latitude !== undefined && latitude !== '' && !isNaN(latitude)) ? parseFloat(latitude) : null;
+    const lngVal = (longitude !== undefined && longitude !== '' && !isNaN(longitude)) ? parseFloat(longitude) : null;
+
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
        salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, latitude, longitude, gps_address, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
-          salinity !== undefined && salinity !== '' ? parseFloat(salinity) : null,
+          salinityVal,
           soil_type || null,
           hatchery_name || null,
           brooder || null,
-          seed_date || null,
-          stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' ? parseFloat(stocking_quantity_lakhs) : null,
+          seedDate,
+          stockQty,
           feed_type || null,
-          culture_type || null, water_type || null,
-          latitude || null, longitude || null, gps_address || null, status || 'active', remarks || null, req.user.id
+          culture_type || null, water_type || null, water_type || null,
+          latVal, lngVal, gps_address || null, status || 'active', remarks || null, req.user.id
         ]
       }
     );
@@ -562,12 +689,12 @@ const updatePond = async (req, res) => {
   } = req.body;
   try {
     const [clientRows] = await sequelize.query(
-      'SELECT id, assigned_salesperson_id FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id] }
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id) {
+    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
       return sendError(res, 'Access denied: not your client', 403);
     }
 
@@ -578,26 +705,31 @@ const updatePond = async (req, res) => {
     if (!existing[0]) return sendError(res, 'Tank not found', 404);
 
     const finalName = tank_number || pond_name || existing[0].pond_name;
-    const finalSize = tank_size !== undefined && tank_size !== '' ? parseFloat(tank_size) : (area_acres ? parseFloat(area_acres) : null);
+    const finalSize = (tank_size !== undefined && tank_size !== '' && !isNaN(tank_size)) ? parseFloat(tank_size) : ((area_acres && !isNaN(area_acres)) ? parseFloat(area_acres) : null);
+    const seedDate = (seed_date && String(seed_date).trim()) ? String(seed_date).trim().substring(0, 10) : null;
+    const salinityVal = (salinity !== undefined && salinity !== '' && !isNaN(salinity)) ? parseFloat(salinity) : null;
+    const stockQty = (stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' && !isNaN(stocking_quantity_lakhs)) ? parseFloat(stocking_quantity_lakhs) : null;
+    const latVal = (latitude !== undefined && latitude !== '' && !isNaN(latitude)) ? parseFloat(latitude) : null;
+    const lngVal = (longitude !== undefined && longitude !== '' && !isNaN(longitude)) ? parseFloat(longitude) : null;
 
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
        salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
-       stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?,
+       stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
        latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
        WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
       {
         replacements: [
           finalName, tank_number || finalName, finalSize, finalSize, finalSize,
-          salinity !== undefined && salinity !== '' ? parseFloat(salinity) : null,
+          salinityVal,
           soil_type || null,
           hatchery_name || null,
           brooder || null,
-          seed_date || null,
-          stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' ? parseFloat(stocking_quantity_lakhs) : null,
+          seedDate,
+          stockQty,
           feed_type || null,
-          culture_type || null, water_type || null,
-          latitude || null, longitude || null, gps_address || null, status || 'active',
+          culture_type || null, water_type || null, water_type || null,
+          latVal, lngVal, gps_address || null, status || 'active',
           remarks || null, req.params.pondId, req.params.id, req.params.id
         ]
       }
@@ -611,12 +743,12 @@ const updatePond = async (req, res) => {
 const deletePond = async (req, res) => {
   try {
     const [clientRows] = await sequelize.query(
-      'SELECT id, assigned_salesperson_id FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id] }
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id) {
+    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
       return sendError(res, 'Access denied: not your client', 403);
     }
 

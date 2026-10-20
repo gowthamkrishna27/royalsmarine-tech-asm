@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import Spinner from './Spinner';
 import { MapPinIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { MAPBOX_TOKEN } from '../../constants';
 
 const getL = () => (typeof window !== 'undefined' ? window.L : null);
 
@@ -65,10 +66,48 @@ export default function TankMapPickerModal({
       zoomControl: true,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap',
-    }).addTo(map);
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    });
+
+    const mapboxSatellite = MAPBOX_TOKEN
+      ? L.tileLayer(
+          `https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/512/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          {
+            maxZoom: 19,
+            tileSize: 512,
+            zoomOffset: -1,
+            attribution: '&copy; Mapbox &copy; OpenStreetMap',
+          }
+        )
+      : null;
+
+    const mapboxStreets = MAPBOX_TOKEN
+      ? L.tileLayer(
+          `https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/512/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+          {
+            maxZoom: 19,
+            tileSize: 512,
+            zoomOffset: -1,
+            attribution: '&copy; Mapbox &copy; OpenStreetMap',
+          }
+        )
+      : null;
+
+    osmLayer.addTo(map);
+
+    const baseMaps = { '🗺️ OpenStreetMap': osmLayer };
+    if (mapboxSatellite) baseMaps['🛰️ Mapbox Satellite'] = mapboxSatellite;
+    if (mapboxStreets) baseMaps['🏙️ Mapbox Streets'] = mapboxStreets;
+
+    if (Object.keys(baseMaps).length > 1) {
+      L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+    }
+
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 200);
 
     const pinIcon = L.divIcon({
       className: 'tank-picker-marker',

@@ -1,4 +1,6 @@
-export default function StatCard({ label, value, icon: Icon, color = 'blue', trend, sub }) {
+import { Link } from 'react-router-dom';
+
+export default function StatCard({ label, value, icon: Icon, color = 'blue', trend, sub, to }) {
   const colors = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
@@ -7,12 +9,14 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
     purple: 'bg-purple-50 text-purple-600',
     orange: 'bg-orange-50 text-orange-600',
     indigo: 'bg-indigo-50 text-indigo-600',
+    amber: 'bg-amber-50 text-amber-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
   };
 
-  return (
-    <div className="stat-card">
+  const card = (
+    <div className={`stat-card ${to ? 'hover:shadow-md hover:border-blue-200 transition-all cursor-pointer' : ''}`}>
       {Icon && (
-        <div className={`stat-icon ${colors[color]}`}>
+        <div className={`stat-icon ${colors[color] || colors.blue}`}>
           <Icon className="w-6 h-6" />
         </div>
       )}
@@ -28,4 +32,6 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
       </div>
     </div>
   );
+
+  return to ? <Link to={to} className="block no-underline">{card}</Link> : card;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { visitApi, clientApi } from '../../services/api';
@@ -29,6 +29,7 @@ const MEDICATION_CATEGORIES = [
 
 export default function VisitForm() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
@@ -148,6 +149,42 @@ export default function VisitForm() {
       }
     }
   }, [existingVisit, setValue]);
+
+  // Pre-fill farmer from URL query parameter (e.g. from Map 1-Tap Log Visit)
+  const paramClientId = searchParams.get('clientId');
+  const paramTank = searchParams.get('tank');
+
+  useEffect(() => {
+    if (!isEdit && paramClientId) {
+      setValue('client_id', Number(paramClientId) || paramClientId);
+    }
+  }, [paramClientId, isEdit, setValue]);
+
+  // Pre-fill tank from URL query parameter when client ponds load
+  useEffect(() => {
+    if (!isEdit && paramTank && selectedClient?.ponds?.length) {
+      const found = selectedClient.ponds.find(
+        p => String(p.id) === String(paramTank) || p.tank_number === paramTank || p.pond_name === paramTank
+      );
+      if (found) {
+        const tankIdentifier = found.tank_number || found.pond_name;
+        setValue('tank_number', tankIdentifier);
+        setValue('tank_id', found.id);
+
+        if (found.seed_date && visitDate) {
+          const seedDate = new Date(found.seed_date);
+          const vDate = new Date(visitDate);
+          const diffDays = Math.max(0, Math.floor((vDate - seedDate) / (1000 * 60 * 60 * 24)));
+          setWaterQuality(prev => ({ ...prev, doc: diffDays }));
+          setFeedingDetails(prev => ({ ...prev, doc: diffDays }));
+        }
+
+        if (found.stocking_quantity_lakhs) {
+          setFeedingDetails(prev => ({ ...prev, seed_quantity: found.stocking_quantity_lakhs }));
+        }
+      }
+    }
+  }, [paramTank, selectedClient, isEdit, setValue, visitDate]);
 
   // Handle Tank selection and auto-calculate DOC & Seed Qty
   const handleTankSelection = (e) => {

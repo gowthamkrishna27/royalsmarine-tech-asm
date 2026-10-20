@@ -1,10 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
-import { clientApi, visitApi, opportunityApi } from '../../services/api';
+import { clientApi, visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Badge from '../../components/common/Badge';
-import { CLIENT_TYPES, OPPORTUNITY_STAGES } from '../../constants';
+import { CLIENT_TYPES } from '../../constants';
 import { PhoneIcon, EnvelopeIcon, MapPinIcon, PencilIcon } from '@heroicons/react/24/outline';
 
 const CLIENT_TYPE_COLOR = { existing_client: 'green', new_prospect: 'blue', retailer: 'orange', corporate: 'purple', distributor: 'indigo', government: 'yellow', other: 'gray' };
@@ -31,11 +31,6 @@ export default function ClientDetail() {
   const { data: visits } = useQuery({
     queryKey: ['client-visits', id],
     queryFn: () => visitApi.list({ client_id: id, limit: 5 }).then(r => r.data.data),
-  });
-  const { data: opportunities } = useQuery({
-    queryKey: ['client-opps', id],
-    queryFn: () => opportunityApi.list({ client_id: id, limit: 5 }).then(r => r.data.data),
-    enabled: !isExec,
   });
 
   if (isLoading) return <PageSpinner />;
@@ -253,40 +248,18 @@ export default function ClientDetail() {
               {visits?.map(v => (
                 <div key={v.id} className="px-6 py-3 flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-800">{v.meeting_type?.replace(/_/g, ' ')}</p>
+                    <Link to={`/visits/${v.id}`} className="text-sm font-medium text-gray-800 hover:text-blue-600">
+                      {v.meeting_type?.replace(/_/g, ' ') || 'Visit'}
+                    </Link>
                     <p className="text-xs text-gray-500">{v.visit_date} · {v.person_met || 'Farmer'}</p>
                   </div>
-                  <Badge color={v.approval_status === 'approved' ? 'green' : v.approval_status === 'rejected' ? 'red' : 'yellow'}>
-                    {v.approval_status}
-                  </Badge>
+                  <Link to={`/visits/${v.id}`} className="text-xs text-blue-600 hover:underline font-medium">
+                    View
+                  </Link>
                 </div>
               ))}
             </div>
           </div>
-
-          {/* Recent Opportunities */}
-          {!isExec && (
-            <div>
-              <div className="card-header border-t border-gray-100 flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Opportunities</h3>
-                <Link to={`/opportunities?client_id=${id}`} className="text-xs text-blue-600 hover:underline">View all</Link>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {opportunities?.length === 0 && <p className="text-sm text-gray-400 text-center py-6">No opportunities</p>}
-                {opportunities?.map(o => (
-                  <div key={o.id} className="px-6 py-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-800">{o.title}</p>
-                      <p className="text-xs text-gray-500">{o.brand_name} · ₹{Number(o.estimated_value || 0).toLocaleString('en-IN')}</p>
-                    </div>
-                    <Badge color={OPPORTUNITY_STAGES.find(s => s.value === o.current_stage)?.color || 'gray'}>
-                      {OPPORTUNITY_STAGES.find(s => s.value === o.current_stage)?.label}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
