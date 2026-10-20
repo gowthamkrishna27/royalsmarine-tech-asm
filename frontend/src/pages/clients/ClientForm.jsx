@@ -345,7 +345,7 @@ export default function ClientForm() {
             {/* Assigned Salesperson (Visible to Managers and Admins) */}
             {isManagerOrAdmin && (
               <div>
-                <label className="label">Assigned Salesperson</label>
+                <label className="label">Assigned Technical Executive</label>
                 <select {...register('assigned_salesperson_id')} className="input">
                   <option value="">Self / Default ({user?.full_name || 'Current User'})</option>
                   {teamUsers?.map(u => (

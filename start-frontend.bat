@@ -1,5 +1,5 @@
 @echo off
-cd /d "C:\Users\JagjeetSingh\Downloads\rupa-crm\frontend"
-echo Starting Royals Marine Frontend...
-npx vite --port 3000
+cd /d "%~dp0frontend"
+echo Starting Royals Marine Field App (Technical Executives & Area Managers)...
+npm run dev
 pause

@@ -11,6 +11,8 @@ node_modules/
 # Build output
 frontend/dist/
 frontend/build/
+admin/dist/
+admin/build/
 
 # Uploads
 backend/src/uploads/*

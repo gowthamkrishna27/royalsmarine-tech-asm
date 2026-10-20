@@ -116,7 +116,7 @@ royalsmarine/
 - Node.js 18+
 - MySQL 8+
 
-### Backend
+### Backend (API Server — Port 5000)
 
 ```bash
 cd backend
@@ -126,19 +126,31 @@ cp .env.example .env
 npm install
 node src/database/migrate.js    # Create tables
 node src/database/seed.js       # Create default admin
-npm run dev                     # Start on port 5000
+npm run dev                     # Starts on port 5000
 ```
+Or double-click `start-backend.bat`.
 
-### Frontend
+### Field App (Technical Executives & Area Managers — Port 3000)
 
 ```bash
 cd frontend
 npm install
-npm run dev                     # Start on port 3000
+npm run dev                     # Starts on port 3000
 ```
+Or double-click `start-frontend.bat`.
+- Open: [http://localhost:3000](http://localhost:3000)
+- Mobile-first experience with bottom floating navigation and quick-action speed dial.
 
-Open: [http://localhost:3000](http://localhost:3000)
-Login: `admin@example.com` / `Admin@123`
+### Admin Website (Admins & Management — Port 3002)
+
+```bash
+cd admin
+npm install
+npm run dev                     # Starts on port 3002
+```
+Or double-click `start-admin.bat`.
+- Open: [http://localhost:3002](http://localhost:3002)
+- Desktop-first portal with full sidebar, user & team management, billing imports, and system admin tools.
 
 ---
 

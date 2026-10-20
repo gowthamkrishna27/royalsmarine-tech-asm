@@ -98,7 +98,7 @@ export default function Clients() {
                       <th>Area / Village</th>
                       <th>Extent</th>
                       <th>Tanks</th>
-                      <th>Salesperson</th>
+                      <th>Technical Executive</th>
                       <th>Status</th>
                       <th></th>
                     </tr>
@@ -181,7 +181,7 @@ export default function Clients() {
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-700">
               <p className="font-semibold mb-1">Excel Column Format (Row 1 = Header)</p>
-              <p className="text-xs text-blue-600">Farmer / Farm Name | Contact Person | Mobile | Email | City | State | Pincode | Farmer Type | Industry Type | Salesperson Email</p>
+              <p className="text-xs text-blue-600">Farmer / Farm Name | Contact Person | Mobile | Email | City | State | Pincode | Farmer Type | Industry Type | Technical Executive Email</p>
               <p className="text-xs text-blue-500 mt-1">Farmer Type values: existing_client, new_prospect, retailer, corporate, distributor, government, other</p>
             </div>
             <div>

@@ -216,7 +216,7 @@ export default function Reports() {
             onChange={e => setSalespersonId(e.target.value)}
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
-            <option value="">All Salespeople</option>
+            <option value="">All Technical Executives</option>
             {salespeople?.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
           </select>
         )}
@@ -306,7 +306,7 @@ export default function Reports() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                      {visitChartType === 'pie' ? 'Visit Share by Salesperson' : 'Visits by Salesperson'}
+                      {visitChartType === 'pie' ? 'Visit Share by Technical Executive' : 'Visits by Technical Executive'}
                     </h4>
                     <span className="text-[11px] text-gray-400">Field Performance Analysis</span>
                   </div>
@@ -396,14 +396,14 @@ export default function Reports() {
             {/* Detailed Table - 100% responsive, Zero horizontal scroll */}
             <div className="card overflow-hidden">
               <div className="card-header flex items-center justify-between">
-                <h3 className="font-semibold text-sm">{isSalesExec ? 'My Performance Record' : 'Salesperson Breakdown'}</h3>
+                <h3 className="font-semibold text-sm">{isSalesExec ? 'My Performance Record' : 'Technical Executive Breakdown'}</h3>
                 <span className="text-xs text-gray-400">{isSalesExec ? `${visitReport?.[0]?.total_visits || 0} Visits` : `${visitReport?.length || 0} Reps`}</span>
               </div>
               <div className="w-full">
                 <table className="table w-full">
                   <thead>
                     <tr>
-                      <th className="py-2.5">Salesperson</th>
+                      <th className="py-2.5">Technical Executive</th>
                       <th className="py-2.5 text-right">Total Visits</th>
                     </tr>
                   </thead>
@@ -565,7 +565,7 @@ export default function Reports() {
                 <table className="table w-full">
                   <thead>
                     <tr>
-                      <th>Salesperson</th>
+                      <th>Technical Executive</th>
                       <th>Total</th>
                       <th>Completed</th>
                       <th>Overdue</th>

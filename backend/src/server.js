@@ -14,16 +14,26 @@ const app = express();
 const API = process.env.API_PREFIX || '/api/v1';
 
 // Security & middleware
+// Security & middleware
 app.use(helmet());
 const allowedOrigins = [
   'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3002',
+  'http://127.0.0.1:3002',
   'http://localhost:5173',
+  'http://127.0.0.1:5173',
   process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Allow any localhost / 127.0.0.1 port in development
+    if (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       return callback(null, true);
     }
     return callback(new Error('Blocked by CORS policy'));

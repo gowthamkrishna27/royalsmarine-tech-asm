@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
+import { formatRole } from '../../constants';
 
 export default function ProfilePage() {
   const { user, fetchMe } = useAuth();
@@ -34,7 +35,7 @@ export default function ProfilePage() {
             </div>
             <div>
               <p className="text-lg font-semibold text-gray-900">{user?.full_name}</p>
-              <p className="text-sm text-gray-500 capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+              <p className="text-sm text-blue-600 font-medium">{formatRole(user?.role)}</p>
             </div>
           </div>
           {[['Email', user?.email], ['Mobile', user?.mobile], ['Department', user?.department || '—']].map(([label, val]) => (

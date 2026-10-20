@@ -72,7 +72,7 @@ export default function BillingImport() {
         <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 transition cursor-pointer" onClick={() => fileRef.current.click()}>
           <CloudArrowUpIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-sm text-gray-600 font-medium">Click to upload Excel / CSV file</p>
-          <p className="text-xs text-gray-400 mt-1">Columns: Invoice No, Date, Farmer Name, Code, Salesperson, Brand, Category, Invoice Amt, Paid, Outstanding, Due Date</p>
+          <p className="text-xs text-gray-400 mt-1">Columns: Invoice No, Date, Farmer Name, Code, Technical Executive, Brand, Category, Invoice Amt, Paid, Outstanding, Due Date</p>
           {uploading && <p className="text-sm text-blue-600 mt-3">Importing...</p>}
         </div>
         <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleUpload} className="hidden" />

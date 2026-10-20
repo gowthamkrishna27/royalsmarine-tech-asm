@@ -92,7 +92,7 @@ const exportReport = async (req, res) => {
     let data = [], headers = [], filename = 'report.xlsx';
 
     if (type === 'visits') {
-      headers = ['Date', 'Salesperson', 'Farmer', 'City', 'Type', 'Outcome', 'Status'];
+      headers = ['Date', 'Technical Executive', 'Farmer', 'City', 'Type', 'Outcome', 'Status'];
       let where = 'v.deleted_at IS NULL';
       const replacements = [];
       if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
@@ -115,7 +115,7 @@ const exportReport = async (req, res) => {
       data = rows;
       filename = 'visit-report.xlsx';
     } else {
-      headers = ['Followup Title', 'Farmer', 'Salesperson', 'Date', 'Status'];
+      headers = ['Followup Title', 'Farmer', 'Technical Executive', 'Date', 'Status'];
       let where = 'f.deleted_at IS NULL';
       const replacements = [];
       if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }

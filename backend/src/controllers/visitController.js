@@ -336,7 +336,7 @@ const exportVisits = async (req, res) => {
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Visits');
-    ws.addRow(['Date', 'Time', 'Salesperson', 'Client', 'City', 'Type', 'Person Met', 'Outcome', 'Status', 'Next Followup']);
+    ws.addRow(['Date', 'Time', 'Technical Executive', 'Farmer', 'City', 'Type', 'Person Met', 'Outcome', 'Status', 'Next Followup']);
     visits.forEach(v => ws.addRow(Object.values(v)));
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

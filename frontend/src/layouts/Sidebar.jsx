@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { formatRole } from '../constants';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
   ChartBarIcon, DocumentTextIcon, ShoppingCartIcon, CloudArrowUpIcon,
-  TagIcon, CubeIcon, Cog6ToothIcon, XMarkIcon, MapIcon,
+  TagIcon, CubeIcon, Cog6ToothIcon, XMarkIcon, MapIcon, ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 
 const navItems = [
@@ -13,10 +14,10 @@ const navItems = [
   { to: '/followups', label: 'Follow-ups', icon: BellIcon, roles: ['super_admin','admin','sales_manager','sales_executive'] },
   { to: '/map', label: 'Map', icon: MapIcon, roles: ['super_admin','admin','backend_ops','sales_manager','sales_executive','management'] },
   { to: '/reports', label: 'Reports', icon: ChartBarIcon, roles: ['super_admin','admin','sales_manager','sales_executive','management'] },
-  { divider: true, label: 'Master Data', roles: ['super_admin','admin'] },
-  { to: '/brands', label: 'Brands & Categories', icon: TagIcon, roles: ['super_admin','admin'] },
-  { to: '/users', label: 'Users', icon: UsersIcon, roles: ['super_admin','admin'] },
-  { to: '/settings', label: 'Settings', icon: Cog6ToothIcon, roles: ['super_admin','admin'] },
+  { divider: true, label: 'Administration', roles: ['super_admin','admin'] },
+  { to: '/users', label: 'Users & Team', icon: UsersIcon, roles: ['super_admin','admin'] },
+  { to: '/brands', label: 'Brands & Master Data', icon: TagIcon, roles: ['super_admin','admin'] },
+  { to: '/settings', label: 'Portal Settings', icon: Cog6ToothIcon, roles: ['super_admin','admin'] },
 ];
 
 export default function Sidebar() {
@@ -67,7 +68,7 @@ export default function Sidebar() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-gray-900 truncate group-hover:text-blue-600 transition">{user?.full_name}</p>
-            <p className="text-xs text-gray-500 capitalize">{user?.role?.replace(/_/g, ' ')}</p>
+            <p className="text-xs text-blue-600 font-medium">{formatRole(user?.role)}</p>
           </div>
         </NavLink>
       </div>

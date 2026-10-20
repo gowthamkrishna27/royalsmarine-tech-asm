@@ -125,7 +125,7 @@ export default function ClientDetail() {
                 </a>
               </div>
             )}
-            <InfoRow label="Salesperson" value={c.salesperson_name} />
+            <InfoRow label="Technical Executive" value={c.salesperson_name} />
             {c.notes && (
               <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
                 <strong>Notes:</strong> {c.notes}

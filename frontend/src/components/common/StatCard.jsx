@@ -21,7 +21,7 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className="stat-label">{label}</p>
+        <p className="stat-label truncate" title={label}>{label}</p>
         <p className="stat-value">{value ?? '—'}</p>
         {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
         {trend !== undefined && (

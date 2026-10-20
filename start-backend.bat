@@ -1,5 +1,5 @@
 @echo off
-cd /d "C:\Users\JagjeetSingh\Downloads\rupa-crm\backend"
-echo Starting Royals Marine Backend API...
+cd /d "%~dp0backend"
+echo Starting Royals Marine Backend API (Port 5000)...
 npm run dev
 pause

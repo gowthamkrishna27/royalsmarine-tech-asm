@@ -63,7 +63,7 @@ export default function Visits() {
                       <th>Date</th>
                       <th>Farmer</th>
                       <th>Tank</th>
-                      <th>Salesperson</th>
+                      <th>Technical Executive</th>
                       <th>Type</th>
                       <th>Actions</th>
                     </tr>

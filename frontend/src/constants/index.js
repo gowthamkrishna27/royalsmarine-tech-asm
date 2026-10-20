@@ -1,4 +1,6 @@
-export const API_BASE = '/api/v1';
+export const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL.replace(/\/$/, '')}/api/v1`
+  : '/api/v1';
 export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || '';
 export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
 
@@ -10,6 +12,17 @@ export const ROLES = {
   BACKEND_OPS: 'backend_ops',
   MANAGEMENT: 'management',
 };
+
+export const ROLE_LABELS = {
+  sales_executive: 'Technical Executive',
+  sales_manager: 'Area Executive Manager',
+  admin: 'Administrator',
+  super_admin: 'Super Admin',
+  backend_ops: 'Operations',
+  management: 'Management',
+};
+
+export const formatRole = (role) => ROLE_LABELS[role] || (role ? role.replace(/_/g, ' ') : '');
 
 
 
