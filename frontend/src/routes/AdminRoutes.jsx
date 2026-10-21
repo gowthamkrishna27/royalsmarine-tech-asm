@@ -12,7 +12,6 @@ import Visits from '../pages/visits/Visits';
 import VisitForm from '../pages/visits/VisitForm';
 import Followups from '../pages/followups/Followups';
 import Users from '../pages/users/Users';
-import Brands from '../pages/brands/Brands';
 import Reports from '../pages/reports/Reports';
 import ProfilePage from '../pages/profile/Profile';
 
@@ -42,7 +41,6 @@ export default function AdminRoutes() {
 
         <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
         <Route path="reports" element={<Reports />} />
-        <Route path="brands" element={<Brands />} />
 
         {/* Admin-only pages */}
         <Route path="admin" element={<Navigate to="/dashboard" replace />} />

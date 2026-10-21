@@ -48,11 +48,15 @@ const listFollowups = async (req, res) => {
 };
 
 const createFollowup = async (req, res) => {
+  if (!['super_admin', 'admin'].includes(req.user.role)) {
+    return sendError(res, 'Access denied: Only administrators can create follow-ups', 403);
+  }
+
   const { title, client_id, visit_id, opportunity_id, assigned_salesperson_id, followup_date, followup_time, priority, remarks } = req.body;
 
   try {
     const uuid = uuidv4();
-    const salespersonId = req.user.role === 'sales_executive' ? req.user.id : (assigned_salesperson_id || req.user.id);
+    const salespersonId = assigned_salesperson_id || req.user.id;
 
     const [result] = await sequelize.query(
       `INSERT INTO followups (uuid, title, client_id, visit_id, opportunity_id, assigned_salesperson_id,

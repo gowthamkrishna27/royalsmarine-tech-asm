@@ -77,8 +77,39 @@ app.use(errorHandler);
 require('./jobs/followupJob');
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   logger.info(`Royals Marine API running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  try {
+    const sequelize = require('./config/database');
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 0;');
+    await sequelize.query('DROP TABLE IF EXISTS visit_brands;');
+    await sequelize.query('DROP TABLE IF EXISTS visit_categories;');
+    await sequelize.query('DROP TABLE IF EXISTS client_brands;');
+    await sequelize.query('DROP TABLE IF EXISTS client_categories;');
+    await sequelize.query('DROP TABLE IF EXISTS products;');
+    await sequelize.query('DROP TABLE IF EXISTS brands;');
+    await sequelize.query('DROP TABLE IF EXISTS categories;');
+
+    // Rename clients table to farmers if clients is a base table
+    const [clientTable] = await sequelize.query(`
+      SELECT TABLE_TYPE FROM information_schema.tables 
+      WHERE table_schema = DATABASE() AND table_name = 'clients'
+    `);
+    const [farmerTable] = await sequelize.query(`
+      SELECT TABLE_TYPE FROM information_schema.tables 
+      WHERE table_schema = DATABASE() AND table_name = 'farmers'
+    `);
+
+    if (clientTable.length && clientTable[0].TABLE_TYPE === 'BASE TABLE' && !farmerTable.length) {
+      await sequelize.query('RENAME TABLE clients TO farmers;');
+      logger.info('Renamed clients table to farmers.');
+    }
+    await sequelize.query('CREATE OR REPLACE VIEW clients AS SELECT * FROM farmers;');
+    await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;');
+    logger.info('Database tables verified: farmers table active with compatibility view.');
+  } catch (err) {
+    logger.warn('Table cleanup note: ' + err.message);
+  }
 });
 
 module.exports = app;

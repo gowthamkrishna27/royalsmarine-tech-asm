@@ -8,7 +8,6 @@
     "dev": "nodemon src/server.js",
     "migrate": "node src/database/migrate.js",
     "seed": "node src/database/seed.js",
-    "seed:dummy": "node src/database/dummy.js",
     "test:security": "node scripts/verifySecurity.js",
     "test:e2e": "node scripts/verifyFullE2E.js",
     "test:rollback": "node scripts/testTransactionRollback.js",

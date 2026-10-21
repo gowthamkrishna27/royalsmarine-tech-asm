@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { dashboardApi, userApi, masterApi } from '../../services/api';
+import { dashboardApi, userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import StatCard from '../../components/common/StatCard';
 import {
@@ -9,7 +9,6 @@ import {
   BuildingOfficeIcon,
   DocumentTextIcon,
   UsersIcon,
-  TagIcon,
 } from '@heroicons/react/24/outline';
 
 function DashboardStatCards({ data }) {
@@ -117,19 +116,13 @@ function ManagementDashboard({ data }) {
     staleTime: 60000,
   });
 
-  const { data: brands } = useQuery({
-    queryKey: ['admin-brands-list'],
-    queryFn: () => masterApi.brands({}).then((r) => r.data.data),
-    staleTime: 60000,
-  });
-
   const techExecs = (users || []).filter((u) => u.role === 'sales_executive');
   const areaManagers = (users || []).filter((u) => u.role === 'sales_manager');
 
   return (
     <div className="fade-in space-y-6">
-      {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Minimal Stat Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           label="Total Farmers"
           value={data.total_farmers ?? 0}
@@ -164,13 +157,6 @@ function ManagementDashboard({ data }) {
           icon={UsersIcon}
           color="purple"
           to="/users"
-        />
-        <StatCard
-          label="Brands"
-          value={brands?.length ?? 0}
-          icon={TagIcon}
-          color="blue"
-          to="/brands"
         />
       </div>
 

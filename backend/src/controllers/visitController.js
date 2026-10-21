@@ -5,6 +5,8 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
 
+const VISIT_EDIT_WINDOW_SECONDS = 5 * 60; // Visits can only be updated within 5 minutes of submission
+
 const buildVisitWhere = (query, userId, role) => {
   let where = 'v.deleted_at IS NULL';
   const replacements = [];
@@ -40,6 +42,7 @@ const listVisits = async (req, res) => {
     const [visits] = await sequelize.query(
       `SELECT v.id, v.uuid, v.visit_date, v.visit_time, v.meeting_type, v.person_met,
               v.visit_outcome, v.approval_status, v.next_followup_date, v.created_at,
+              TIMESTAMPDIFF(SECOND, v.created_at, NOW()) as seconds_since_creation,
               v.tank_id, v.tank_number,
               c.company_name, c.city,
               sp.full_name as salesperson_name
@@ -51,7 +54,19 @@ const listVisits = async (req, res) => {
       { replacements: [...replacements, limit, offset] }
     );
 
-    return sendPaginated(res, 'Visits fetched', visits, buildMeta(total, page, limit));
+    const visitsWithEditInfo = visits.map(v => {
+      const secDb = Number(v.seconds_since_creation);
+      const secNode = v.created_at ? Math.max(0, Math.floor((Date.now() - new Date(v.created_at).getTime()) / 1000)) : 999999;
+      const elapsed = !isNaN(secDb) && secDb >= 0 ? secDb : secNode;
+      const isEditable = elapsed <= VISIT_EDIT_WINDOW_SECONDS && v.approval_status !== 'approved';
+      return {
+        ...v,
+        is_editable: isEditable,
+        edit_time_remaining_seconds: Math.max(0, VISIT_EDIT_WINDOW_SECONDS - elapsed),
+      };
+    });
+
+    return sendPaginated(res, 'Visits fetched', visitsWithEditInfo, buildMeta(total, page, limit));
   } catch (err) {
     return sendError(res, err.message, 500);
   }
@@ -100,21 +115,8 @@ const createVisit = async (req, res) => {
 
     const visitId = typeof insertResult === 'number' ? insertResult : (insertResult?.insertId || insertResult);
 
-    for (const brandId of (brands || [])) {
-      await sequelize.query('INSERT IGNORE INTO visit_brands (visit_id, brand_id) VALUES (?, ?)', {
-        replacements: [visitId, brandId],
-        transaction: t,
-      });
-    }
-    for (const catId of (categories || [])) {
-      await sequelize.query('INSERT IGNORE INTO visit_categories (visit_id, category_id) VALUES (?, ?)', {
-        replacements: [visitId, catId],
-        transaction: t,
-      });
-    }
-
-    // Auto-create follow-up if next_followup_date provided
-    if (next_followup_date) {
+    // Auto-create follow-up only if admin and next_followup_date provided
+    if (next_followup_date && ['super_admin', 'admin'].includes(req.user.role)) {
       await sequelize.query(
         `INSERT INTO followups (uuid, title, client_id, visit_id, assigned_salesperson_id, followup_date, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -140,6 +142,7 @@ const getVisit = async (req, res) => {
   try {
     const [visits] = await sequelize.query(
       `SELECT v.*, c.company_name, c.city, c.state,
+              TIMESTAMPDIFF(SECOND, v.created_at, NOW()) as seconds_since_creation,
               sp.full_name as salesperson_name, ab.full_name as approved_by_name
        FROM visits v
        JOIN clients c ON v.client_id = c.id
@@ -169,14 +172,6 @@ const getVisit = async (req, res) => {
       }
     }
 
-    const [brands] = await sequelize.query(
-      'SELECT b.id, b.name FROM brands b JOIN visit_brands vb ON b.id = vb.brand_id WHERE vb.visit_id = ?',
-      { replacements: [req.params.id] }
-    );
-    const [cats] = await sequelize.query(
-      'SELECT c.id, c.name FROM categories c JOIN visit_categories vc ON c.id = vc.category_id WHERE vc.visit_id = ?',
-      { replacements: [req.params.id] }
-    );
     const [attachments] = await sequelize.query(
       'SELECT id, original_name, file_type, file_size, created_at FROM visit_attachments WHERE visit_id = ?',
       { replacements: [req.params.id] }
@@ -192,7 +187,20 @@ const getVisit = async (req, res) => {
     visit.medication_details = safeParse(visit.medication_details);
     visit.harvest_details = safeParse(visit.harvest_details);
 
-    return sendSuccess(res, 'Visit fetched', { ...visit, brands, categories: cats, attachments });
+    const secDb = Number(visit.seconds_since_creation);
+    const secNode = visit.created_at ? Math.max(0, Math.floor((Date.now() - new Date(visit.created_at).getTime()) / 1000)) : 999999;
+    const elapsed = !isNaN(secDb) && secDb >= 0 ? secDb : secNode;
+    const isEditable = elapsed <= VISIT_EDIT_WINDOW_SECONDS && visit.approval_status !== 'approved';
+    const remainingSeconds = Math.max(0, VISIT_EDIT_WINDOW_SECONDS - elapsed);
+
+    return sendSuccess(res, 'Visit fetched', {
+      ...visit,
+      brands: [],
+      categories: [],
+      attachments,
+      is_editable: isEditable,
+      edit_time_remaining_seconds: remainingSeconds,
+    });
   } catch (err) {
     return sendError(res, err.message, 500);
   }
@@ -201,7 +209,9 @@ const getVisit = async (req, res) => {
 const updateVisit = async (req, res) => {
   try {
     const [visits] = await sequelize.query(
-      "SELECT id, salesperson_id, approval_status FROM visits WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+      `SELECT id, salesperson_id, approval_status, created_at,
+              TIMESTAMPDIFF(SECOND, created_at, NOW()) as seconds_since_creation
+       FROM visits WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
       { replacements: [req.params.id] }
     );
     if (!visits[0]) return sendError(res, 'Visit not found', 404);
@@ -209,6 +219,19 @@ const updateVisit = async (req, res) => {
     const visit = visits[0];
     if (req.user.role === 'sales_executive') {
       if (visit.salesperson_id !== req.user.id) return sendError(res, 'Access denied: not your visit', 403);
+    }
+
+    if (visit.approval_status === 'approved') {
+      return sendError(res, 'Approved visits cannot be modified', 400);
+    }
+
+    // Enforce 5-minute update limit from submission time
+    const secDb = Number(visit.seconds_since_creation);
+    const secNode = visit.created_at ? Math.max(0, Math.floor((Date.now() - new Date(visit.created_at).getTime()) / 1000)) : 999999;
+    const elapsedSeconds = !isNaN(secDb) && secDb >= 0 ? secDb : secNode;
+
+    if (elapsedSeconds > VISIT_EDIT_WINDOW_SECONDS) {
+      return sendError(res, 'Visit update window has expired. Visits can only be edited within 5 minutes of submission.', 403);
     }
 
     const {
@@ -260,20 +283,6 @@ const updateVisit = async (req, res) => {
         }
       );
 
-      if (brands && Array.isArray(brands)) {
-        await sequelize.query('DELETE FROM visit_brands WHERE visit_id = ?', { replacements: [req.params.id], transaction: t });
-        for (const brandId of brands) {
-          await sequelize.query('INSERT IGNORE INTO visit_brands (visit_id, brand_id) VALUES (?, ?)', { replacements: [req.params.id, brandId], transaction: t });
-        }
-      }
-
-      if (categories && Array.isArray(categories)) {
-        await sequelize.query('DELETE FROM visit_categories WHERE visit_id = ?', { replacements: [req.params.id], transaction: t });
-        for (const catId of categories) {
-          await sequelize.query('INSERT IGNORE INTO visit_categories (visit_id, category_id) VALUES (?, ?)', { replacements: [req.params.id, catId], transaction: t });
-        }
-      }
-
       await t.commit();
     } catch (updateErr) {
       await t.rollback();
@@ -307,6 +316,27 @@ const approveVisit = async (req, res) => {
 const uploadAttachment = async (req, res) => {
   if (!req.file) return sendError(res, 'No file uploaded');
   try {
+    const [visits] = await sequelize.query(
+      `SELECT id, salesperson_id, approval_status, created_at,
+              TIMESTAMPDIFF(SECOND, created_at, NOW()) as seconds_since_creation
+       FROM visits WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+      { replacements: [req.params.id] }
+    );
+    if (!visits[0]) return sendError(res, 'Visit not found', 404);
+    const visit = visits[0];
+    if (req.user.role === 'sales_executive' && visit.salesperson_id !== req.user.id) {
+      return sendError(res, 'Access denied: not your visit', 403);
+    }
+    if (visit.approval_status === 'approved') {
+      return sendError(res, 'Approved visits cannot be modified', 400);
+    }
+    const secDb = Number(visit.seconds_since_creation);
+    const secNode = visit.created_at ? Math.max(0, Math.floor((Date.now() - new Date(visit.created_at).getTime()) / 1000)) : 999999;
+    const elapsedSeconds = !isNaN(secDb) && secDb >= 0 ? secDb : secNode;
+    if (elapsedSeconds > VISIT_EDIT_WINDOW_SECONDS) {
+      return sendError(res, 'Attachments can only be uploaded within 5 minutes of visit submission', 403);
+    }
+
     await sequelize.query(
       `INSERT INTO visit_attachments (visit_id, file_name, original_name, file_type, file_size, file_path, uploaded_by)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,

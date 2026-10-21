@@ -13,7 +13,6 @@ import VisitForm from '../pages/visits/VisitForm';
 import Followups from '../pages/followups/Followups';
 import Reports from '../pages/reports/Reports';
 import ProfilePage from '../pages/profile/Profile';
-import Brands from '../pages/brands/Brands';
 
 const MapPage = lazy(() => import('../pages/map/Map'));
 
@@ -41,7 +40,6 @@ export default function FieldRoutes() {
 
         <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
         <Route path="reports" element={<Reports />} />
-        <Route path="brands" element={<Brands />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="settings" element={<ProfilePage />} />
       </Route>

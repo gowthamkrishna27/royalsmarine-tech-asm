@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PageSpinner } from './components/common/Spinner';
@@ -9,8 +10,52 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 // Field routes for Technical Executives & Area Executive Managers
 import FieldRoutes from './routes/FieldRoutes';
 
-const FIELD_ROLES = ['sales_executive', 'sales_manager'];
 const ADMIN_ROLES = ['super_admin', 'admin', 'management', 'backend_ops'];
+
+function AdminRestrictedScreen() {
+  const { logout } = useAuth();
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    if (countdown <= 0) {
+      logout().finally(() => {
+        window.location.href = '/login';
+      });
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [countdown, logout]);
+
+  const handleSignOut = async () => {
+    await logout();
+    window.location.href = '/login';
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50/90 p-4">
+      <div className="bg-white rounded-2xl shadow-sm border border-red-100 max-w-[280px] w-full p-6 text-center">
+        <h2 className="text-sm font-semibold text-red-600 mb-1">
+          Restricted Access
+        </h2>
+        <p className="text-xs text-red-500/80 mb-4 font-medium">
+          Signing out in {countdown}s
+        </p>
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className="w-full py-2 px-3 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-xs font-medium rounded-lg transition shadow-xs"
+        >
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function AppRouter() {
   const { user, loading } = useAuth();
@@ -28,44 +73,12 @@ function AppRouter() {
     );
   }
 
-  // Field Staff → load field app directly
-  if (FIELD_ROLES.includes(user.role)) {
-    return <FieldRoutes />;
-  }
-
-  // Admin Account logged into Field App
+  // Admin Account logged into Field App → Show minimal screen & auto sign out in 5s (do not load field app in background)
   if (ADMIN_ROLES.includes(user.role)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
-          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">🖥️</span>
-          </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Admin Account Detected</h1>
-          <p className="text-sm text-gray-600 mb-6">
-            This application is designed specifically for <strong>Technical Executives</strong> and <strong>Area Executive Managers</strong>.
-            Please access the dedicated <strong>Royals Marine Admin Website</strong>.
-          </p>
-          <div className="space-y-3">
-            <a
-              href="http://localhost:3002"
-              className="w-full inline-flex justify-center items-center px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition"
-            >
-              Open Admin Website (Port 3002) →
-            </a>
-            <button
-              onClick={() => { localStorage.clear(); window.location.href = '/login'; }}
-              className="w-full inline-flex justify-center items-center px-4 py-2.5 border border-gray-200 text-gray-700 hover:bg-gray-50 font-medium rounded-xl transition"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <AdminRestrictedScreen />;
   }
 
-  // Fallback: render field app
+  // Field Staff → load field app
   return <FieldRoutes />;
 }
 

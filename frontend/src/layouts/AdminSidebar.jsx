@@ -34,7 +34,6 @@ const navSections = [
     items: [
       { to: '/admin', label: 'Admin Portal', icon: ShieldCheckIcon },
       { to: '/users', label: 'Users & Team', icon: UsersIcon },
-      { to: '/brands', label: 'Brands & Products', icon: TagIcon },
       { to: '/billing', label: 'Billing', icon: ClipboardDocumentListIcon },
     ],
   },

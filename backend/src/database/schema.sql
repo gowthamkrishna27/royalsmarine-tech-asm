@@ -64,58 +64,9 @@ CREATE TABLE users (
 );
 
 -- ============================================================
--- BRANDS & CATEGORIES
+-- FARMERS (FORMERLY CLIENTS)
 -- ============================================================
-CREATE TABLE brands (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(150) NOT NULL UNIQUE,
-  description TEXT,
-  status ENUM('active','inactive') DEFAULT 'active',
-  created_by INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  deleted_at TIMESTAMP NULL,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-);
-
-CREATE TABLE categories (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(150) NOT NULL,
-  parent_id INT NULL,
-  description TEXT,
-  status ENUM('active','inactive') DEFAULT 'active',
-  created_by INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  deleted_at TIMESTAMP NULL,
-  FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE SET NULL,
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
-  UNIQUE KEY uk_name_parent (name, parent_id)
-);
-
-CREATE TABLE products (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(200) NOT NULL,
-  brand_id INT NOT NULL,
-  category_id INT NOT NULL,
-  subcategory_id INT NULL,
-  description TEXT,
-  status ENUM('active','inactive') DEFAULT 'active',
-  created_by INT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  deleted_at TIMESTAMP NULL,
-  FOREIGN KEY (brand_id) REFERENCES brands(id),
-  FOREIGN KEY (category_id) REFERENCES categories(id),
-  FOREIGN KEY (subcategory_id) REFERENCES categories(id),
-  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
-);
-
-
--- ============================================================
--- CLIENTS
--- ============================================================
-CREATE TABLE clients (
+CREATE TABLE farmers (
   id INT AUTO_INCREMENT PRIMARY KEY,
   uuid VARCHAR(36) NOT NULL UNIQUE,
   company_name VARCHAR(200) NOT NULL,
@@ -154,21 +105,7 @@ CREATE TABLE clients (
   INDEX idx_status (status)
 );
 
-CREATE TABLE client_brands (
-  client_id INT NOT NULL,
-  brand_id INT NOT NULL,
-  PRIMARY KEY (client_id, brand_id),
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-  FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
-);
-
-CREATE TABLE client_categories (
-  client_id INT NOT NULL,
-  category_id INT NOT NULL,
-  PRIMARY KEY (client_id, category_id),
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-);
+CREATE OR REPLACE VIEW clients AS SELECT * FROM farmers;
 
 -- ============================================================
 -- PONDS (FARMER PONDS)
@@ -190,7 +127,7 @@ CREATE TABLE ponds (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL,
-  FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+  FOREIGN KEY (client_id) REFERENCES farmers(id) ON DELETE CASCADE,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_pond_client (client_id),
   INDEX idx_pond_status (status)
@@ -234,29 +171,13 @@ CREATE TABLE visits (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL,
   FOREIGN KEY (salesperson_id) REFERENCES users(id),
-  FOREIGN KEY (client_id) REFERENCES clients(id),
+  FOREIGN KEY (client_id) REFERENCES farmers(id),
   FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_salesperson (salesperson_id),
   INDEX idx_client (client_id),
   INDEX idx_visit_date (visit_date),
   INDEX idx_approval_status (approval_status)
-);
-
-CREATE TABLE visit_brands (
-  visit_id INT NOT NULL,
-  brand_id INT NOT NULL,
-  PRIMARY KEY (visit_id, brand_id),
-  FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE CASCADE,
-  FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
-);
-
-CREATE TABLE visit_categories (
-  visit_id INT NOT NULL,
-  category_id INT NOT NULL,
-  PRIMARY KEY (visit_id, category_id),
-  FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE CASCADE,
-  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
 );
 
 CREATE TABLE visit_attachments (
@@ -297,7 +218,7 @@ CREATE TABLE followups (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP NULL,
-  FOREIGN KEY (client_id) REFERENCES clients(id),
+  FOREIGN KEY (client_id) REFERENCES farmers(id),
   FOREIGN KEY (visit_id) REFERENCES visits(id) ON DELETE SET NULL,
   FOREIGN KEY (assigned_salesperson_id) REFERENCES users(id),
   FOREIGN KEY (escalated_to) REFERENCES users(id) ON DELETE SET NULL,

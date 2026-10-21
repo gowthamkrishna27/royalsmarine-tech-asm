@@ -16,7 +16,6 @@ const navItems = [
   { to: '/reports', label: 'Reports', icon: ChartBarIcon, roles: ['super_admin','admin','sales_manager','sales_executive','management'] },
   { divider: true, label: 'Administration', roles: ['super_admin','admin'] },
   { to: '/users', label: 'Users & Team', icon: UsersIcon, roles: ['super_admin','admin'] },
-  { to: '/brands', label: 'Brands & Master Data', icon: TagIcon, roles: ['super_admin','admin'] },
   { to: '/settings', label: 'Portal Settings', icon: Cog6ToothIcon, roles: ['super_admin','admin'] },
 ];
 

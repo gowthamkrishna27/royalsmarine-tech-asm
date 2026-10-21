@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { visitApi, clientApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
 import { MapPinIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -28,6 +29,8 @@ const MEDICATION_CATEGORIES = [
 ];
 
 export default function VisitForm() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('super_admin', 'admin');
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -35,6 +38,7 @@ export default function VisitForm() {
   const [loading, setLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsCoords, setGpsCoords] = useState(null);
+  const [secondsLeft, setSecondsLeft] = useState(null);
 
   // 3. Water Quality state
   const [waterQuality, setWaterQuality] = useState({
@@ -150,6 +154,38 @@ export default function VisitForm() {
     }
   }, [existingVisit, setValue]);
 
+  // 5-minute countdown timer logic for visits: only editable within 5 minutes of submission
+  useEffect(() => {
+    if (!isEdit || !existingVisit) return;
+
+    const calcRemaining = () => {
+      if (existingVisit.approval_status === 'approved') return 0;
+      if (existingVisit.created_at) {
+        const createdAt = new Date(existingVisit.created_at).getTime();
+        const elapsed = Math.floor((Date.now() - createdAt) / 1000);
+        return Math.max(0, 300 - elapsed);
+      }
+      return existingVisit.edit_time_remaining_seconds ?? 0;
+    };
+
+    const initial = calcRemaining();
+    setSecondsLeft(initial);
+
+    if (initial <= 0) return;
+
+    const interval = setInterval(() => {
+      const remaining = calcRemaining();
+      setSecondsLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isEdit, existingVisit]);
+
+  const isLocked = isEdit && secondsLeft !== null && (secondsLeft <= 0 || existingVisit?.approval_status === 'approved');
+
   // Pre-fill farmer from URL query parameter (e.g. from Map 1-Tap Log Visit)
   const paramClientId = searchParams.get('clientId');
   const paramTank = searchParams.get('tank');
@@ -226,6 +262,7 @@ export default function VisitForm() {
 
   // Medication handlers
   const addMedication = () => {
+    if (isLocked) return;
     setMedications(prev => [
       ...prev,
       {
@@ -241,6 +278,7 @@ export default function VisitForm() {
   };
 
   const updateMedication = (index, field, value) => {
+    if (isLocked) return;
     setMedications(prev => {
       const copy = [...prev];
       copy[index] = { ...copy[index], [field]: value };
@@ -249,11 +287,13 @@ export default function VisitForm() {
   };
 
   const removeMedication = (index) => {
+    if (isLocked) return;
     setMedications(prev => prev.filter((_, i) => i !== index));
   };
 
   // Harvest handlers
   const addPartialHarvest = () => {
+    if (isLocked) return;
     if (partialHarvests.length >= 3) {
       toast.error('Maximum 3 partial harvest records');
       return;
@@ -290,6 +330,7 @@ export default function VisitForm() {
   };
 
   const removePartialHarvest = (index) => {
+    if (isLocked) return;
     setPartialHarvests(prev => {
       const filtered = prev.filter((_, i) => i !== index);
       return filtered.map((item, idx) => ({ ...item, harvest_no: idx + 1 }));
@@ -297,6 +338,7 @@ export default function VisitForm() {
   };
 
   const updateFinalHarvest = (field, value) => {
+    if (isLocked) return;
     setFinalHarvest(prev => {
       const updated = { ...prev, [field]: value };
       if (field === 'harvested_quantity' || field === 'abw') {
@@ -379,6 +421,10 @@ export default function VisitForm() {
   }, []);
 
   const onSubmit = async (data) => {
+    if (isEdit && isLocked) {
+      toast.error('The 5-minute update window has expired. This visit cannot be modified.');
+      return;
+    }
     setLoading(true);
 
     // Auto-capture GPS if not already present
@@ -428,10 +474,11 @@ export default function VisitForm() {
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="page-header">
-        <h1 className="page-title">{isEdit ? 'Edit Visit' : 'Log Visit'}</h1>
+        <h1 className="page-title">{isEdit ? (isLocked ? 'Visit Details' : 'Edit Visit') : 'Log Visit'}</h1>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <fieldset disabled={isLocked} className="space-y-4 border-0 p-0 m-0 min-w-0">
         {/* Visit Details */}
         <div className="card">
           <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Visit Details</h3></div>
@@ -994,22 +1041,27 @@ export default function VisitForm() {
           <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Notes</h3></div>
           <div className="card-body p-4 space-y-3">
             <textarea {...register('meeting_highlights')} className="input text-xs" rows={2} placeholder="Meeting highlights / discussion..." />
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5`}>
               <input {...register('visit_outcome')} className="input text-xs py-1" placeholder="Visit outcome" />
               <input {...register('next_action')} className="input text-xs py-1" placeholder="Next action" />
-              <input type="date" {...register('next_followup_date')} className="input text-xs py-1" />
+              {isAdmin && (
+                <input type="date" {...register('next_followup_date')} className="input text-xs py-1" title="Next Follow-up Date" />
+              )}
             </div>
           </div>
         </div>
+        </fieldset>
 
         {/* Action Buttons */}
         <div className="flex gap-2 justify-end pb-8">
           <button type="button" onClick={() => navigate(-1)} className="btn-secondary btn-sm">
-            Cancel
+            {isLocked ? 'Back' : 'Cancel'}
           </button>
-          <button type="submit" disabled={loading} className="btn-primary btn-sm">
-            {loading ? <><Spinner size="xs" /> Saving...</> : isEdit ? 'Update Visit' : 'Submit Visit'}
-          </button>
+          {!isLocked && (
+            <button type="submit" disabled={loading} className="btn-primary btn-sm">
+              {loading ? <><Spinner size="xs" /> Saving...</> : isEdit ? 'Update Visit' : 'Submit Visit'}
+            </button>
+          )}
         </div>
       </form>
     </div>

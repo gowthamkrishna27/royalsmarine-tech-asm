@@ -597,7 +597,7 @@ export default function ClientForm() {
           onClose={() => setMapTarget(null)}
           tankName={
             mapTarget.type === 'farm'
-              ? 'Farm Location'
+              ? 'Farm'
               : (tanks[mapTarget.index]?.tank_number || `Tank ${mapTarget.index + 1}`)
           }
           initialCoords={

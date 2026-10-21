@@ -226,9 +226,15 @@ export default function ClientForm() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="page-header">
-        <h1 className="page-title">{isEdit ? 'Edit Farmer' : 'Add New Farmer'}</h1>
-        <p className="text-sm text-gray-500">Record farmer details and tank information</p>
+      <div className="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="page-title">{isEdit ? 'Edit Farmer' : 'Add New Farmer'}</h1>
+          <p className="text-sm text-gray-500">Record farmer details and tank information</p>
+        </div>
+        <div className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200/80 px-3 py-1.5 rounded-lg self-start sm:self-auto font-medium">
+          <span>💡</span>
+          <span>Adding farmers on-site via the Technical Executive mobile portal captures exact real-time GPS coordinates.</span>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -597,7 +603,7 @@ export default function ClientForm() {
           onClose={() => setMapTarget(null)}
           tankName={
             mapTarget.type === 'farm'
-              ? 'Farm Location'
+              ? 'Farm'
               : (tanks[mapTarget.index]?.tank_number || `Tank ${mapTarget.index + 1}`)
           }
           initialCoords={

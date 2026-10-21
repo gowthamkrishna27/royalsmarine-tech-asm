@@ -88,7 +88,9 @@ export default function Visits() {
                         <td className="text-gray-600">{v.salesperson_name}</td>
                         <td><Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge></td>
                         <td>
-                          <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline">View</Link>
+                          <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline">
+                            {v.is_editable ? 'Edit' : 'View'}
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -104,7 +106,9 @@ export default function Visits() {
                         <p className="font-semibold text-gray-900 truncate">{v.company_name}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{v.visit_date} · {v.salesperson_name}</p>
                       </div>
-                      <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline shrink-0">View Details</Link>
+                      <Link to={`/visits/${v.id}`} className="text-blue-600 text-xs hover:underline shrink-0">
+                        {v.is_editable ? 'Edit' : 'View Details'}
+                      </Link>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge color="blue">{MEETING_TYPES.find(t => t.value === v.meeting_type)?.label || v.meeting_type}</Badge>

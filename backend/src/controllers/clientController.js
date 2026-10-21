@@ -129,24 +129,6 @@ const createClient = async (req, res) => {
 
     const clientId = typeof result === 'number' ? result : (result?.insertId || result);
 
-    if (brands && brands.length) {
-      for (const brandId of brands) {
-        await sequelize.query('INSERT IGNORE INTO client_brands (client_id, brand_id) VALUES (?, ?)', {
-          replacements: [clientId, brandId],
-          transaction: t,
-        });
-      }
-    }
-
-    if (categories && categories.length) {
-      for (const catId of categories) {
-        await sequelize.query('INSERT IGNORE INTO client_categories (client_id, category_id) VALUES (?, ?)', {
-          replacements: [clientId, catId],
-          transaction: t,
-        });
-      }
-    }
-
     if (ponds && Array.isArray(ponds) && ponds.length) {
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
@@ -256,20 +238,12 @@ const getClient = async (req, res) => {
       return sendError(res, 'Access denied: not your client', 403);
     }
 
-    const [brands] = await sequelize.query(
-      'SELECT b.id, b.name FROM brands b JOIN client_brands cb ON b.id = cb.brand_id WHERE cb.client_id = ?',
-      { replacements: [req.params.id] }
-    );
-    const [cats] = await sequelize.query(
-      'SELECT c.id, c.name FROM categories c JOIN client_categories cc ON c.id = cc.category_id WHERE cc.client_id = ?',
-      { replacements: [req.params.id] }
-    );
     const [ponds] = await sequelize.query(
       'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
       { replacements: [req.params.id, req.params.id] }
     );
 
-    return sendSuccess(res, 'Client fetched', { ...client, brands, categories: cats, ponds });
+    return sendSuccess(res, 'Client fetched', { ...client, brands: [], categories: [], ponds });
   } catch (err) {
     return sendError(res, err.message, 500);
   }
@@ -340,26 +314,6 @@ const updateClient = async (req, res) => {
         transaction: t,
       }
     );
-
-    if (brands !== undefined) {
-      await sequelize.query('DELETE FROM client_brands WHERE client_id = ?', { replacements: [req.params.id], transaction: t });
-      for (const brandId of (brands || [])) {
-        await sequelize.query('INSERT IGNORE INTO client_brands (client_id, brand_id) VALUES (?, ?)', {
-          replacements: [req.params.id, brandId],
-          transaction: t,
-        });
-      }
-    }
-
-    if (categories !== undefined) {
-      await sequelize.query('DELETE FROM client_categories WHERE client_id = ?', { replacements: [req.params.id], transaction: t });
-      for (const catId of (categories || [])) {
-        await sequelize.query('INSERT IGNORE INTO client_categories (client_id, category_id) VALUES (?, ?)', {
-          replacements: [req.params.id, catId],
-          transaction: t,
-        });
-      }
-    }
 
     if (ponds !== undefined && Array.isArray(ponds)) {
       const activePondIds = [];

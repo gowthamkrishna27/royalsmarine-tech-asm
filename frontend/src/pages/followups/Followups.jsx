@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { followupApi, clientApi } from '../../services/api';
+import { followupApi, clientApi, userApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
@@ -12,7 +13,7 @@ import { FOLLOWUP_STATUS } from '../../constants';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 
-function CreateFollowupModal({ open, onClose, clients, onCreate }) {
+function CreateFollowupModal({ open, onClose, clients, users, onCreate }) {
   const { register, handleSubmit, reset, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +41,17 @@ function CreateFollowupModal({ open, onClose, clients, onCreate }) {
           <select {...register('client_id', { required: true })} className="input">
             <option value="">Select farmer</option>
             {clients?.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label">Assign To</label>
+          <select {...register('assigned_salesperson_id')} className="input">
+            <option value="">Assign to Myself (Admin)</option>
+            {users?.map(u => (
+              <option key={u.id} value={u.id}>
+                {u.full_name} ({u.role_display || u.role})
+              </option>
+            ))}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -75,6 +87,9 @@ function CreateFollowupModal({ open, onClose, clients, onCreate }) {
 
 export default function Followups() {
   const qc = useQueryClient();
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('super_admin', 'admin');
+
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
@@ -89,6 +104,11 @@ export default function Followups() {
   const { data: todayData } = useQuery({ queryKey: ['followups-today'], queryFn: () => followupApi.today().then(r => r.data.data) });
   const { data: overdueData } = useQuery({ queryKey: ['followups-overdue'], queryFn: () => followupApi.overdue().then(r => r.data.data) });
   const { data: clients } = useQuery({ queryKey: ['clients-list'], queryFn: () => clientApi.list({ limit: 200 }).then(r => r.data.data) });
+  const { data: usersData } = useQuery({
+    queryKey: ['users-list-followup'],
+    queryFn: () => userApi.list({ limit: 100 }).then(r => r.data.data),
+    enabled: isAdmin,
+  });
 
   const handleComplete = async () => {
     try {
@@ -109,9 +129,11 @@ export default function Followups() {
           <h1 className="page-title">Follow-ups</h1>
           <p className="text-sm text-gray-500">{data?.pagination?.total || 0} total</p>
         </div>
-        <button onClick={() => setAddModal(true)} className="btn-primary btn-sm">
-          <PlusIcon className="w-4 h-4" /> Add Follow-up
-        </button>
+        {isAdmin && (
+          <button onClick={() => setAddModal(true)} className="btn-primary btn-sm">
+            <PlusIcon className="w-4 h-4" /> Add Follow-up
+          </button>
+        )}
       </div>
 
       {/* Quick Stats */}
@@ -145,8 +167,17 @@ export default function Followups() {
       {isLoading ? <PageSpinner /> : (
         <div className="card">
           {data?.data?.length === 0 ? (
-            <EmptyState title="No follow-ups" icon={BellIcon}
-              action={<button onClick={() => setAddModal(true)} className="btn-primary btn-sm">Add Follow-up</button>} />
+            <EmptyState
+              title="No follow-ups"
+              icon={BellIcon}
+              action={
+                isAdmin ? (
+                  <button onClick={() => setAddModal(true)} className="btn-primary btn-sm">
+                    Add Follow-up
+                  </button>
+                ) : null
+              }
+            />
           ) : (
             <>
               <div className="divide-y divide-gray-50">
@@ -175,8 +206,15 @@ export default function Followups() {
         </div>
       )}
 
-      <CreateFollowupModal open={addModal} onClose={() => setAddModal(false)} clients={clients}
-        onCreate={() => qc.invalidateQueries(['followups'])} />
+      {isAdmin && (
+        <CreateFollowupModal
+          open={addModal}
+          onClose={() => setAddModal(false)}
+          clients={clients}
+          users={usersData}
+          onCreate={() => qc.invalidateQueries(['followups'])}
+        />
+      )}
 
       <Modal open={Boolean(completeModal)} onClose={() => setCompleteModal(null)} title="Mark as Completed">
         <div className="space-y-4">
