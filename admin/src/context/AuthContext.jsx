@@ -26,8 +26,8 @@ export function AuthProvider({ children }) {
     else setLoading(false);
   }, [fetchMe]);
 
-  const login = async (email, password) => {
-    const { data } = await authApi.login({ email, password });
+  const login = async (identifier, password) => {
+    const { data } = await authApi.login({ email: identifier, identifier, password });
     localStorage.setItem('accessToken', data.data.accessToken);
     localStorage.setItem('refreshToken', data.data.refreshToken);
     setUser(data.data.user);

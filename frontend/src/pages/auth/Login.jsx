@@ -11,16 +11,20 @@ export default function Login() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
+  const [authError, setAuthError] = useState('');
   const { register, handleSubmit, formState: { errors } } = useForm();
 
   const onSubmit = async (data) => {
     setLoading(true);
+    setAuthError('');
     try {
       const user = await login(data.email, data.password);
       toast.success(`Welcome, ${user.full_name}!`);
       navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed');
+      const errMsg = err.response?.data?.message || 'Login failed. Please check your credentials.';
+      setAuthError(errMsg);
+      toast.error(errMsg);
     } finally {
       setLoading(false);
     }
@@ -35,15 +39,24 @@ export default function Login() {
             <h2 className="text-xl font-bold text-gray-900">Sign in to your account</h2>
           </div>
 
+          {authError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 font-medium flex items-center gap-2">
+              <svg className="w-4 h-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{authError}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label className="label">Email address</label>
+              <label className="label">Email or Mobile Number</label>
               <input
-                type="email"
-                {...register('email', { required: 'Email is required' })}
+                type="text"
+                {...register('email', { required: 'Email or mobile number is required' })}
                 className={`input ${errors.email ? 'input-error' : ''}`}
-                placeholder="you@rupaenterprises.com"
-                autoComplete="email"
+                placeholder="Enter email or mobile number"
+                autoComplete="username"
               />
               {errors.email && <p className="form-error">{errors.email.message}</p>}
             </div>
