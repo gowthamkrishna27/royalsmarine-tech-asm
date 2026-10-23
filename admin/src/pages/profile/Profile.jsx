@@ -12,14 +12,20 @@ export default function ProfilePage() {
   const { register, handleSubmit, watch, reset } = useForm();
 
   const onChangePassword = async (data) => {
-    if (data.new_password !== data.confirm_password) { toast.error('Passwords do not match'); return; }
+    if (data.new_password !== data.confirm_password) {
+      toast.error('Passwords do not match');
+      return;
+    }
     setPwLoading(true);
     try {
       await api.put(`/users/${user.id}/reset-password`, { password: data.new_password });
-      toast.success('Password updated');
+      toast.success('Password updated successfully');
       reset();
-    } catch { toast.error('Failed to update password'); }
-    finally { setPwLoading(false); }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to update password');
+    } finally {
+      setPwLoading(false);
+    }
   };
 
   return (
