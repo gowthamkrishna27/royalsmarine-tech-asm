@@ -29,6 +29,7 @@ const listUsers = async (req, res) => {
     const [users] = await sequelize.query(
       `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.status,
               u.joining_date, u.last_login, u.created_at,
+              u.manager_id,
               r.name as role, r.display_name as role_display,
               m.full_name as manager_name
        FROM users u

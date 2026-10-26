@@ -46,6 +46,7 @@ const listClients = async (req, res) => {
               c.city, c.state, c.address, c.latitude, c.longitude, c.gps_address,
               c.area, c.village, c.farm_extent_acres, c.number_of_tanks, c.water_source,
               c.client_type, c.status, c.created_at,
+              c.assigned_salesperson_id, c.assigned_manager_id, c.created_by,
               sp.full_name as salesperson_name, m.full_name as manager_name
        FROM clients c
        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id

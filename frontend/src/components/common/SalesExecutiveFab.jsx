@@ -23,12 +23,6 @@ const actions = [
     icon: BuildingOfficeIcon,
     color: 'bg-indigo-600 hover:bg-indigo-700 text-white',
   },
-  {
-    label: 'Follow-ups',
-    to: '/followups',
-    icon: BellIcon,
-    color: 'bg-sky-600 hover:bg-sky-700 text-white',
-  },
 ];
 
 export default function SalesExecutiveFab() {
