@@ -717,6 +717,30 @@ const deletePond = async (req, res) => {
   }
 };
 
+const calculateDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return null;
+  const nLat1 = Number(lat1);
+  const nLon1 = Number(lon1);
+  const nLat2 = Number(lat2);
+  const nLon2 = Number(lon2);
+  if (isNaN(nLat1) || isNaN(nLon1) || isNaN(nLat2) || isNaN(nLon2)) return null;
+  if (nLat1 === 0 && nLon1 === 0) return null;
+  if (nLat2 === 0 && nLon2 === 0) return null;
+
+  const R = 6371000;
+  const dLat = ((nLat2 - nLat1) * Math.PI) / 180;
+  const dLon = ((nLon2 - nLon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((nLat1 * Math.PI) / 180) *
+      Math.cos((nLat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const d = R * c;
+  return Math.round(d * 10) / 10;
+};
+
 const getMapLocations = async (req, res) => {
   const { where, replacements } = buildClientWhere(req.query, req.user.id, req.user.role);
 
@@ -742,13 +766,41 @@ const getMapLocations = async (req, res) => {
                 p.pond_name, p.tank_number, p.area, p.area_acres, p.tank_size,
                 p.salinity, p.soil_type, p.hatchery_name, p.brooder, p.seed_date,
                 p.stocking_quantity_lakhs, p.feed_type, p.culture_type, p.water_type,
-                p.latitude, p.longitude, p.gps_address, p.status, p.remarks
+                p.latitude, p.longitude, p.gps_address, p.status, p.remarks,
+                v.id as latest_visit_id,
+                v.visit_date as test_date,
+                v.visit_time as test_time,
+                v.latitude as test_latitude,
+                v.longitude as test_longitude,
+                v.water_quality,
+                u.full_name as tested_by_name,
+                r.name as tested_by_role,
+                r.display_name as tested_by_role_name
          FROM ponds p
+         LEFT JOIN (
+           SELECT v1.*
+           FROM visits v1
+           INNER JOIN (
+             SELECT MAX(id) as max_id
+             FROM visits
+             WHERE deleted_at IS NULL AND latitude IS NOT NULL AND (tank_id IS NOT NULL OR tank_number IS NOT NULL)
+             GROUP BY client_id, COALESCE(tank_id, tank_number)
+           ) v2 ON v1.id = v2.max_id
+         ) v ON (v.tank_id = p.id OR (v.tank_number = p.pond_name AND v.client_id = p.client_id))
+         LEFT JOIN users u ON v.salesperson_id = u.id
+         LEFT JOIN roles r ON u.role_id = r.id
          WHERE (p.client_id IN (?) OR p.farmer_id IN (?)) AND p.deleted_at IS NULL
          ORDER BY p.pond_name ASC`,
         { replacements: [clientIds, clientIds] }
       );
-      ponds = pondRows;
+      ponds = pondRows.map(p => {
+        const dist = calculateDistanceMeters(p.latitude, p.longitude, p.test_latitude, p.test_longitude);
+        return {
+          ...p,
+          test_distance_meters: dist,
+          has_test: Boolean(p.latest_visit_id || dist != null),
+        };
+      });
     }
 
     return sendSuccess(res, 'Map locations fetched', { clients, ponds });

@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import toast from 'react-hot-toast';
+import NotificationBell from '../components/common/NotificationBell';
 
 /**
  * TopBar — Shared top header bar.
@@ -74,8 +75,9 @@ export default function TopBar({ variant = 'field' }) {
           </Link>
         </div>
 
-        {/* Right: Settings */}
+        {/* Right: Notifications & Settings */}
         <div className="flex items-center gap-2">
+          <NotificationBell />
           <SettingsDropdown
             user={user}
             showMenu={showMenu}
@@ -107,8 +109,9 @@ export default function TopBar({ variant = 'field' }) {
         </div>
       </div>
 
-      {/* Right: Settings */}
+      {/* Right: Notifications & Settings */}
       <div className="flex items-center gap-2">
+        <NotificationBell />
         <SettingsDropdown
           user={user}
           showMenu={showMenu}

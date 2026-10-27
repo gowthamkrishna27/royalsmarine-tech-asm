@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { followupApi, clientApi, userApi, visitApi } from '../../services/api';
+import { followupApi, clientApi, userApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -14,67 +13,14 @@ import {
   PlusIcon,
   CheckCircleIcon,
   ExclamationTriangleIcon,
-  DocumentTextIcon,
-  CheckIcon,
   UserIcon,
+  PhoneIcon,
+  CalendarDaysIcon,
+  ClockIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
-import { FOLLOWUP_STATUS, MEETING_TYPES } from '../../constants';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
-
-function RejectModal({ visitId, onClose, onRejected }) {
-  const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!reason.trim()) {
-      toast.error('Please enter a rejection reason');
-      return;
-    }
-    setLoading(true);
-    try {
-      await visitApi.approve(visitId, { status: 'rejected', rejection_reason: reason.trim() });
-      toast.success('Visit submission rejected');
-      onRejected();
-      onClose();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to reject visit');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Modal open={Boolean(visitId)} onClose={onClose} title="Reject Submission" size="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="label">Reason for Rejection <span className="text-red-500">*</span></label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            className="input"
-            rows={3}
-            placeholder="Explain why this submission is rejected..."
-            required
-          />
-        </div>
-        <div className="flex gap-2.5 sm:gap-3 justify-end pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1 sm:flex-initial py-2 sm:py-1.5">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-sm flex-1 sm:flex-initial py-2 sm:py-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg font-medium text-xs sm:text-sm transition"
-          >
-            {loading ? 'Rejecting...' : 'Reject Submission'}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
-}
 
 function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCreate }) {
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
@@ -83,48 +29,47 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
   const [showAllFarmers, setShowAllFarmers] = useState(false);
 
   const isASM = currentUser?.role === 'sales_manager';
-  const isAdmin = ['super_admin', 'admin'].includes(currentUser?.role);
 
   // Technical executives assigned to this ASM (where manager_id matches ASM)
   const directReports = (users || []).filter(
     (u) => u.role === 'sales_executive' && (u.manager_id === currentUser?.id)
   );
 
-  // If there are direct reports, show those; otherwise show all technical executives
-  const techExecutives = directReports.length > 0
-    ? directReports
-    : (users || []).filter((u) => u.role === 'sales_executive');
-
-  // Selected executive user object
-  const selectedExec = (users || []).find((u) => String(u.id) === String(selectedExecId))
-    || (String(currentUser?.id) === String(selectedExecId) ? currentUser : null);
-
-  // Filter farmers belonging to the selected technical executive
+  // Filter farmers assigned to the selected technical executive / ASM
   const filteredClients = (clients || []).filter((c) => {
     if (!selectedExecId) return false;
-    const matchId = String(c.assigned_salesperson_id) === String(selectedExecId);
-    const matchCreator = String(c.created_by) === String(selectedExecId);
-    const matchName = selectedExec?.full_name && c.salesperson_name === selectedExec.full_name;
-    const matchManager = String(currentUser?.id) === String(selectedExecId) && String(c.assigned_manager_id) === String(currentUser?.id);
-    return matchId || matchCreator || matchName || matchManager;
+    return String(c.assigned_salesperson_id) === String(selectedExecId);
   });
 
-  const displayFarmers = showAllFarmers ? (clients || []) : filteredClients;
-
-  // Reset state when modal is closed or opened
-  useEffect(() => {
-    if (!open) {
-      reset();
-      setSelectedExecId('');
-      setShowAllFarmers(false);
-    }
-  }, [open, reset]);
+  const displayFarmers = showAllFarmers || filteredClients.length === 0
+    ? (clients || [])
+    : filteredClients;
 
   const handleExecChange = (e) => {
-    const execId = e.target.value;
-    setSelectedExecId(execId);
+    const val = e.target.value;
+    setSelectedExecId(val);
+    setValue('assigned_salesperson_id', val);
     setValue('client_id', '');
     setShowAllFarmers(false);
+  };
+
+  const onSubmit = async (formData) => {
+    setLoading(true);
+    try {
+      await followupApi.create({
+        ...formData,
+        assigned_salesperson_id: selectedExecId || currentUser?.id,
+      });
+      toast.success('Follow-up scheduled successfully');
+      reset();
+      setSelectedExecId('');
+      onClose();
+      onCreate();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to create follow-up');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleModalClose = () => {
@@ -134,58 +79,24 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
     onClose();
   };
 
-  const onSubmit = async (data) => {
-    if (!selectedExecId) {
-      toast.error('Please select a Technical Executive');
-      return;
-    }
-    if (!data.client_id) {
-      toast.error('Please select a Farmer');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await followupApi.create({
-        title: data.title,
-        client_id: Number(data.client_id),
-        assigned_salesperson_id: Number(selectedExecId),
-        followup_date: data.followup_date,
-        followup_time: data.followup_time || undefined,
-        priority: data.priority || 'medium',
-        remarks: data.remarks || undefined,
-      });
-      toast.success('Follow-up created successfully');
-      reset();
-      setSelectedExecId('');
-      setShowAllFarmers(false);
-      onCreate();
-      onClose();
-    } catch (err) {
-      toast.error(err?.response?.data?.message || err?.message || 'Failed to create follow-up');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
-    <Modal open={open} onClose={handleModalClose} title="Create Follow-up">
+    <Modal open={open} onClose={handleModalClose} title="Create Follow-up" size="md">
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {/* 1. Title */}
         <div>
-          <label className="label">Purpose <span className="text-red-500">*</span></label>
+          <label className="label">Title <span className="text-red-500">*</span></label>
           <input
-            {...register('title', { required: 'Follow-up title is required' })}
+            {...register('title', { required: 'Title is required' })}
             className="input"
-            placeholder="Follow-up title"
+            placeholder="e.g. Water Quality Review & Stock Assessment"
           />
           {errors.title && <p className="form-error">{errors.title.message}</p>}
         </div>
 
-        {/* 2. Technical Executive assigned to the ASM */}
+        {/* 2. Assigned Executive (ASM or Technical Executive) */}
         <div>
           <label className="label">
-            Technical Executive <span className="text-red-500">*</span>
+            Assigned Executive <span className="text-red-500">*</span>
           </label>
           <select
             value={selectedExecId}
@@ -193,26 +104,23 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
             className="input font-medium"
             required
           >
-            <option value="">Select Technical Executive</option>
+            <option value="">Select Technical Executive or ASM</option>
             {isASM && currentUser && (
               <option value={currentUser.id}>
-                Myself ({currentUser.full_name})
+                Myself ({currentUser.full_name}) - ASM
               </option>
             )}
-            {techExecutives.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name} ({u.role_display || 'Technical Executive'})
-              </option>
-            ))}
+            {(users || [])
+              .filter((u) => ['sales_manager', 'sales_executive'].includes(u.role))
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name} ({u.role_display || (u.role === 'sales_manager' ? 'ASM' : 'Technical Executive')})
+                </option>
+              ))}
           </select>
-          {directReports.length > 0 && isASM && (
-            <p className="text-[11px] text-gray-500 mt-1">
-              Showing Technical Executives reporting to your territory
-            </p>
-          )}
         </div>
 
-        {/* 3. Farmer of the selected Technical Executive */}
+        {/* 3. Farmer of the selected Executive */}
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="label mb-0">
@@ -232,7 +140,7 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
           >
             <option value="">
               {!selectedExecId
-                ? 'Select Technical Executive first'
+                ? 'Select Executive first'
                 : displayFarmers.length === 0
                   ? 'No farmers found for this executive'
                   : 'Select farmer'}
@@ -245,7 +153,6 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
           </select>
           {errors.client_id && <p className="form-error">{errors.client_id.message}</p>}
 
-          {/* Helper when selected executive has no farmers mapped */}
           {selectedExecId && filteredClients.length === 0 && !showAllFarmers && (
             <div className="flex items-center justify-between mt-1 text-xs">
               <span className="text-amber-600">No farmers mapped to this executive.</span>
@@ -255,19 +162,6 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
                 className="text-blue-600 hover:underline font-semibold ml-2 shrink-0"
               >
                 Show all farmers ({clients?.length || 0})
-              </button>
-            </div>
-          )}
-
-          {showAllFarmers && (
-            <div className="flex items-center justify-between mt-1 text-xs">
-              <span className="text-blue-600 font-medium">Showing all farmers</span>
-              <button
-                type="button"
-                onClick={() => setShowAllFarmers(false)}
-                className="text-gray-500 hover:underline ml-2 shrink-0"
-              >
-                Filter by executive only
               </button>
             </div>
           )}
@@ -286,10 +180,20 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
           </div>
         </div>
 
-        {/* 5. Remarks */}
+        {/* 5. Priority */}
+        <div>
+          <label className="label">Priority</label>
+          <select {...register('priority')} defaultValue="medium" className="input">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </div>
+
+        {/* 6. Remarks */}
         <div>
           <label className="label">Remarks</label>
-          <textarea {...register('remarks')} className="input" rows={2} placeholder="Optional remarks..." />
+          <textarea {...register('remarks')} className="input" rows={2} placeholder="Optional instructions or notes..." />
         </div>
 
         {/* Action Buttons */}
@@ -309,20 +213,17 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
 export default function Followups() {
   const qc = useQueryClient();
   const { user: currentUser, hasRole } = useAuth();
-  const isAdmin = hasRole('super_admin', 'admin');
-  const isManagerOrAdmin = hasRole('super_admin', 'admin', 'sales_manager');
   const canCreate = hasRole('super_admin', 'admin', 'sales_manager', 'sales_executive');
   const canAssignUsers = hasRole('super_admin', 'admin', 'sales_manager');
 
-  const [activeTab, setActiveTab] = useState('followups'); // 'followups' | 'submissions'
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('dues'); // Default to dues & overdues
   const [addModal, setAddModal] = useState(false);
-  const [rejectModal, setRejectModal] = useState(null);
-  const [completeModal, setCompleteModal] = useState(null);
+  const [completeTarget, setCompleteTarget] = useState(null);
   const [completeNotes, setCompleteNotes] = useState('');
+  const [completing, setCompleting] = useState(false);
 
-  // 1. Follow-ups queries
+  // Queries
   const { data, isLoading } = useQuery({
     queryKey: ['followups', page, status],
     queryFn: () => followupApi.list({ page, limit: 20, status }).then((r) => r.data),
@@ -345,37 +246,29 @@ export default function Followups() {
     enabled: canAssignUsers,
   });
 
-  // 2. Pending Submissions query (technician visit submissions pending review/approval)
-  const { data: pendingVisitsData, isLoading: loadingVisits } = useQuery({
-    queryKey: ['pending-submissions'],
-    queryFn: () => visitApi.list({ approval_status: 'pending', limit: 50 }).then((r) => r.data),
-  });
-  const pendingSubmissions = pendingVisitsData?.data || [];
-  const pendingCount = pendingVisitsData?.pagination?.total ?? pendingSubmissions.length;
-
   const handleComplete = async () => {
+    if (!completeTarget) return;
+    setCompleting(true);
     try {
-      await followupApi.complete(completeModal, completeNotes);
-      toast.success('Follow-up completed!');
-      setCompleteModal(null);
+      const res = await followupApi.complete(completeTarget.id, completeNotes);
+      toast.success('Follow-up marked completed and stored in database!');
+
+      // Trigger WhatsApp Web / App directly if whatsapp_url is present
+      const whatsappUrl = res.data?.data?.whatsapp_url;
+      if (whatsappUrl) {
+        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      setCompleteTarget(null);
       setCompleteNotes('');
       qc.invalidateQueries(['followups']);
       qc.invalidateQueries(['followups-today']);
       qc.invalidateQueries(['followups-overdue']);
-    } catch {
-      toast.error('Failed to complete');
-    }
-  };
-
-  const handleApproveVisit = async (visitId) => {
-    try {
-      await visitApi.approve(visitId, { status: 'approved' });
-      toast.success('Visit submission approved');
-      qc.invalidateQueries(['pending-submissions']);
-      qc.invalidateQueries(['visits']);
-      qc.invalidateQueries(['dashboard']);
+      qc.invalidateQueries(['notifications']);
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to approve submission');
+      toast.error(err?.response?.data?.message || 'Failed to complete follow-up');
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -384,11 +277,9 @@ export default function Followups() {
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-5">
         <div className="min-w-0">
-          <h1 className="page-title text-lg sm:text-xl font-bold text-gray-900 truncate">Follow-ups</h1>
+          <h1 className="page-title text-lg sm:text-xl font-bold text-gray-900 truncate">Follow-ups & Dues</h1>
           <p className="text-xs sm:text-sm text-gray-500">
-            {activeTab === 'submissions'
-              ? `${pendingCount} pending ${pendingCount === 1 ? 'submission' : 'submissions'}`
-              : `${data?.pagination?.total || 0} total follow-ups`}
+            {data?.pagination?.total || 0} follow-up records
           </p>
         </div>
         {canCreate && (
@@ -403,314 +294,235 @@ export default function Followups() {
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div
-          onClick={() => {
-            setActiveTab('followups');
-            setStatus('');
-          }}
-          className={`card p-3.5 sm:p-4 flex items-center gap-3 border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${activeTab === 'followups' && status === '' ? 'ring-2 ring-blue-500/20' : ''
-            }`}
+          onClick={() => setStatus('dues')}
+          className={`card p-4 flex items-center gap-3 border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
+            status === 'dues' ? 'ring-2 ring-amber-500/20 bg-amber-50/40' : ''
+          }`}
         >
-          <BellIcon className="w-7 h-7 sm:w-8 sm:h-8 text-blue-500 shrink-0" />
+          <ClockIcon className="w-8 h-8 text-amber-500 shrink-0" />
           <div className="min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{todayData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate">Today's Follow-ups</p>
-          </div>
-        </div>
-
-        <div
-          onClick={() => {
-            setActiveTab('followups');
-            setStatus('overdue');
-          }}
-          className={`card p-3.5 sm:p-4 flex items-center gap-3 border-l-4 border-red-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${activeTab === 'followups' && status === 'overdue' ? 'ring-2 ring-red-500/20' : ''
-            }`}
-        >
-          <ExclamationTriangleIcon className="w-7 h-7 sm:w-8 sm:h-8 text-red-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xl sm:text-2xl font-bold text-gray-900">{overdueData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate">Overdue</p>
-          </div>
-        </div>
-
-        <div
-          onClick={() => setActiveTab('submissions')}
-          className={`card p-3.5 sm:p-4 flex items-center gap-3 border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] col-span-2 sm:col-span-1 ${activeTab === 'submissions'
-              ? 'ring-2 ring-amber-500/30 bg-amber-50/50'
-              : pendingCount > 0
-                ? 'bg-amber-50/30'
-                : ''
-            }`}
-        >
-          <DocumentTextIcon className="w-7 h-7 sm:w-8 sm:h-8 text-amber-500 shrink-0" />
-          <div className="min-w-0 flex-1 flex sm:block items-center justify-between">
-            <div>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">{pendingCount}</p>
-              <p className="text-xs sm:text-sm text-gray-500 truncate">Pending Submissions</p>
-            </div>
-            {pendingCount > 0 && (
-              <span className="sm:hidden text-xs font-semibold px-2.5 py-1 bg-amber-600 text-white rounded-lg shadow-xs">
-                Review
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Technician Pending Submissions Alert Banner (when on Follow-ups tab) */}
-      {pendingCount > 0 && activeTab === 'followups' && (
-        <div className="p-3 sm:p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 fade-in shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <DocumentTextIcon className="w-5 h-5 text-amber-600 shrink-0" />
-            <p className="text-xs sm:text-sm text-amber-900 font-medium truncate">
-              <span className="font-bold">{pendingCount}</span> technician visit {pendingCount === 1 ? 'submission is' : 'submissions are'} pending review
+            <p className="text-2xl font-bold text-gray-900">
+              {(todayData?.length || 0) + (overdueData?.length || 0)}
             </p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">All Dues & Overdues</p>
           </div>
-          <button
-            type="button"
-            onClick={() => setActiveTab('submissions')}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white text-xs font-semibold rounded-lg shrink-0 transition shadow-xs"
-          >
-            Review Pendings
-          </button>
         </div>
-      )}
 
-      {/* View Switcher Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2 overflow-x-auto">
-        <button
-          type="button"
-          onClick={() => setActiveTab('followups')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 flex items-center gap-2 ${activeTab === 'followups'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
+        <div
+          onClick={() => setStatus('pending')}
+          className={`card p-4 flex items-center gap-3 border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
+            status === 'pending' ? 'ring-2 ring-blue-500/20 bg-blue-50/40' : ''
+          }`}
         >
-          <BellIcon className="w-4 h-4" />
-          <span>Follow-ups</span>
-          {data?.pagination?.total ? (
-            <span
-              className={`px-1.5 py-0.5 text-xs rounded-full font-bold ${activeTab === 'followups' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
-                }`}
-            >
-              {data.pagination.total}
-            </span>
-          ) : null}
-        </button>
+          <BellIcon className="w-8 h-8 text-blue-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-gray-900">{todayData?.length || 0}</p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Today's Dues</p>
+          </div>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab('submissions')}
-          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all shrink-0 flex items-center gap-2 ${activeTab === 'submissions'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
-            }`}
+        <div
+          onClick={() => setStatus('overdue')}
+          className={`card p-4 flex items-center gap-3 border-l-4 border-red-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
+            status === 'overdue' ? 'ring-2 ring-red-500/20 bg-red-50/40' : ''
+          }`}
         >
-          <DocumentTextIcon className="w-4 h-4" />
-          <span>Pending Submissions</span>
-          {pendingCount > 0 && (
-            <span
-              className={`px-2 py-0.5 text-xs rounded-full font-bold ${activeTab === 'submissions' ? 'bg-white text-amber-700' : 'bg-amber-100 text-amber-800'
-                }`}
-            >
-              {pendingCount}
-            </span>
-          )}
-        </button>
+          <ExclamationTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-gray-900">{overdueData?.length || 0}</p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Overdue Dues</p>
+          </div>
+        </div>
       </div>
 
-      {/* TAB 1: PENDING SUBMISSIONS */}
-      {activeTab === 'submissions' && (
-        <div className="fade-in space-y-4">
-          {loadingVisits ? (
-            <PageSpinner />
-          ) : (
-            <div className="card">
-              {pendingSubmissions.length === 0 ? (
-                <EmptyState
-                  title="No pending submissions"
-                  description="All technician visit submissions have been reviewed and approved."
-                  icon={DocumentTextIcon}
-                />
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {pendingSubmissions.map((v) => (
-                    <div
-                      key={v.id}
-                      className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:bg-gray-50/60 transition"
+      {/* Filter Bar & List */}
+      <div className="fade-in space-y-4">
+        <FilterBar
+          onReset={() => {
+            setStatus('dues');
+          }}
+        >
+          <SelectFilter
+            label="Followup Status"
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'dues', label: 'All Dues & Overdues' },
+              { value: 'pending', label: 'Pending Dues Only' },
+              { value: 'overdue', label: 'Overdue Dues Only' },
+              { value: 'completed', label: 'Completed' },
+              { value: 'cancelled', label: 'Cancelled' },
+              { value: '', label: 'All Records' },
+            ]}
+          />
+        </FilterBar>
+
+        {isLoading ? (
+          <PageSpinner />
+        ) : (
+          <div className="card">
+            {data?.data?.length === 0 ? (
+              <EmptyState
+                title={status === 'dues' ? 'No pending dues or overdues' : 'No follow-ups found'}
+                description={
+                  status === 'dues'
+                    ? 'Great job! All follow-ups for ASMs and Technical Executives are up to date.'
+                    : 'There are no records matching your current filter.'
+                }
+                icon={BellIcon}
+                action={
+                  canCreate ? (
+                    <button
+                      onClick={() => setAddModal(true)}
+                      className="btn-primary btn-sm flex items-center gap-1.5"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <Link
-                            to={`/visits/${v.id}`}
-                            className="text-sm font-bold text-gray-900 hover:text-blue-600 truncate block"
-                          >
-                            {v.company_name}
-                          </Link>
-                          <Badge color="yellow">Pending Approval</Badge>
-                          <Badge color="blue">
-                            {MEETING_TYPES.find((t) => t.value === v.meeting_type)?.label || v.meeting_type}
-                          </Badge>
-                          {v.tank_number && (
-                            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">
-                              Tank {v.tank_number}
-                            </span>
-                          )}
-                        </div>
+                      <PlusIcon className="w-4 h-4" /> Create Followup
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <>
+                <div className="divide-y divide-gray-100">
+                  {data.data.map((f) => {
+                    const isDue = f.status === 'pending' || f.status === 'overdue';
+                    const roleDisplay =
+                      f.salesperson_role_name ||
+                      (f.salesperson_role === 'sales_manager'
+                        ? 'ASM'
+                        : f.salesperson_role === 'sales_executive'
+                        ? 'Technical Executive'
+                        : 'Staff');
 
-                        <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap mt-1">
-                          <span className="inline-flex items-center gap-1 font-semibold text-gray-800 bg-gray-100/90 px-2 py-0.5 rounded">
-                            <UserIcon className="w-3.5 h-3.5 text-gray-500" />
-                            {v.salesperson_name || 'Technical Executive'}
-                          </span>
-                          <span>•</span>
-                          <span>
-                            {v.visit_date}
-                            {v.visit_time ? ` at ${v.visit_time}` : ''}
-                          </span>
-                          {v.city && (
-                            <>
-                              <span>•</span>
-                              <span>{v.city}</span>
-                            </>
-                          )}
-                        </div>
-
-                        {v.visit_outcome && (
-                          <p className="text-xs text-gray-600 mt-2 line-clamp-2 bg-gray-50 p-2 rounded-lg border border-gray-100">
-                            <span className="font-semibold text-gray-700">Outcome:</span> {v.visit_outcome}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 justify-end">
-                        <Link
-                          to={`/visits/${v.id}`}
-                          className="btn-secondary btn-sm text-xs py-1.5 px-3 rounded-lg"
-                        >
-                          View Details
-                        </Link>
-                        {isManagerOrAdmin && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => setRejectModal(v.id)}
-                              className="btn-sm text-xs py-1.5 px-3 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 transition"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApproveVisit(v.id)}
-                              className="btn-sm text-xs py-1.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-medium flex items-center gap-1 shadow-xs transition"
-                            >
-                              <CheckIcon className="w-3.5 h-3.5" /> Approve
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 2: FOLLOW-UPS LIST */}
-      {activeTab === 'followups' && (
-        <div className="fade-in space-y-4">
-          <FilterBar
-            onReset={() => {
-              setStatus('');
-            }}
-          >
-            <SelectFilter
-              label="All Status"
-              value={status}
-              onChange={setStatus}
-              options={[
-                { value: 'pending', label: 'Pending' },
-                { value: 'completed', label: 'Completed' },
-                { value: 'overdue', label: 'Overdue' },
-                { value: 'cancelled', label: 'Cancelled' },
-              ]}
-            />
-          </FilterBar>
-
-          {isLoading ? (
-            <PageSpinner />
-          ) : (
-            <div className="card">
-              {data?.data?.length === 0 ? (
-                <EmptyState
-                  title="No follow-ups"
-                  icon={BellIcon}
-                  action={
-                    canCreate ? (
-                      <button
-                        onClick={() => setAddModal(true)}
-                        className="btn-primary btn-sm flex items-center gap-1.5"
+                    return (
+                      <div
+                        key={f.id}
+                        className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 transition hover:bg-gray-50/70 ${
+                          f.status === 'overdue' ? 'bg-red-50/20' : ''
+                        }`}
                       >
-                        <PlusIcon className="w-4 h-4" /> Create Followup
-                      </button>
-                    ) : null
-                  }
-                />
-              ) : (
-                <>
-                  <div className="divide-y divide-gray-50">
-                    {data.data.map((f) => (
-                      <div key={f.id} className="px-4 sm:px-6 py-4 flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <p className="text-sm font-semibold text-gray-900">{f.title}</p>
+                          {/* Badges & Title */}
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                            <p className="text-base font-bold text-gray-900">{f.title}</p>
                             <Badge
-                              color={f.priority === 'high' ? 'red' : f.priority === 'medium' ? 'blue' : 'gray'}
+                              color={
+                                f.priority === 'high' ? 'red' : f.priority === 'medium' ? 'blue' : 'gray'
+                              }
                             >
-                              {f.priority}
+                              {f.priority?.toUpperCase()} PRIORITY
                             </Badge>
+
                             <Badge
                               color={
                                 f.status === 'completed'
                                   ? 'green'
                                   : f.status === 'overdue'
-                                    ? 'red'
-                                    : f.status === 'cancelled'
-                                      ? 'gray'
-                                      : 'yellow'
+                                  ? 'red'
+                                  : f.status === 'cancelled'
+                                  ? 'gray'
+                                  : 'yellow'
                               }
                             >
-                              {f.status}
+                              {f.status === 'overdue' && f.days_overdue
+                                ? `${f.days_overdue}d Overdue`
+                                : f.status?.toUpperCase()}
                             </Badge>
                           </div>
-                          <p className="text-sm text-gray-600">{f.company_name}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {f.followup_date}
-                            {f.followup_time ? ` at ${f.followup_time}` : ''}
-                            {f.salesperson_name ? ` · Technician: ${f.salesperson_name}` : ''}
-                          </p>
+
+                          {/* Farmer & Location */}
+                          <div className="flex items-center gap-2 text-sm text-gray-700 font-medium flex-wrap">
+                            <span className="text-blue-700 font-semibold">{f.company_name}</span>
+                            {(f.client_village || f.client_city) && (
+                              <span className="text-xs text-gray-400">
+                                ({[f.client_village, f.client_city].filter(Boolean).join(', ')})
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Assigned Executive / ASM info with Role Badge & WhatsApp direct link */}
+                          <div className="flex items-center gap-2 text-xs text-gray-600 flex-wrap mt-2">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-blue-50 text-blue-800 border border-blue-200">
+                              <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+                              <span>{roleDisplay}:</span>
+                              <span className="text-gray-900 font-bold">{f.salesperson_name || 'Unassigned'}</span>
+                            </span>
+
+                            {f.salesperson_mobile && (
+                              <a
+                                href={`https://api.whatsapp.com/send?phone=91${f.salesperson_mobile.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition font-medium"
+                                title="Chat on WhatsApp"
+                              >
+                                <PhoneIcon className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>+91 {f.salesperson_mobile}</span>
+                                <ArrowTopRightOnSquareIcon className="w-3 h-3 text-emerald-500" />
+                              </a>
+                            )}
+
+                            <span className="inline-flex items-center gap-1 text-gray-500 font-medium">
+                              <CalendarDaysIcon className="w-3.5 h-3.5 text-gray-400" />
+                              <span>Due: {f.followup_date}</span>
+                              {f.followup_time ? <span>at {f.followup_time}</span> : null}
+                            </span>
+                          </div>
+
+                          {/* Remarks */}
+                          {f.remarks && (
+                            <p className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg border border-gray-100 line-clamp-2">
+                              <span className="font-semibold text-gray-700">Remarks:</span> {f.remarks}
+                            </p>
+                          )}
+
+                          {/* Completed Status Banner */}
+                          {f.status === 'completed' && (
+                            <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-1.5 flex-wrap">
+                              <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="font-bold">Completed</span>
+                              <span>by {f.completed_by_name || 'Admin'}</span>
+                              {f.completed_date && (
+                                <span className="text-emerald-700">
+                                  on {new Date(f.completed_date).toLocaleDateString()}
+                                </span>
+                              )}
+                              {f.completion_notes && (
+                                <span className="text-emerald-900 font-medium italic">
+                                  — "{f.completion_notes}"
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {f.status === 'pending' || f.status === 'overdue' ? (
-                          <button
-                            onClick={() => setCompleteModal(f.id)}
-                            className="btn-success btn-sm flex-shrink-0"
-                          >
-                            <CheckCircleIcon className="w-4 h-4" /> Complete
-                          </button>
-                        ) : null}
+
+                        {/* Complete Button for Dues & Overdues */}
+                        {isDue && (
+                          <div className="pt-2 sm:pt-0 shrink-0 flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                setCompleteTarget(f);
+                                setCompleteNotes('');
+                              }}
+                              className="btn-success btn-sm flex items-center gap-1.5 px-3.5 py-2 shadow-xs active:scale-95 transition"
+                            >
+                              <CheckCircleIcon className="w-4 h-4" />
+                              <span>Complete & Notify</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                  <Pagination meta={data.pagination} onPageChange={setPage} />
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                    );
+                  })}
+                </div>
+                <Pagination meta={data.pagination} onPageChange={setPage} />
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Creation Modal */}
       {canCreate && (
@@ -728,46 +540,95 @@ export default function Followups() {
         />
       )}
 
-      {/* Completion Modal */}
-      <Modal open={Boolean(completeModal)} onClose={() => setCompleteModal(null)} title="Mark as Completed">
-        <div className="space-y-4">
-          <div>
-            <label className="label">Completion Notes</label>
-            <textarea
-              value={completeNotes}
-              onChange={(e) => setCompleteNotes(e.target.value)}
-              className="input"
-              rows={3}
-              placeholder="What was discussed/achieved..."
-            />
-          </div>
-          <div className="flex gap-2.5 sm:gap-3 justify-end pt-2">
-            <button
-              onClick={() => setCompleteModal(null)}
-              className="btn-secondary flex-1 sm:flex-initial py-2 sm:py-1.5"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleComplete}
-              className="btn-success flex-1 sm:flex-initial py-2 sm:py-1.5"
-            >
-              Mark Complete
-            </button>
-          </div>
-        </div>
-      </Modal>
+      {/* Enhanced Completion Modal with WhatsApp & In-App Notification preview */}
+      <Modal
+        open={Boolean(completeTarget)}
+        onClose={() => setCompleteTarget(null)}
+        title="Complete Follow-up & Notify Executive"
+        size="md"
+      >
+        {completeTarget && (
+          <div className="space-y-4">
+            {/* Target Executive & Farmer Details */}
+            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1.5 text-blue-900">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 font-medium">Assigned Executive:</span>
+                <span className="font-bold text-gray-900">
+                  {completeTarget.salesperson_name} (
+                  {completeTarget.salesperson_role_name ||
+                    (completeTarget.salesperson_role === 'sales_manager' ? 'ASM' : 'Technical Executive')}
+                  )
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 font-medium">Mobile (WhatsApp):</span>
+                <span className="font-semibold text-emerald-700">
+                  {completeTarget.salesperson_mobile ? `+91 ${completeTarget.salesperson_mobile}` : 'No phone linked'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 font-medium">Farmer / Company:</span>
+                <span className="font-bold text-gray-900">{completeTarget.company_name}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500 font-medium">Due Date:</span>
+                <span className="font-semibold text-gray-800">
+                  {completeTarget.followup_date}
+                  {completeTarget.followup_time ? ` at ${completeTarget.followup_time}` : ''}
+                </span>
+              </div>
+            </div>
 
-      {/* Rejection Modal for Submissions */}
-      <RejectModal
-        visitId={rejectModal}
-        onClose={() => setRejectModal(null)}
-        onRejected={() => {
-          qc.invalidateQueries(['pending-submissions']);
-          qc.invalidateQueries(['visits']);
-          qc.invalidateQueries(['dashboard']);
-        }}
-      />
+            {/* Workflow Notice */}
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 space-y-1">
+              <p className="font-bold text-emerald-950 flex items-center gap-1">
+                <CheckCircleIcon className="w-4 h-4 text-emerald-700" />
+                Automated Actions on Completion:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 text-emerald-800">
+                <li>Database status updated to <strong>COMPLETED</strong> with timestamp & your admin ID.</li>
+                <li>Instant <strong>In-App Notification</strong> delivered to the executive's page bell.</li>
+                <li>Official <strong>WhatsApp message</strong> prepared and opened to send to the executive.</li>
+              </ul>
+            </div>
+
+            {/* Completion Notes */}
+            <div>
+              <label className="label">
+                Completion Notes / Summary <span className="text-gray-400 font-normal">(Optional)</span>
+              </label>
+              <textarea
+                value={completeNotes}
+                onChange={(e) => setCompleteNotes(e.target.value)}
+                className="input"
+                rows={3}
+                placeholder="Enter completion remarks, discussion summary, or recommendations..."
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 sm:gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setCompleteTarget(null)}
+                className="btn-secondary flex-1 sm:flex-initial py-2 sm:py-1.5"
+                disabled={completing}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleComplete}
+                disabled={completing}
+                className="btn-success flex-1 sm:flex-initial py-2 sm:py-1.5 flex items-center justify-center gap-1.5"
+              >
+                <CheckCircleIcon className="w-4 h-4" />
+                <span>{completing ? 'Completing...' : 'Complete & Notify'}</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

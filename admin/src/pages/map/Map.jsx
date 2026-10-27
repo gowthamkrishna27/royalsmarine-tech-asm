@@ -8,6 +8,7 @@ import {
   FunnelIcon,
   Square3Stack3DIcon,
   MapPinIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 
 const getL = () => (typeof window !== 'undefined' ? window.L : null);
@@ -38,8 +39,10 @@ export default function MapPage() {
 
   const osmLayerRef = useRef(null);
   const satelliteLayerRef = useRef(null);
+  const activeRangeLayersRef = useRef([]);
 
   const [search, setSearch] = useState('');
+  const [selectedDate, setSelectedDate] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [mapMode, setMapMode] = useState('satellite'); // Satellite view by default
   const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -99,8 +102,8 @@ export default function MapPage() {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['map-locations'],
-    queryFn: () => clientService.getMapLocations().then(res => res.data.data),
+    queryKey: ['map-locations', selectedDate],
+    queryFn: () => clientService.getMapLocations(selectedDate ? { date: selectedDate } : {}).then(res => res.data.data),
   });
 
   const clients = data?.clients || [];
@@ -148,6 +151,16 @@ export default function MapPage() {
           address: p.gps_address,
           latitude: lat,
           longitude: lng,
+          has_test: Boolean(p.has_test || p.latest_visit_id),
+          test_distance_meters: p.test_distance_meters != null ? p.test_distance_meters : null,
+          test_latitude: p.test_latitude ? parseFloat(p.test_latitude) : null,
+          test_longitude: p.test_longitude ? parseFloat(p.test_longitude) : null,
+          test_date: p.test_date,
+          test_time: p.test_time,
+          tested_by_name: p.tested_by_name,
+          tested_by_role: p.tested_by_role,
+          tested_by_role_name: p.tested_by_role_name || (p.tested_by_role === 'sales_manager' ? 'ASM' : 'Technical Executive'),
+          latest_visit_id: p.latest_visit_id,
         });
       }
     });
@@ -507,6 +520,10 @@ export default function MapPage() {
       clearTimeout(t2);
       clearTimeout(t3);
       if (resizeObserver) resizeObserver.disconnect();
+      activeRangeLayersRef.current.forEach(layer => {
+        try { map.removeLayer(layer); } catch {}
+      });
+      activeRangeLayersRef.current = [];
       map.remove();
       mapInstanceRef.current = null;
       markersLayerRef.current = null;
@@ -546,6 +563,10 @@ export default function MapPage() {
     const markersLayer = markersLayerRef.current;
     if (!isLeafletReady || !L || !map || !markersLayer) return;
 
+    activeRangeLayersRef.current.forEach(layer => {
+      try { map.removeLayer(layer); } catch {}
+    });
+    activeRangeLayersRef.current = [];
     markersLayer.clearLayers();
     markerMapRef.current = {};
     const bounds = L.latLngBounds([]);
@@ -608,6 +629,41 @@ export default function MapPage() {
             </p>
           ` : ''}
 
+          ${!isFarmer ? `
+            <div style="margin: 7px 0 5px 0; padding: 6px 8px; background: ${item.has_test ? '#f0fdf4' : '#f9fafb'}; border: 1px solid ${item.has_test ? '#bbf7d0' : '#e5e7eb'}; border-radius: 8px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <span style="font-size: 10px; font-weight: 700; color: ${item.has_test ? '#166534' : '#6b7280'}; text-transform: uppercase; letter-spacing: 0.03em;">
+                  Test Range
+                </span>
+                ${item.test_distance_meters != null ? `
+                  <span style="font-size: 11px; font-weight: 800; color: #15803d; background: #dcfce7; padding: 1.5px 6px; border-radius: 6px; border: 1px solid #86efac;">
+                    ${item.test_distance_meters} m from tank
+                  </span>
+                ` : `
+                  <span style="font-size: 10px; font-weight: 600; color: #9ca3af;">
+                    No test logged
+                  </span>
+                `}
+              </div>
+
+              ${item.has_test ? `
+                <div style="font-size: 11px; color: #374151; margin-top: 3px; line-height: 1.25;">
+                  Tested by <strong style="color: #111827;">${item.tested_by_name || 'Executive'}</strong>
+                  <span style="font-size: 10px; color: #6b7280;">(${item.tested_by_role_name || (item.tested_by_role === 'sales_manager' ? 'ASM' : 'Technical Executive')})</span>
+                </div>
+                ${item.test_date ? `
+                  <div style="font-size: 10px; color: #6b7280; margin-top: 2px;">
+                    Date: ${item.test_date}${item.test_time ? ` at ${item.test_time}` : ''}
+                  </div>
+                ` : ''}
+              ` : `
+                <div style="font-size: 10px; color: #6b7280; margin-top: 2px;">
+                  No field test recorded yet
+                </div>
+              `}
+            </div>
+          ` : ''}
+
           <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
             <a href="https://www.google.com/maps/dir/?api=1&destination=${item.latitude},${item.longitude}" 
                target="_blank" rel="noreferrer" 
@@ -629,6 +685,99 @@ export default function MapPage() {
 
       const marker = L.marker([item.latitude, item.longitude], { icon, title: item.name });
       marker.bindPopup(popup);
+
+      if (!isFarmer && item.has_test && item.test_distance_meters != null) {
+        // When filtered by date, show range circles directly on the map
+        if (selectedDate) {
+          const circleRadius = Math.max(Number(item.test_distance_meters), 6);
+          const rangeCircle = L.circle([item.latitude, item.longitude], {
+            radius: circleRadius,
+            color: '#059669',
+            fillColor: '#10b981',
+            fillOpacity: 0.22,
+            weight: 2,
+            dashArray: '5, 5',
+          }).addTo(map);
+          activeRangeLayersRef.current.push(rangeCircle);
+
+          if (item.test_latitude && item.test_longitude) {
+            const line = L.polyline([
+              [item.latitude, item.longitude],
+              [item.test_latitude, item.test_longitude],
+            ], {
+              color: '#047857',
+              weight: 2,
+              dashArray: '3, 4',
+            }).addTo(map);
+            activeRangeLayersRef.current.push(line);
+
+            const testDot = L.circleMarker([item.test_latitude, item.test_longitude], {
+              radius: 6,
+              color: '#065f46',
+              fillColor: '#34d399',
+              fillOpacity: 1,
+              weight: 2,
+            }).addTo(map);
+
+            testDot.bindTooltip(
+              `<b>Test Location:</b> ${item.test_distance_meters}m from tank<br/>${item.tested_by_name || 'Executive'} (${item.tested_by_role_name || 'ASM / Tech'})`,
+              { permanent: false, direction: 'top' }
+            );
+            activeRangeLayersRef.current.push(testDot);
+          }
+        }
+        marker.on('popupopen', () => {
+          activeRangeLayersRef.current.forEach(layer => {
+            try { map.removeLayer(layer); } catch {}
+          });
+          activeRangeLayersRef.current = [];
+
+          const circleRadius = Math.max(Number(item.test_distance_meters), 6);
+          const rangeCircle = L.circle([item.latitude, item.longitude], {
+            radius: circleRadius,
+            color: '#059669',
+            fillColor: '#10b981',
+            fillOpacity: 0.18,
+            weight: 2,
+            dashArray: '5, 5',
+          }).addTo(map);
+          activeRangeLayersRef.current.push(rangeCircle);
+
+          if (item.test_latitude && item.test_longitude) {
+            const line = L.polyline([
+              [item.latitude, item.longitude],
+              [item.test_latitude, item.test_longitude],
+            ], {
+              color: '#047857',
+              weight: 2,
+              dashArray: '3, 4',
+            }).addTo(map);
+            activeRangeLayersRef.current.push(line);
+
+            const testDot = L.circleMarker([item.test_latitude, item.test_longitude], {
+              radius: 6,
+              color: '#065f46',
+              fillColor: '#34d399',
+              fillOpacity: 1,
+              weight: 2,
+            }).addTo(map);
+
+            testDot.bindTooltip(
+              `<b>Test Location:</b> ${item.test_distance_meters}m from tank<br/>${item.tested_by_name || 'Executive'} (${item.tested_by_role_name || 'ASM / Tech'})`,
+              { permanent: false, direction: 'top' }
+            );
+            activeRangeLayersRef.current.push(testDot);
+          }
+        });
+
+        marker.on('popupclose', () => {
+          activeRangeLayersRef.current.forEach(layer => {
+            try { map.removeLayer(layer); } catch {}
+          });
+          activeRangeLayersRef.current = [];
+        });
+      }
+
       marker.addTo(markersLayer);
       markerMapRef.current[item.id] = marker;
 
@@ -795,6 +944,30 @@ export default function MapPage() {
               )}
           </div>
 
+          {/* Date Filter Control */}
+          <div className={`h-10 px-2.5 flex-shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
+            selectedDate ? 'border-emerald-500 bg-emerald-50/90 text-emerald-800' : 'border-gray-200/90 text-gray-700 hover:bg-white'
+          }`}>
+            <CalendarDaysIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent border-none text-xs font-semibold text-gray-800 focus:outline-none focus:ring-0 cursor-pointer p-0 w-28 sm:w-32"
+              title="Select date to view tests submitted on that date"
+            />
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate('')}
+                className="text-gray-400 hover:text-red-600 p-0.5 ml-0.5"
+                title="Clear date filter"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {/* Collapsed Filter Dropdown */}
           <div className="relative" ref={filterDropdownRef}>
             <button
@@ -881,6 +1054,37 @@ export default function MapPage() {
             {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-5 h-5 text-gray-700" />}
           </button>
         </div>
+
+        {/* Date Filter Active Status Banner */}
+        {selectedDate && (
+          <div className="mt-2.5 flex items-center gap-2 pointer-events-auto">
+            <div className={`px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border animate-in fade-in slide-in-from-top-2 ${
+              filtered.filter((i) => i.type === 'pond').length > 0
+                ? 'bg-emerald-600/95 border-emerald-500 text-white'
+                : 'bg-amber-600/95 border-amber-500 text-white'
+            }`}>
+              <CalendarDaysIcon className="w-4 h-4 shrink-0" />
+              <span>
+                {filtered.filter((i) => i.type === 'pond').length > 0 ? (
+                  <>
+                    Tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>: <b>{filtered.filter((i) => i.type === 'pond').length}</b> {filtered.filter((i) => i.type === 'pond').length === 1 ? 'tank test' : 'tank tests'}
+                  </>
+                ) : (
+                  <>
+                    No tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
+                  </>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedDate('')}
+                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
