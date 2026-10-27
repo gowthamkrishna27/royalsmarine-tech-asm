@@ -11,6 +11,8 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
     indigo: 'bg-indigo-50 text-indigo-600',
     amber: 'bg-amber-50 text-amber-600',
     emerald: 'bg-emerald-50 text-emerald-600',
+    cyan: 'bg-cyan-50 text-cyan-600',
+    gray: 'bg-gray-100 text-gray-600',
   };
 
   const card = (

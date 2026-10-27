@@ -7,7 +7,7 @@ import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
 import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import EmptyState from '../../components/common/EmptyState';
-import { MapPinIcon, PlusIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import { MEETING_TYPES } from '../../constants';
 import { downloadBlob } from '../../hooks/useApi';
 import toast from 'react-hot-toast';
@@ -20,18 +20,30 @@ export default function Visits() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['visits', page, meetingType, fromDate, toDate],
-    queryFn: () => visitApi.list({ page, limit: 20, meeting_type: meetingType, from_date: fromDate, to_date: toDate }).then(r => r.data),
+    queryFn: () => visitApi.list({
+      page,
+      limit: 20,
+      meeting_type: meetingType,
+      from_date: fromDate,
+      to_date: toDate,
+    }).then(r => r.data),
   });
 
   const handleExport = async () => {
     try {
-      const res = await visitApi.export({ meeting_type: meetingType, from_date: fromDate, to_date: toDate });
+      const res = await visitApi.export({
+        meeting_type: meetingType,
+        from_date: fromDate,
+        to_date: toDate,
+      });
       downloadBlob(res.data, 'visits.xlsx');
-    } catch { toast.error('Export failed'); }
+    } catch {
+      toast.error('Export failed');
+    }
   };
 
   return (
-    <div>
+    <div className="space-y-6 fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Visit Reports</h1>
@@ -39,7 +51,6 @@ export default function Visits() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={handleExport} className="btn-secondary btn-sm"><ArrowDownTrayIcon className="w-4 h-4" /> Export</button>
-          <Link to="/visits/new" className="btn-primary btn-sm"><PlusIcon className="w-4 h-4" /> Add Visit</Link>
         </div>
       </div>
 
@@ -52,8 +63,7 @@ export default function Visits() {
       {isLoading ? <PageSpinner /> : (
         <div className="card">
           {data?.data?.length === 0 ? (
-            <EmptyState title="No visits found" icon={MapPinIcon}
-              action={<Link to="/visits/new" className="btn-primary btn-sm">Add Visit</Link>} />
+            <EmptyState title="No visits found" icon={MapPinIcon} />
           ) : (
             <>
               <div className="hidden sm:block table-container">

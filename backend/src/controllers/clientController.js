@@ -757,7 +757,134 @@ const getMapLocations = async (req, res) => {
   }
 };
 
+
+const listHarvestedTanks = async (req, res) => {
+  try {
+    const { search, district, culture_type } = req.query;
+
+    let scopingClause = '';
+    const replacements = [];
+
+    if (req.user.role === 'sales_executive') {
+      scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+      replacements.push(req.user.id, req.user.id, req.user.id);
+    } else if (req.user.role === 'sales_manager') {
+      scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
+    }
+
+    let filterClause = '';
+    if (search) {
+      filterClause += ` AND (
+        p.pond_name LIKE ? OR 
+        p.tank_number LIKE ? OR 
+        c.company_name LIKE ? OR 
+        c.contact_person LIKE ? OR 
+        c.mobile LIKE ? OR 
+        c.village LIKE ? OR 
+        c.district LIKE ?
+      )`;
+      const s = `%${search.trim()}%`;
+      replacements.push(s, s, s, s, s, s, s);
+    }
+
+    if (district) {
+      filterClause += ' AND c.district = ?';
+      replacements.push(district);
+    }
+
+    if (culture_type) {
+      filterClause += ' AND p.culture_type = ?';
+      replacements.push(culture_type);
+    }
+
+    const [tanks] = await sequelize.query(`
+      SELECT 
+        p.*,
+        COALESCE(p.area_acres, p.area) as area_acres,
+        c.id as client_id,
+        c.company_name,
+        c.contact_person,
+        c.mobile as farmer_phone,
+        c.village,
+        c.mandal,
+        c.district,
+        c.city,
+        c.state,
+        c.pincode,
+        c.address as farmer_address,
+        u.full_name as salesperson_name,
+        u.mobile as salesperson_phone
+      FROM ponds p
+      JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+      LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+        AND (
+          p.status = 'harvested'
+          OR p.status = 'inactive'
+          OR EXISTS (
+            SELECT 1 FROM visits v
+            WHERE (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+              AND v.deleted_at IS NULL
+              AND v.harvest_details IS NOT NULL
+              AND v.harvest_details != ''
+              AND v.harvest_details != '{}'
+              AND v.harvest_details != 'null'
+          )
+        )
+        ${scopingClause}
+        ${filterClause}
+      ORDER BY p.updated_at DESC
+    `, { replacements });
+
+    for (const tank of tanks) {
+      const [visits] = await sequelize.query(`
+        SELECT 
+          v.id, v.visit_date, v.visit_time, v.meeting_type, v.meeting_highlights, v.remarks,
+          v.water_quality, v.feeding_details, v.medication_details, v.harvest_details,
+          sp.full_name as salesperson_name, sp.mobile as salesperson_phone
+        FROM visits v
+        LEFT JOIN users sp ON v.salesperson_id = sp.id
+        WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+          AND v.deleted_at IS NULL
+        ORDER BY v.visit_date DESC, v.created_at DESC
+      `, {
+        replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+      });
+
+      const parsedVisits = visits.map(v => {
+        let wq = v.water_quality;
+        let fd = v.feeding_details;
+        let md = v.medication_details;
+        let hd = v.harvest_details;
+        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+        try { if (typeof md === 'string') md = JSON.parse(md); } catch(e){}
+        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+        return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
+      });
+
+      let latestHarvest = null;
+      for (const v of parsedVisits) {
+        if (v.harvest_details && (v.harvest_details.final_harvest || (Array.isArray(v.harvest_details.partial_harvests) && v.harvest_details.partial_harvests.length))) {
+          latestHarvest = v.harvest_details;
+          break;
+        }
+      }
+
+      tank.harvest_info = latestHarvest || null;
+      tank.visits_history = parsedVisits;
+    }
+
+    return sendSuccess(res, 'Harvested tanks fetched successfully', tanks);
+  } catch (err) {
+    console.error('Error fetching harvested tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
+  listHarvestedTanks,
   listClients,
   createClient,
   getClient,

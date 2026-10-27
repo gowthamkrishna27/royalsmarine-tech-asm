@@ -345,6 +345,7 @@ export default function ClientForm() {
               <select {...register('status')} className="input">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
+                <option value="forcely_closed">Forcely Closed</option>
               </select>
             </div>
 

@@ -7,7 +7,7 @@ const managerRoles = ['super_admin', 'admin', 'sales_manager'];
 
 router.get('/export', authenticate, exportVisits);
 router.get('/', authenticate, listVisits);
-router.post('/', authenticate, authorize('super_admin', 'admin', 'sales_manager', 'sales_executive'), createVisit);
+router.post('/', authenticate, authorize('sales_manager', 'sales_executive'), createVisit);
 router.get('/:id', authenticate, getVisit);
 router.put('/:id', authenticate, updateVisit);
 router.patch('/:id/approve', authenticate, authorize(...managerRoles), approveVisit);

@@ -13,6 +13,7 @@ export const clientService = {
   updatePond: (clientId, pondId, data) => api.put(`/clients/${clientId}/ponds/${pondId}`, data),
   deletePond: (clientId, pondId) => api.delete(`/clients/${clientId}/ponds/${pondId}`),
   getMapLocations: (params) => api.get('/clients/map-locations', { params }),
+  getHarvestedTanks: (params) => api.get('/clients/harvested-tanks', { params }),
 };
 
 export default clientService;

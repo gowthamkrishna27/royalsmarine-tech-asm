@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { dashboardApi, userApi, masterApi } from '../../services/api';
+import { dashboardApi, userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import StatCard from '../../components/common/StatCard';
 import {
@@ -9,12 +9,17 @@ import {
   BuildingOfficeIcon,
   DocumentTextIcon,
   UsersIcon,
-  TagIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  CircleStackIcon,
+  ArchiveBoxArrowDownIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 
 function DashboardStatCards({ data }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Row 1: Farmers */}
       <StatCard
         label="Total Farmers"
         value={data.total_farmers ?? 0}
@@ -22,6 +27,45 @@ function DashboardStatCards({ data }) {
         color="blue"
         to="/clients"
       />
+      <StatCard
+        label="Active Farmers"
+        value={data.active_farmers ?? 0}
+        icon={CheckCircleIcon}
+        color="emerald"
+        to="/clients"
+      />
+      <StatCard
+        label="Inactive Farmers"
+        value={data.inactive_farmers ?? 0}
+        icon={XCircleIcon}
+        color="gray"
+        to="/clients"
+      />
+
+      {/* Row 2: Tanks */}
+      <StatCard
+        label="Total Tanks"
+        value={data.total_tanks ?? 0}
+        icon={CircleStackIcon}
+        color="indigo"
+        to="/clients"
+      />
+      <StatCard
+        label="Active Tanks"
+        value={data.active_tanks ?? 0}
+        icon={CheckCircleIcon}
+        color="emerald"
+        to="/clients"
+      />
+      <StatCard
+        label="Harvested Tanks"
+        value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
+        icon={ArchiveBoxArrowDownIcon}
+        color="amber"
+        to="/harvested-tanks"
+      />
+
+      {/* Row 3: Submissions & Operations */}
       <StatCard
         label="Total Submissions"
         value={data.total_submissions ?? 0}
@@ -35,6 +79,13 @@ function DashboardStatCards({ data }) {
         icon={ClockIcon}
         color="amber"
         to="/followups"
+      />
+      <StatCard
+        label="Forcely Closed Farmer"
+        value={data.forcely_closed_farmers ?? 0}
+        icon={NoSymbolIcon}
+        color="amber"
+        to="/clients?status=forcely_closed"
       />
     </div>
   );
@@ -111,16 +162,10 @@ function ManagerDashboard({ data }) {
 }
 
 function ManagementDashboard({ data }) {
-  // Query users and brands to integrate admin features directly into minimal stat cards
+  // Query users to integrate admin features directly into minimal stat cards
   const { data: users } = useQuery({
     queryKey: ['admin-users-list'],
     queryFn: () => userApi.list({}).then((r) => r.data.data),
-    staleTime: 60000,
-  });
-
-  const { data: brands } = useQuery({
-    queryKey: ['admin-brands-list'],
-    queryFn: () => masterApi.brands({}).then((r) => r.data.data),
     staleTime: 60000,
   });
 
@@ -130,7 +175,8 @@ function ManagementDashboard({ data }) {
   return (
     <div className="fade-in space-y-6">
       {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Row 1: Farmers */}
         <StatCard
           label="Total Farmers"
           value={data.total_farmers ?? 0}
@@ -138,6 +184,45 @@ function ManagementDashboard({ data }) {
           color="blue"
           to="/clients"
         />
+        <StatCard
+          label="Active Farmers"
+          value={data.active_farmers ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+        />
+        <StatCard
+          label="Inactive Farmers"
+          value={data.inactive_farmers ?? 0}
+          icon={XCircleIcon}
+          color="gray"
+          to="/clients"
+        />
+
+        {/* Row 2: Tanks */}
+        <StatCard
+          label="Total Tanks"
+          value={data.total_tanks ?? 0}
+          icon={CircleStackIcon}
+          color="indigo"
+          to="/clients"
+        />
+        <StatCard
+          label="Active Tanks"
+          value={data.active_tanks ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+        />
+        <StatCard
+        label="Harvested Tanks"
+        value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
+        icon={ArchiveBoxArrowDownIcon}
+        color="amber"
+        to="/harvested-tanks"
+      />
+
+        {/* Row 3: Submissions & Operations */}
         <StatCard
           label="Total Submissions"
           value={data.total_submissions ?? 0}
@@ -159,6 +244,8 @@ function ManagementDashboard({ data }) {
           color="indigo"
           to="/users"
         />
+
+        {/* Row 4: Management & Leadership */}
         <StatCard
           label="Area Managers"
           value={areaManagers.length}
@@ -167,11 +254,11 @@ function ManagementDashboard({ data }) {
           to="/users"
         />
         <StatCard
-          label="Brands"
-          value={brands?.length ?? 0}
-          icon={TagIcon}
-          color="blue"
-          to="/brands"
+          label="Forcely Closed Farmer"
+          value={data.forcely_closed_farmers ?? 0}
+          icon={NoSymbolIcon}
+          color="amber"
+          to="/clients?status=forcely_closed"
         />
       </div>
 

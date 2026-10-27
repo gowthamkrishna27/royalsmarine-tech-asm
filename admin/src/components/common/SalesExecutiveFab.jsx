@@ -12,12 +12,6 @@ import {
 
 const actions = [
   {
-    label: 'Log Visit',
-    to: '/visits/new',
-    icon: MapPinIcon,
-    color: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-  },
-  {
     label: 'New Farmer',
     to: '/clients/new',
     icon: BuildingOfficeIcon,

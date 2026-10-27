@@ -3,8 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
-  ChartBarIcon, DocumentTextIcon, ShoppingCartIcon, CloudArrowUpIcon,
-  TagIcon, CubeIcon, Cog6ToothIcon, XMarkIcon, MapIcon, ShieldCheckIcon,
+  ChartBarIcon, Cog6ToothIcon, MapIcon,
 } from '@heroicons/react/24/outline';
 
 const navItems = [

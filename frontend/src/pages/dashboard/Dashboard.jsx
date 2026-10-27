@@ -9,11 +9,17 @@ import {
   BuildingOfficeIcon,
   DocumentTextIcon,
   UsersIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  CircleStackIcon,
+  ArchiveBoxArrowDownIcon,
+  NoSymbolIcon,
 } from '@heroicons/react/24/outline';
 
 function DashboardStatCards({ data }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Row 1: Farmers */}
       <StatCard
         label="Total Farmers"
         value={data.total_farmers ?? 0}
@@ -21,6 +27,45 @@ function DashboardStatCards({ data }) {
         color="blue"
         to="/clients"
       />
+      <StatCard
+        label="Active Farmers"
+        value={data.active_farmers ?? 0}
+        icon={CheckCircleIcon}
+        color="emerald"
+        to="/clients"
+      />
+      <StatCard
+        label="Inactive Farmers"
+        value={data.inactive_farmers ?? 0}
+        icon={XCircleIcon}
+        color="gray"
+        to="/clients"
+      />
+
+      {/* Row 2: Tanks */}
+      <StatCard
+        label="Total Tanks"
+        value={data.total_tanks ?? 0}
+        icon={CircleStackIcon}
+        color="indigo"
+        to="/clients"
+      />
+      <StatCard
+        label="Active Tanks"
+        value={data.active_tanks ?? 0}
+        icon={CheckCircleIcon}
+        color="emerald"
+        to="/clients"
+      />
+      <StatCard
+        label="Harvested Tanks"
+        value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
+        icon={ArchiveBoxArrowDownIcon}
+        color="amber"
+        to="/harvested-tanks"
+      />
+
+      {/* Row 3: Submissions & Operations */}
       <StatCard
         label="Total Submissions"
         value={data.total_submissions ?? 0}
@@ -34,6 +79,13 @@ function DashboardStatCards({ data }) {
         icon={ClockIcon}
         color="amber"
         to="/followups"
+      />
+      <StatCard
+        label="Forcely Closed Farmer"
+        value={data.forcely_closed_farmers ?? 0}
+        icon={NoSymbolIcon}
+        color="amber"
+        to="/clients?status=forcely_closed"
       />
     </div>
   );
@@ -121,8 +173,9 @@ function ManagementDashboard({ data }) {
 
   return (
     <div className="fade-in space-y-6">
-      {/* Minimal Stat Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Row 1: Farmers */}
         <StatCard
           label="Total Farmers"
           value={data.total_farmers ?? 0}
@@ -130,6 +183,45 @@ function ManagementDashboard({ data }) {
           color="blue"
           to="/clients"
         />
+        <StatCard
+          label="Active Farmers"
+          value={data.active_farmers ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+        />
+        <StatCard
+          label="Inactive Farmers"
+          value={data.inactive_farmers ?? 0}
+          icon={XCircleIcon}
+          color="gray"
+          to="/clients"
+        />
+
+        {/* Row 2: Tanks */}
+        <StatCard
+          label="Total Tanks"
+          value={data.total_tanks ?? 0}
+          icon={CircleStackIcon}
+          color="indigo"
+          to="/clients"
+        />
+        <StatCard
+          label="Active Tanks"
+          value={data.active_tanks ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+        />
+        <StatCard
+        label="Harvested Tanks"
+        value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
+        icon={ArchiveBoxArrowDownIcon}
+        color="amber"
+        to="/harvested-tanks"
+      />
+
+        {/* Row 3: Submissions & Operations */}
         <StatCard
           label="Total Submissions"
           value={data.total_submissions ?? 0}
@@ -151,12 +243,21 @@ function ManagementDashboard({ data }) {
           color="indigo"
           to="/users"
         />
+
+        {/* Row 4: Management & Leadership */}
         <StatCard
           label="Area Managers"
           value={areaManagers.length}
           icon={UsersIcon}
           color="purple"
           to="/users"
+        />
+        <StatCard
+          label="Forcely Closed Farmer"
+          value={data.forcely_closed_farmers ?? 0}
+          icon={NoSymbolIcon}
+          color="amber"
+          to="/clients?status=forcely_closed"
         />
       </div>
 

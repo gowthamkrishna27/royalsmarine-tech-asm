@@ -73,6 +73,9 @@ const listVisits = async (req, res) => {
 };
 
 const createVisit = async (req, res) => {
+  if (['super_admin', 'admin', 'management', 'backend_ops'].includes(req.user.role)) {
+    return sendError(res, 'Admins cannot create or log visits. Field visits can only be conducted by technical executives or ASMs.', 403);
+  }
   const {
     visit_date, visit_time, client_id, latitude, longitude, gps_address,
     gps_captured_at, gps_denied_reason, person_met, designation_met,
@@ -217,6 +220,11 @@ const updateVisit = async (req, res) => {
     if (!visits[0]) return sendError(res, 'Visit not found', 404);
 
     const visit = visits[0];
+    if (['super_admin', 'admin', 'management'].includes(req.user.role)) {
+      if (visit.salesperson_id !== req.user.id) {
+        return sendError(res, 'Admins cannot edit visits submitted by technical executives or ASMs. View only.', 403);
+      }
+    }
     if (req.user.role === 'sales_executive') {
       if (visit.salesperson_id !== req.user.id) return sendError(res, 'Access denied: not your visit', 403);
     }

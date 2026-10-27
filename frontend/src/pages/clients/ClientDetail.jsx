@@ -170,7 +170,7 @@ export default function ClientDetail() {
                           </span>
                         )}
                       </div>
-                      <Badge color={p.status === 'active' ? 'green' : 'gray'}>
+                      <Badge color={p.status === 'active' ? 'green' : (p.status === 'harvested' ? 'yellow' : 'gray')}>
                         {p.status || 'Active'}
                       </Badge>
                     </div>

@@ -16,12 +16,13 @@ import Clients from './pages/clients/Clients';
 import ClientDetail from './pages/clients/ClientDetail';
 import ClientForm from './pages/clients/ClientForm';
 import Visits from './pages/visits/Visits';
-import VisitForm from './pages/visits/VisitForm';
+import VisitDetail from './pages/visits/VisitDetail';
 import Followups from './pages/followups/Followups';
 import Users from './pages/users/Users';
 import Brands from './pages/brands/Brands';
 import BillingImport from './pages/billing/BillingImport';
 import Reports from './pages/reports/Reports';
+import HarvestedTanks from './pages/tanks/HarvestedTanks';
 import ProfilePage from './pages/profile/Profile';
 
 const MapPage = lazy(() => import('./pages/map/Map'));
@@ -78,13 +79,15 @@ function AppRouter() {
         <Route path="clients/:id/edit" element={<ClientForm />} />
 
         <Route path="visits" element={<Visits />} />
-        <Route path="visits/new" element={<VisitForm />} />
-        <Route path="visits/:id" element={<VisitForm />} />
+        <Route path="visits/new" element={<Navigate to="/visits" replace />} />
+        <Route path="visits/:id" element={<VisitDetail />} />
+        <Route path="visits/:id/edit" element={<Navigate to="/visits/:id" replace />} />
 
         <Route path="followups" element={<Followups />} />
 
         <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
         <Route path="reports" element={<Reports />} />
+        <Route path="harvested-tanks" element={<HarvestedTanks />} />
         <Route path="brands" element={<Brands />} />
         <Route path="billing" element={<BillingImport />} />
 

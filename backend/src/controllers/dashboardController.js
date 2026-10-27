@@ -2,8 +2,33 @@ const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const getSalesExecutiveDashboard = async (userId) => {
-  const [farmersCount] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM clients WHERE (assigned_salesperson_id=? OR created_by=?) AND deleted_at IS NULL",
+  const [farmerStats] = await sequelize.query(
+    `SELECT 
+      COUNT(*) as total_farmers,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_farmers,
+      COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_farmers,
+      COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers
+    FROM clients 
+    WHERE (assigned_salesperson_id=? OR created_by=?) AND deleted_at IS NULL`,
+    { replacements: [userId, userId] }
+  );
+  const [tankStats] = await sequelize.query(
+    `SELECT 
+      COUNT(*) as total_tanks,
+      COUNT(CASE WHEN p.status = 'active' THEN 1 END) as active_tanks,
+      COUNT(CASE WHEN p.status = 'harvested' OR p.status = 'inactive' OR EXISTS (
+        SELECT 1 FROM visits v 
+        WHERE v.deleted_at IS NULL 
+          AND (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+          AND v.harvest_details IS NOT NULL 
+          AND v.harvest_details != '' 
+          AND v.harvest_details != '{}'
+          AND v.harvest_details != 'null'
+      ) THEN 1 END) as harvested_tanks,
+      COUNT(CASE WHEN p.status != 'active' OR p.status IS NULL THEN 1 END) as inactive_tanks
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    WHERE (c.assigned_salesperson_id=? OR c.created_by=?) AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
     { replacements: [userId, userId] }
   );
   const [submissionsCount] = await sequelize.query(
@@ -45,8 +70,15 @@ const getSalesExecutiveDashboard = async (userId) => {
   );
 
   return {
-    total_farmers: farmersCount[0]?.count || 0,
-    total_clients: farmersCount[0]?.count || 0,
+    total_farmers: Number(farmerStats[0]?.total_farmers || 0),
+    active_farmers: Number(farmerStats[0]?.active_farmers || 0),
+    inactive_farmers: Number(farmerStats[0]?.inactive_farmers || 0),
+    forcely_closed_farmers: Number(farmerStats[0]?.forcely_closed_farmers || 0),
+    total_tanks: Number(tankStats[0]?.total_tanks || 0),
+    active_tanks: Number(tankStats[0]?.active_tanks || 0),
+    harvested_tanks: Number(tankStats[0]?.harvested_tanks || 0),
+    inactive_tanks: Number(tankStats[0]?.inactive_tanks || 0),
+    total_clients: Number(farmerStats[0]?.total_farmers || 0),
     total_submissions: submissionsCount[0]?.count || 0,
     due_followups: dueFollowups[0]?.count || 0,
     today_followups: todayFollowups[0]?.count || 0,
@@ -58,8 +90,33 @@ const getSalesExecutiveDashboard = async (userId) => {
 };
 
 const getSalesManagerDashboard = async (userId) => {
-  const [farmersCount] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM clients WHERE (assigned_manager_id=? OR assigned_salesperson_id=? OR created_by=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) OR created_by IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL",
+  const [farmerStats] = await sequelize.query(
+    `SELECT 
+      COUNT(*) as total_farmers,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_farmers,
+      COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_farmers,
+      COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers
+    FROM clients 
+    WHERE (assigned_manager_id=? OR assigned_salesperson_id=? OR created_by=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) OR created_by IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL`,
+    { replacements: [userId, userId, userId, userId, userId] }
+  );
+  const [tankStats] = await sequelize.query(
+    `SELECT 
+      COUNT(*) as total_tanks,
+      COUNT(CASE WHEN p.status = 'active' THEN 1 END) as active_tanks,
+      COUNT(CASE WHEN p.status = 'harvested' OR p.status = 'inactive' OR EXISTS (
+        SELECT 1 FROM visits v 
+        WHERE v.deleted_at IS NULL 
+          AND (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+          AND v.harvest_details IS NOT NULL 
+          AND v.harvest_details != '' 
+          AND v.harvest_details != '{}'
+          AND v.harvest_details != 'null'
+      ) THEN 1 END) as harvested_tanks,
+      COUNT(CASE WHEN p.status != 'active' OR p.status IS NULL THEN 1 END) as inactive_tanks
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    WHERE (c.assigned_manager_id=? OR c.assigned_salesperson_id=? OR c.created_by=? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) OR c.created_by IN (SELECT id FROM users WHERE manager_id=?)) AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
     { replacements: [userId, userId, userId, userId, userId] }
   );
   const [submissionsCount] = await sequelize.query(
@@ -99,8 +156,15 @@ const getSalesManagerDashboard = async (userId) => {
   );
 
   return {
-    total_farmers: farmersCount[0]?.count || 0,
-    total_clients: farmersCount[0]?.count || 0,
+    total_farmers: Number(farmerStats[0]?.total_farmers || 0),
+    active_farmers: Number(farmerStats[0]?.active_farmers || 0),
+    inactive_farmers: Number(farmerStats[0]?.inactive_farmers || 0),
+    forcely_closed_farmers: Number(farmerStats[0]?.forcely_closed_farmers || 0),
+    total_tanks: Number(tankStats[0]?.total_tanks || 0),
+    active_tanks: Number(tankStats[0]?.active_tanks || 0),
+    harvested_tanks: Number(tankStats[0]?.harvested_tanks || 0),
+    inactive_tanks: Number(tankStats[0]?.inactive_tanks || 0),
+    total_clients: Number(farmerStats[0]?.total_farmers || 0),
     total_submissions: submissionsCount[0]?.count || 0,
     due_followups: dueFollowups[0]?.count || 0,
     team_visits_month: teamVisitsMonth[0]?.count || 0,
@@ -112,9 +176,32 @@ const getSalesManagerDashboard = async (userId) => {
 };
 
 const getManagementDashboard = async () => {
-  const [farmersCount] = await sequelize.query(
-    "SELECT COUNT(*) as total FROM clients WHERE deleted_at IS NULL"
-  );
+  const [farmerStats] = await sequelize.query(`
+    SELECT 
+      COUNT(*) as total_farmers,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_farmers,
+      COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_farmers,
+      COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers
+    FROM clients 
+    WHERE deleted_at IS NULL
+  `);
+  const [tankStats] = await sequelize.query(`
+    SELECT 
+      COUNT(*) as total_tanks,
+      COUNT(CASE WHEN status = 'active' THEN 1 END) as active_tanks,
+      COUNT(CASE WHEN status = 'harvested' OR status = 'inactive' OR EXISTS (
+        SELECT 1 FROM visits v 
+        WHERE v.deleted_at IS NULL 
+          AND (v.tank_id = ponds.id OR (v.client_id = ponds.client_id AND v.tank_number = ponds.tank_number))
+          AND v.harvest_details IS NOT NULL 
+          AND v.harvest_details != '' 
+          AND v.harvest_details != '{}'
+          AND v.harvest_details != 'null'
+      ) THEN 1 END) as harvested_tanks,
+      COUNT(CASE WHEN status != 'active' OR status IS NULL THEN 1 END) as inactive_tanks
+    FROM ponds 
+    WHERE deleted_at IS NULL
+  `);
   const [submissionsCount] = await sequelize.query(
     "SELECT COUNT(*) as total FROM visits WHERE deleted_at IS NULL"
   );
@@ -141,8 +228,15 @@ const getManagementDashboard = async () => {
   );
 
   return {
-    total_farmers: farmersCount[0]?.total || 0,
-    total_clients: farmersCount[0]?.total || 0,
+    total_farmers: Number(farmerStats[0]?.total_farmers || 0),
+    active_farmers: Number(farmerStats[0]?.active_farmers || 0),
+    inactive_farmers: Number(farmerStats[0]?.inactive_farmers || 0),
+    forcely_closed_farmers: Number(farmerStats[0]?.forcely_closed_farmers || 0),
+    total_tanks: Number(tankStats[0]?.total_tanks || 0),
+    active_tanks: Number(tankStats[0]?.active_tanks || 0),
+    harvested_tanks: Number(tankStats[0]?.harvested_tanks || 0),
+    inactive_tanks: Number(tankStats[0]?.inactive_tanks || 0),
+    total_clients: Number(farmerStats[0]?.total_farmers || 0),
     total_submissions: submissionsCount[0]?.total || 0,
     due_followups: dueFollowups[0]?.count || 0,
     month_visits: monthVisits[0]?.count || 0,

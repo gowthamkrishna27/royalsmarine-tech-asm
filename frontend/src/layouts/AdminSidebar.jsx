@@ -3,8 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
-  ChartBarIcon, TagIcon, Cog6ToothIcon, MapIcon, ShieldCheckIcon,
-  ClipboardDocumentListIcon,
+  ChartBarIcon, Cog6ToothIcon, MapIcon,
 } from '@heroicons/react/24/outline';
 
 const navSections = [
@@ -32,9 +31,7 @@ const navSections = [
   {
     label: 'Administration',
     items: [
-      { to: '/admin', label: 'Admin Portal', icon: ShieldCheckIcon },
       { to: '/users', label: 'Users & Team', icon: UsersIcon },
-      { to: '/billing', label: 'Billing', icon: ClipboardDocumentListIcon },
     ],
   },
   {

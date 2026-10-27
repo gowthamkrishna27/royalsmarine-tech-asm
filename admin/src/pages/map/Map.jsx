@@ -608,13 +608,6 @@ export default function MapPage() {
             </p>
           ` : ''}
 
-          <!-- 1-Tap Log Visit Button -->
-          <a href="/visits/new?${isFarmer ? `clientId=${item.rawId}` : `clientId=${item.clientId}&tank=${encodeURIComponent(item.name)}`}" 
-             style="display: flex; align-items: center; justify-content: center; gap: 4px; background: #2563eb; color: #ffffff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; text-decoration: none; margin-top: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-            <span>Log Visit</span>
-            <span style="font-size: 12px; font-weight: 700;">+</span>
-          </a>
-
           <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; gap: 12px;">
             <a href="https://www.google.com/maps/dir/?api=1&destination=${item.latitude},${item.longitude}" 
                target="_blank" rel="noreferrer" 

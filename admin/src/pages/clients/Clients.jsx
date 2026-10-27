@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -16,11 +16,12 @@ import toast from 'react-hot-toast';
 const CLIENT_TYPE_COLOR = { existing_client: 'green', new_prospect: 'blue', retailer: 'orange', corporate: 'purple', distributor: 'indigo', government: 'yellow', other: 'gray' };
 
 export default function Clients() {
+  const [searchParams] = useSearchParams();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [clientType, setClientType] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
   const [importModal, setImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -78,7 +79,7 @@ export default function Clients() {
 
       <FilterBar onSearch={setSearch} searchValue={search} onReset={() => { setSearch(''); setClientType(''); setStatus(''); }}>
         <SelectFilter label="All Types" value={clientType} onChange={setClientType} options={CLIENT_TYPES} />
-        <SelectFilter label="All Status" value={status} onChange={setStatus} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
+        <SelectFilter label="All Status" value={status} onChange={setStatus} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'forcely_closed', label: 'Forcely Closed' }]} />
       </FilterBar>
 
       {isLoading ? <PageSpinner /> : (
@@ -112,7 +113,7 @@ export default function Clients() {
                         <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>
                         <td className="text-gray-600">{c.number_of_tanks ? `${c.number_of_tanks}` : '—'}</td>
                         <td className="text-gray-600">{c.salesperson_name || '—'}</td>
-                        <td><Badge color={c.status === 'active' ? 'green' : 'red'}>{c.status}</Badge></td>
+                        <td><Badge color={c.status === 'active' ? 'green' : c.status === 'forcely_closed' ? 'amber' : 'red'}>{c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}</Badge></td>
                         <td><Link to={`/clients/${c.id}`} className="text-blue-600 text-sm hover:underline">View</Link></td>
                       </tr>
                     ))}
@@ -135,7 +136,7 @@ export default function Clients() {
                         </p>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <Badge color={c.status === 'active' ? 'green' : 'red'}>{c.status}</Badge>
+                        <Badge color={c.status === 'active' ? 'green' : c.status === 'forcely_closed' ? 'amber' : 'red'}>{c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}</Badge>
                       </div>
                     </div>
                     {c.salesperson_name && <p className="text-xs text-blue-600 mt-2">👤 {c.salesperson_name}</p>}
