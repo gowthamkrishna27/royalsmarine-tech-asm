@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
-  ChartBarIcon, Cog6ToothIcon, MapIcon,
+  ChartBarIcon, Cog6ToothIcon, MapIcon, ScaleIcon,
 } from '@heroicons/react/24/outline';
 
 const navSections = [
@@ -26,6 +26,7 @@ const navSections = [
     label: 'Analytics',
     items: [
       { to: '/reports', label: 'Reports & Analytics', icon: ChartBarIcon },
+      { to: '/fcr', label: 'FCR', icon: ScaleIcon },
     ],
   },
   {

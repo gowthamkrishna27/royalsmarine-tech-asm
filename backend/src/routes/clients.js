@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const {
   listClients, createClient, getClient, updateClient, getClientProfile, exportClients, importClients,
-  listPonds, createPond, updatePond, deletePond, getMapLocations, listHarvestedTanks,
+  listPonds, createPond, updatePond, deletePond, getMapLocations, listHarvestedTanks, listFcrTanks,
 } = require('../controllers/clientController');
 const { authenticate, authorize } = require('../middleware/auth');
 const multer = require('multer');
@@ -12,6 +12,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.get('/export', authenticate, exportClients);
 router.get('/map-locations', authenticate, getMapLocations);
 router.get('/harvested-tanks', authenticate, listHarvestedTanks);
+router.get('/fcr-tanks', authenticate, listFcrTanks);
 router.post('/import', authenticate, authorize('super_admin', 'admin', 'sales_manager'), upload.single('file'), importClients);
 router.get('/', authenticate, listClients);
 router.post('/', authenticate, authorize(...noViewer), createClient);

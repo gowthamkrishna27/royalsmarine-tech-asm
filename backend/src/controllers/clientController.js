@@ -883,7 +883,144 @@ const listHarvestedTanks = async (req, res) => {
   }
 };
 
+
+const listFcrTanks = async (req, res) => {
+  try {
+    const { doc, search, feed_type, status, match_mode } = req.query;
+
+    let scopingClause = '';
+    const replacements = [];
+
+    if (req.user.role === 'sales_executive') {
+      scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+      replacements.push(req.user.id, req.user.id, req.user.id);
+    } else if (req.user.role === 'sales_manager') {
+      scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
+    }
+
+    let filterClause = '';
+    if (search) {
+      filterClause += ` AND (
+        p.pond_name LIKE ? OR 
+        p.tank_number LIKE ? OR 
+        c.company_name LIKE ? OR 
+        c.contact_person LIKE ? OR 
+        c.mobile LIKE ? OR 
+        c.village LIKE ? OR 
+        c.district LIKE ?
+      )`;
+      const s = `%${search.trim()}%`;
+      replacements.push(s, s, s, s, s, s, s);
+    }
+
+    if (feed_type) {
+      filterClause += ' AND p.feed_type LIKE ?';
+      replacements.push(`%${feed_type}%`);
+    }
+
+    if (status) {
+      filterClause += ' AND p.status = ?';
+      replacements.push(status);
+    }
+
+    const [tanks] = await sequelize.query(`
+      SELECT 
+        p.*,
+        COALESCE(p.area_acres, p.area) as area_acres,
+        c.id as client_id,
+        c.company_name,
+        c.contact_person,
+        c.mobile as farmer_phone,
+        c.village,
+        c.mandal,
+        c.district,
+        c.city,
+        c.state,
+        c.pincode,
+        c.address as farmer_address,
+        u.full_name as salesperson_name,
+        u.mobile as salesperson_phone,
+        CASE 
+          WHEN p.seed_date IS NOT NULL THEN GREATEST(0, DATEDIFF(CURDATE(), p.seed_date))
+          ELSE COALESCE(p.doc, 0)
+        END as current_doc
+      FROM ponds p
+      JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+      LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+        ${scopingClause}
+        ${filterClause}
+      ORDER BY current_doc DESC, p.updated_at DESC
+    `, { replacements });
+
+    for (const tank of tanks) {
+      const [visits] = await sequelize.query(`
+        SELECT 
+          v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+          v.water_quality, v.feeding_details, v.harvest_details,
+          sp.full_name as salesperson_name
+        FROM visits v
+        LEFT JOIN users sp ON v.salesperson_id = sp.id
+        WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+          AND v.deleted_at IS NULL
+        ORDER BY v.visit_date DESC, v.created_at DESC
+      `, {
+        replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+      });
+
+      const parsedVisits = visits.map(v => {
+        let wq = v.water_quality;
+        let fd = v.feeding_details;
+        let hd = v.harvest_details;
+        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+        return { ...v, water_quality: wq, feeding_details: fd, harvest_details: hd };
+      });
+
+      let latestFeeding = null;
+      let recordedDocs = [];
+      for (const v of parsedVisits) {
+        if (v.feeding_details) {
+          if (!latestFeeding) latestFeeding = v.feeding_details;
+          if (v.feeding_details.doc !== undefined && v.feeding_details.doc !== null) {
+            recordedDocs.push(parseInt(v.feeding_details.doc, 10));
+          }
+        }
+        if (v.water_quality && v.water_quality.doc !== undefined && v.water_quality.doc !== null) {
+          recordedDocs.push(parseInt(v.water_quality.doc, 10));
+        }
+      }
+
+      tank.latest_feeding = latestFeeding;
+      tank.recorded_docs = Array.from(new Set(recordedDocs));
+      tank.visits = parsedVisits;
+    }
+
+    let resultTanks = tanks;
+    if (doc !== undefined && doc !== '' && !isNaN(doc)) {
+      const targetDoc = parseInt(doc, 10);
+      resultTanks = tanks.filter(t => {
+        const cDoc = parseInt(t.current_doc, 10);
+        const pDoc = parseInt(t.doc, 10);
+        const hasVisitDoc = t.recorded_docs?.includes(targetDoc);
+        if (match_mode === 'range') {
+          return Math.abs(cDoc - targetDoc) <= 3 || Math.abs(pDoc - targetDoc) <= 3 || hasVisitDoc;
+        }
+        return cDoc === targetDoc || pDoc === targetDoc || hasVisitDoc;
+      });
+    }
+
+    return sendSuccess(res, 'FCR tanks fetched successfully', resultTanks);
+  } catch (err) {
+    console.error('Error fetching FCR tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
+  listFcrTanks,
   listHarvestedTanks,
   listClients,
   createClient,

@@ -23,6 +23,7 @@ import Brands from './pages/brands/Brands';
 import BillingImport from './pages/billing/BillingImport';
 import Reports from './pages/reports/Reports';
 import HarvestedTanks from './pages/tanks/HarvestedTanks';
+import FcrTracker from './pages/fcr/FcrTracker';
 import ProfilePage from './pages/profile/Profile';
 
 const MapPage = lazy(() => import('./pages/map/Map'));
@@ -88,6 +89,7 @@ function AppRouter() {
         <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
         <Route path="reports" element={<Reports />} />
         <Route path="harvested-tanks" element={<HarvestedTanks />} />
+        <Route path="fcr" element={<FcrTracker />} />
         <Route path="brands" element={<Brands />} />
         <Route path="billing" element={<BillingImport />} />
 

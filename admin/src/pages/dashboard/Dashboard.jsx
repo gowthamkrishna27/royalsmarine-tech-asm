@@ -261,36 +261,6 @@ function ManagementDashboard({ data }) {
           to="/clients?status=forcely_closed"
         />
       </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <VisitLogsCard visits={data.recent_visits} showSalesperson={true} />
-        </div>
-
-        {/* Salesperson Performance */}
-        {data.salesperson_performance && data.salesperson_performance.length > 0 && (
-          <div className="card">
-            <div className="card-header flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Technical Executive Performance</h3>
-              <Link to="/reports" className="text-xs font-medium text-blue-600 hover:underline">
-                Full report
-              </Link>
-            </div>
-            <div className="p-4">
-              <div className="space-y-3">
-                {data.salesperson_performance.slice(0, 5).map((sp, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-sm py-1">
-                    <span className="font-medium text-gray-800 truncate">{sp.full_name}</span>
-                    <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded">
-                      {sp.visits} visits
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
