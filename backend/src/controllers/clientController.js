@@ -13,8 +13,16 @@ const buildClientWhere = (query, userId, role) => {
     where += ' AND (c.assigned_salesperson_id = ? OR c.created_by = ?)';
     replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
-    where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ?))';
-    replacements.push(userId, userId, userId, userId, userId);
+    if (query.scope === 'my_farmers') {
+      where += ' AND (c.assigned_salesperson_id = ? OR (c.created_by = ? AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = ?)))';
+      replacements.push(userId, userId, userId);
+    } else if (query.scope === 'tech_exec_farmers' || query.scope === 'farmers') {
+      where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?)';
+      replacements.push(userId);
+    } else {
+      where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(userId, userId, userId, userId, userId);
+    }
   }
 
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }

@@ -73,6 +73,10 @@ const getSalesExecutiveDashboard = async (userId) => {
     total_farmers: Number(farmerStats[0]?.total_farmers || 0),
     active_farmers: Number(farmerStats[0]?.active_farmers || 0),
     inactive_farmers: Number(farmerStats[0]?.inactive_farmers || 0),
+    my_farmers: Number(farmerStats[0]?.my_farmers || 0),
+    tech_exec_farmers: Number(farmerStats[0]?.tech_exec_farmers || 0),
+    my_farmers_list: myFarmersList || [],
+    tech_exec_farmers_list: techFarmersList || [],
     forcely_closed_farmers: Number(farmerStats[0]?.forcely_closed_farmers || 0),
     total_tanks: Number(tankStats[0]?.total_tanks || 0),
     active_tanks: Number(tankStats[0]?.active_tanks || 0),
@@ -95,10 +99,32 @@ const getSalesManagerDashboard = async (userId) => {
       COUNT(*) as total_farmers,
       COUNT(CASE WHEN status = 'active' THEN 1 END) as active_farmers,
       COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_farmers,
-      COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers
+      COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers,
+      COUNT(CASE WHEN (assigned_salesperson_id = :userId OR ((assigned_manager_id = :userId OR created_by = :userId) AND (assigned_salesperson_id IS NULL OR assigned_salesperson_id = :userId))) THEN 1 END) as my_farmers,
+      COUNT(CASE WHEN assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = :userId) THEN 1 END) as tech_exec_farmers
     FROM clients 
-    WHERE (assigned_manager_id=? OR assigned_salesperson_id=? OR created_by=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) OR created_by IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL`,
-    { replacements: [userId, userId, userId, userId, userId] }
+    WHERE (assigned_manager_id=:userId OR assigned_salesperson_id=:userId OR created_by=:userId OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=:userId) OR created_by IN (SELECT id FROM users WHERE manager_id=:userId)) AND deleted_at IS NULL`,
+    { replacements: { userId } }
+  );
+
+  const [myFarmersList] = await sequelize.query(
+    `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.city, c.village, c.farm_extent_acres, c.number_of_tanks, c.status
+     FROM clients c
+     WHERE (c.assigned_salesperson_id = :userId OR ((c.assigned_manager_id = :userId OR c.created_by = :userId) AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = :userId)))
+       AND c.deleted_at IS NULL
+     ORDER BY c.company_name ASC`,
+    { replacements: { userId } }
+  );
+
+  const [techFarmersList] = await sequelize.query(
+    `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.city, c.village, c.farm_extent_acres, c.number_of_tanks, c.status,
+            sp.full_name as executive_name, sp.mobile as executive_mobile
+     FROM clients c
+     JOIN users sp ON c.assigned_salesperson_id = sp.id
+     WHERE c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = :userId)
+       AND c.deleted_at IS NULL
+     ORDER BY c.company_name ASC`,
+    { replacements: { userId } }
   );
   const [tankStats] = await sequelize.query(
     `SELECT 
