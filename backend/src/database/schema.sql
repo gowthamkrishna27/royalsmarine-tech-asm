@@ -44,6 +44,8 @@ CREATE TABLE users (
   role_id INT NOT NULL,
   manager_id INT NULL,
   department VARCHAR(100),
+  region VARCHAR(150) NULL,
+  area VARCHAR(150) NULL,
   status ENUM('active','inactive') DEFAULT 'active',
   joining_date DATE,
   last_login TIMESTAMP NULL,

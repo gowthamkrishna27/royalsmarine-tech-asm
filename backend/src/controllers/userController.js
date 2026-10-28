@@ -16,8 +16,8 @@ const listUsers = async (req, res) => {
   if (status) { where += ' AND u.status = ?'; replacements.push(status); }
   if (manager_id) { where += ' AND u.manager_id = ?'; replacements.push(manager_id); }
   if (search) {
-    where += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ?)';
-    replacements.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    where += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ? OR u.region LIKE ? OR u.area LIKE ?)';
+    replacements.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   try {
@@ -27,11 +27,13 @@ const listUsers = async (req, res) => {
     );
 
     const [users] = await sequelize.query(
-      `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.status,
+      `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.region, u.area, u.status,
               u.joining_date, u.last_login, u.created_at,
-              u.manager_id,
+              u.manager_id, u.role_id,
               r.name as role, r.display_name as role_display,
-              m.full_name as manager_name
+              m.full_name as manager_name,
+              (SELECT GROUP_CONCAT(te.full_name SEPARATOR ', ') FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL) as assigned_executives_names,
+              (SELECT COUNT(*) FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL) as assigned_executives_count
        FROM users u
        JOIN roles r ON u.role_id = r.id
        LEFT JOIN users m ON u.manager_id = m.id
@@ -47,7 +49,7 @@ const listUsers = async (req, res) => {
 };
 
 const createUser = async (req, res) => {
-  const { full_name, email, mobile, role_id, manager_id, department, joining_date, password } = req.body;
+  const { full_name, email, mobile, role_id, manager_id, department, region, area, joining_date, password, executive_ids } = req.body;
 
   try {
     const [existing] = await sequelize.query(
@@ -60,9 +62,9 @@ const createUser = async (req, res) => {
     const uuid = uuidv4();
 
     await sequelize.query(
-      `INSERT INTO users (uuid, full_name, email, mobile, password_hash, role_id, manager_id, department, joining_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      { replacements: [uuid, full_name, email, mobile, hash, role_id, manager_id || null, department || null, joining_date || null, req.user.id] }
+      `INSERT INTO users (uuid, full_name, email, mobile, password_hash, role_id, manager_id, department, region, area, joining_date, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      { replacements: [uuid, full_name, email, mobile, hash, role_id, manager_id || null, department || null, region || null, area || null, joining_date || null, req.user.id] }
     );
 
     const [[user]] = await sequelize.query(
@@ -70,6 +72,14 @@ const createUser = async (req, res) => {
        JOIN roles r ON u.role_id = r.id WHERE u.uuid = ? LIMIT 1`,
       { replacements: [uuid] }
     );
+
+    // If technical executives are assigned to this ASM/manager
+    if (Array.isArray(executive_ids) && executive_ids.length > 0) {
+      await sequelize.query(
+        `UPDATE users SET manager_id = ? WHERE id IN (?) AND deleted_at IS NULL`,
+        { replacements: [user.id, executive_ids] }
+      );
+    }
 
     await log({ action: 'USER_CREATED', module: 'users', recordId: user.id, newValue: { email }, performedBy: req.user.id, req });
 
@@ -82,7 +92,7 @@ const createUser = async (req, res) => {
 const getUser = async (req, res) => {
   try {
     const [users] = await sequelize.query(
-      `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.status,
+      `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.region, u.area, u.status,
               u.joining_date, u.last_login, u.created_at, u.updated_at,
               r.id as role_id, r.name as role, r.display_name as role_display,
               m.id as manager_id, m.full_name as manager_name
@@ -93,26 +103,62 @@ const getUser = async (req, res) => {
       { replacements: [req.params.id] }
     );
     if (!users[0]) return sendError(res, 'User not found', 404);
-    return sendSuccess(res, 'User fetched', users[0]);
+
+    const user = users[0];
+
+    // Get assigned technical executives if any (e.g. for ASM)
+    const [assignedExecutives] = await sequelize.query(
+      `SELECT id, full_name, email, mobile, area, status FROM users WHERE manager_id = ? AND deleted_at IS NULL`,
+      { replacements: [user.id] }
+    );
+    user.assigned_executives = assignedExecutives;
+    user.executive_ids = assignedExecutives.map(e => e.id);
+
+    return sendSuccess(res, 'User fetched', user);
   } catch (err) {
     return sendError(res, err.message, 500);
   }
 };
 
 const updateUser = async (req, res) => {
-  const { full_name, mobile, role_id, manager_id, department, status, joining_date } = req.body;
+  const { full_name, mobile, role_id, manager_id, department, region, area, status, joining_date, executive_ids } = req.body;
   try {
     const [users] = await sequelize.query(
-      'SELECT id FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT id, role_id, status FROM users WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id] }
     );
     if (!users[0]) return sendError(res, 'User not found', 404);
 
+    const finalStatus = status || users[0].status || 'active';
+    const finalRoleId = role_id || users[0].role_id;
+
     await sequelize.query(
       `UPDATE users SET full_name = ?, mobile = ?, role_id = ?, manager_id = ?,
-       department = ?, status = ?, joining_date = ?, updated_at = NOW() WHERE id = ?`,
-      { replacements: [full_name, mobile, role_id, manager_id || null, department || null, status, joining_date || null, req.params.id] }
+       department = ?, region = ?, area = ?, status = ?, joining_date = ?, updated_at = NOW() WHERE id = ?`,
+      { replacements: [full_name, mobile, finalRoleId, manager_id || null, department || null, region || null, area || null, finalStatus, joining_date || null, req.params.id] }
     );
+
+    // If executive_ids was provided in the update (e.g. managing executives for an ASM)
+    if (Array.isArray(executive_ids)) {
+      if (executive_ids.length > 0) {
+        // Assign selected executives to this user
+        await sequelize.query(
+          `UPDATE users SET manager_id = ? WHERE id IN (?) AND deleted_at IS NULL`,
+          { replacements: [req.params.id, executive_ids] }
+        );
+        // Unassign executives who were previously assigned to this user but no longer selected
+        await sequelize.query(
+          `UPDATE users SET manager_id = NULL WHERE manager_id = ? AND id NOT IN (?) AND deleted_at IS NULL`,
+          { replacements: [req.params.id, executive_ids] }
+        );
+      } else {
+        // Clear all executives currently assigned to this user
+        await sequelize.query(
+          `UPDATE users SET manager_id = NULL WHERE manager_id = ? AND deleted_at IS NULL`,
+          { replacements: [req.params.id] }
+        );
+      }
+    }
 
     await log({ action: 'USER_UPDATED', module: 'users', recordId: req.params.id, performedBy: req.user.id, req });
     return sendSuccess(res, 'User updated successfully');

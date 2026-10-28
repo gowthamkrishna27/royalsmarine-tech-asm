@@ -69,14 +69,22 @@ const getSalesExecutiveDashboard = async (userId) => {
     { replacements: [userId] }
   );
 
+  const [myFarmersList] = await sequelize.query(
+    `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.city, c.village, c.farm_extent_acres, c.number_of_tanks, c.status
+     FROM clients c
+     WHERE (c.assigned_salesperson_id = ? OR c.created_by = ?) AND c.deleted_at IS NULL
+     ORDER BY c.company_name ASC`,
+    { replacements: [userId, userId] }
+  );
+
   return {
     total_farmers: Number(farmerStats[0]?.total_farmers || 0),
     active_farmers: Number(farmerStats[0]?.active_farmers || 0),
     inactive_farmers: Number(farmerStats[0]?.inactive_farmers || 0),
-    my_farmers: Number(farmerStats[0]?.my_farmers || 0),
-    tech_exec_farmers: Number(farmerStats[0]?.tech_exec_farmers || 0),
+    my_farmers: Number(farmerStats[0]?.total_farmers || 0),
+    tech_exec_farmers: 0,
     my_farmers_list: myFarmersList || [],
-    tech_exec_farmers_list: techFarmersList || [],
+    tech_exec_farmers_list: [],
     forcely_closed_farmers: Number(farmerStats[0]?.forcely_closed_farmers || 0),
     total_tanks: Number(tankStats[0]?.total_tanks || 0),
     active_tanks: Number(tankStats[0]?.active_tanks || 0),
@@ -181,6 +189,19 @@ const getSalesManagerDashboard = async (userId) => {
     { replacements: [userId, userId] }
   );
 
+  const [myTechsList] = await sequelize.query(
+    `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.area, u.department, u.status,
+            u.joining_date, u.last_login, u.created_at,
+            (SELECT COUNT(*) FROM clients c WHERE c.assigned_salesperson_id = u.id AND c.deleted_at IS NULL) as total_farmers,
+            (SELECT COUNT(*) FROM clients c WHERE c.assigned_salesperson_id = u.id AND c.status = 'active' AND c.deleted_at IS NULL) as active_farmers,
+            (SELECT COUNT(*) FROM visits v WHERE v.salesperson_id = u.id AND v.deleted_at IS NULL) as total_visits,
+            (SELECT COUNT(*) FROM visits v WHERE v.salesperson_id = u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL) as monthly_visits
+     FROM users u
+     WHERE u.manager_id = :userId AND u.deleted_at IS NULL
+     ORDER BY u.full_name ASC`,
+    { replacements: { userId } }
+  );
+
   return {
     total_farmers: Number(farmerStats[0]?.total_farmers || 0),
     active_farmers: Number(farmerStats[0]?.active_farmers || 0),
@@ -198,6 +219,12 @@ const getSalesManagerDashboard = async (userId) => {
     team_members: teamMembers[0]?.count || teamVisits.length,
     team_visits: teamVisits,
     recent_visits: recentVisits,
+    my_techs_count: myTechsList.length,
+    my_techs: myTechsList,
+    my_farmers: Number(farmerStats[0]?.my_farmers || 0),
+    tech_exec_farmers: Number(farmerStats[0]?.tech_exec_farmers || 0),
+    my_farmers_list: myFarmersList,
+    tech_exec_farmers_list: techFarmersList,
   };
 };
 
