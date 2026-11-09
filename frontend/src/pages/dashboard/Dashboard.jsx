@@ -26,7 +26,7 @@ import {
 
 function DashboardStatCards({ data }) {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       <StatCard
         label="My Farmers"
         value={data.total_farmers ?? 0}
@@ -50,14 +50,6 @@ function DashboardStatCards({ data }) {
         icon={DocumentTextIcon}
         color="emerald"
         to="/visits"
-      />
-      <StatCard
-        label="Due Follow-ups"
-        value={data.due_followups ?? 0}
-        sub={data.today_followups ? `${data.today_followups} today` : 'Pending'}
-        icon={ClockIcon}
-        color="amber"
-        to="/followups"
       />
     </div>
   );

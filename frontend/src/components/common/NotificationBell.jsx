@@ -67,7 +67,7 @@ export default function NotificationBell() {
             {/* Header */}
             <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-gray-900 text-sm">Notifications & Messages</span>
+                <span className="font-bold text-gray-900 text-sm">Notifications</span>
                 {unreadCount > 0 && (
                   <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                     {unreadCount} new
@@ -99,14 +99,12 @@ export default function NotificationBell() {
                   <div
                     key={notif.id}
                     onClick={() => handleNotificationClick(notif)}
-                    className={`p-3.5 cursor-pointer hover:bg-gray-50 transition-colors flex items-start gap-2.5 ${
-                      !notif.is_read ? 'bg-blue-50/40' : ''
-                    }`}
+                    className={`p-3.5 cursor-pointer hover:bg-gray-50 transition-colors flex items-start gap-2.5 ${!notif.is_read ? 'bg-blue-50/40' : ''
+                      }`}
                   >
                     <div
-                      className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                        !notif.is_read ? 'bg-blue-600' : 'bg-transparent'
-                      }`}
+                      className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!notif.is_read ? 'bg-blue-600' : 'bg-transparent'
+                        }`}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-gray-900 truncate">{notif.title}</p>

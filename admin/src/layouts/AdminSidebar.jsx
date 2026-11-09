@@ -56,7 +56,7 @@ export default function AdminSidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3">
+      <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {navSections.map((section, sIdx) => (
           <div key={sIdx} className={sIdx > 0 ? 'mt-5' : ''}>
             {section.label && (

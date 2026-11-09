@@ -122,6 +122,7 @@ CREATE TABLE ponds (
   water_type VARCHAR(100) NULL,
   latitude DECIMAL(10,8) NULL,
   longitude DECIMAL(11,8) NULL,
+  polygon_coordinates TEXT NULL,
   gps_address TEXT NULL,
   status ENUM('active','fallow','nursery','harvested','inactive') DEFAULT 'active',
   remarks TEXT NULL,

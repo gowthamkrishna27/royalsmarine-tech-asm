@@ -7,8 +7,10 @@ import { clientApi, userApi } from '../../services/api';
 import { CLIENT_TYPES, SOIL_TYPES, POND_STATUSES } from '../../constants';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
+import Modal from '../../components/common/Modal';
 import TankMapPickerModal from '../../components/common/TankMapPickerModal';
 import { MapPinIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon as MapPinSolidIcon, PlayIcon as PlaySolidIcon } from '@heroicons/react/24/solid';
 
 export default function ClientForm() {
   const { id } = useParams();
@@ -18,7 +20,8 @@ export default function ClientForm() {
   const isManagerOrAdmin = ['super_admin', 'admin', 'sales_manager'].includes(user?.role);
   const isEdit = Boolean(id);
   const [loading, setLoading] = useState(false);
-  const [mapTarget, setMapTarget] = useState(null); // null | { type: 'farm' } | { type: 'tank', index: number }
+  const [mapTarget, setMapTarget] = useState(null); // null | { type: 'farm' } | { type: 'tank', index: number, mode?: 'pin'|'walk' }
+  const [mappingChoiceTarget, setMappingChoiceTarget] = useState(null); // null | { type: 'tank', index: number }
 
   const { data: teamUsers } = useQuery({
     queryKey: ['team-users'],
@@ -544,22 +547,30 @@ export default function ClientForm() {
                     </div>
                   </div>
 
-                  {/* Tank Coordinates */}
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
+                  {/* Tank Coordinates & Mapping Action */}
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => setMapTarget({ type: 'tank', index: idx })}
-                      className="btn-secondary btn-sm py-1 text-xs flex items-center gap-1"
+                      onClick={() => setMappingChoiceTarget({ type: 'tank', index: idx })}
+                      className="btn-secondary btn-sm py-1.5 px-3 text-xs flex items-center gap-1.5 hover:border-blue-500 hover:text-blue-700 transition shadow-xs"
+                      title="Choose mapping method: Pin on Map or Walk around the tank"
                     >
-                      <MapPinIcon className="w-3.5 h-3.5 text-gray-400" />
-                      <span>{tank.latitude ? 'Location Set ✓' : 'Pin on Map'}</span>
+                      <MapPinIcon className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="font-semibold">{tank.latitude ? 'Location Set ✓' : 'Pin on Map'}</span>
                     </button>
 
-                    {tank.latitude && tank.longitude && (
-                      <span className="text-xs text-gray-500 font-mono">
-                        {Number(tank.latitude).toFixed(4)}, {Number(tank.longitude).toFixed(4)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {tank.latitude && tank.longitude && (
+                        <span className="text-xs text-gray-500 font-mono">
+                          {Number(tank.latitude).toFixed(4)}, {Number(tank.longitude).toFixed(4)}
+                        </span>
+                      )}
+                      {tank.area_acres && (
+                        <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          {Number(tank.area_acres).toFixed(2)} Ac
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))
@@ -591,6 +602,96 @@ export default function ClientForm() {
         </div>
       </form>
 
+      {/* Choice Modal: 1. Pin a tank | 2. Walk around the tank */}
+      {mappingChoiceTarget && (
+        <Modal
+          open={Boolean(mappingChoiceTarget)}
+          onClose={() => setMappingChoiceTarget(null)}
+          title={`Map Location: ${
+            tanks[mappingChoiceTarget.index]?.tank_number || `Tank ${mappingChoiceTarget.index + 1}`
+          }`}
+          size="sm"
+        >
+          <div className="space-y-3 py-1">
+            <p className="text-xs text-gray-600">
+              Choose how you want to set the location for{' '}
+              <strong className="text-gray-900">
+                {tanks[mappingChoiceTarget.index]?.tank_number || `Tank ${mappingChoiceTarget.index + 1}`}
+              </strong>
+              :
+            </p>
+
+            <div className="grid grid-cols-1 gap-2.5">
+              {/* Option 1: Pin a Tank */}
+              <button
+                type="button"
+                onClick={() => {
+                  const target = mappingChoiceTarget;
+                  setMappingChoiceTarget(null);
+                  setMapTarget({ ...target, mode: 'pin' });
+                }}
+                className="w-full p-3.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/50 transition text-left flex items-start gap-3 group focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <MapPinSolidIcon className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-gray-900 group-hover:text-blue-700">
+                      1. Pin a Tank
+                    </h4>
+                    <span className="text-[10px] bg-blue-100 text-blue-800 font-semibold px-2 py-0.5 rounded-full">
+                      Satellite Tap
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Click anywhere directly on the satellite map to pinpoint the tank location.
+                  </p>
+                </div>
+              </button>
+
+              {/* Option 2: Walk around the tank */}
+              <button
+                type="button"
+                onClick={() => {
+                  const target = mappingChoiceTarget;
+                  setMappingChoiceTarget(null);
+                  setMapTarget({ ...target, mode: 'walk' });
+                }}
+                className="w-full p-3.5 rounded-xl border border-gray-200 hover:border-emerald-500 hover:bg-emerald-50/50 transition text-left flex items-start gap-3 group focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-xs"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition">
+                  <PlaySolidIcon className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-gray-900 group-hover:text-emerald-700">
+                      2. Walk around the tank
+                    </h4>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-semibold px-2 py-0.5 rounded-full">
+                      Live GPS Walk
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    Walk around the tank perimeter with Start, Finish, Restart / Edit to track the route and auto-calculate acreage.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setMappingChoiceTarget(null)}
+                className="btn-secondary btn-sm px-4 py-1.5"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Map Picker Modal for Farm or Tank */}
       {mapTarget && (
         <TankMapPickerModal
@@ -601,6 +702,7 @@ export default function ClientForm() {
               ? 'Farm'
               : (tanks[mapTarget.index]?.tank_number || `Tank ${mapTarget.index + 1}`)
           }
+          initialMode={mapTarget.mode || 'pin'}
           initialCoords={
             mapTarget.type === 'farm'
               ? (lat && lng ? { latitude: lat, longitude: lng } : null)
@@ -624,7 +726,18 @@ export default function ClientForm() {
               const targetIdx = mapTarget.index;
               updateTankField(targetIdx, 'latitude', coords.latitude);
               updateTankField(targetIdx, 'longitude', coords.longitude);
-              toast.success(`Coordinates set for ${tanks[targetIdx]?.tank_number || 'Tank'}`);
+              if (coords.area_acres) {
+                updateTankField(targetIdx, 'tank_size', String(coords.area_acres));
+                updateTankField(targetIdx, 'area_acres', String(coords.area_acres));
+              }
+              if (coords.polygon_coordinates) {
+                updateTankField(targetIdx, 'polygon_coordinates', coords.polygon_coordinates);
+              }
+              toast.success(
+                `Tank mapped successfully${
+                  coords.area_acres ? ` (${coords.area_acres} Ac)` : ''
+                } for ${tanks[targetIdx]?.tank_number || 'Tank'}`
+              );
             }
           }}
         />

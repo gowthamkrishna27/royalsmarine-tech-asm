@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { clientApi, userApi } from '../../services/api';
+import CreateFollowupModal from './CreateFollowupModal';
 import {
   PlusIcon,
   MapPinIcon,
@@ -8,29 +11,62 @@ import {
   BellIcon,
   HomeIcon,
   MapIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
-
-const actions = [
-  {
-    label: 'Log Visit',
-    to: '/visits/new',
-    icon: MapPinIcon,
-    color: 'bg-emerald-600 hover:bg-emerald-700 text-white',
-  },
-  {
-    label: 'New Farmer',
-    to: '/clients/new',
-    icon: BuildingOfficeIcon,
-    color: 'bg-indigo-600 hover:bg-indigo-700 text-white',
-  },
-];
 
 export default function SalesExecutiveFab() {
   const [open, setOpen] = useState(false);
+  const [createFollowupOpen, setCreateFollowupOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const containerRef = useRef(null);
-  const { hasRole } = useAuth();
+  const qc = useQueryClient();
+  const { user: currentUser, hasRole } = useAuth();
+
+  const canAssignUsers = hasRole('super_admin', 'admin', 'sales_manager');
+  const canCreateFollowup = hasRole('super_admin', 'admin', 'sales_manager');
+
+  // Queries to power CreateFollowupModal when invoked from anywhere via FAB
+  const { data: clients } = useQuery({
+    queryKey: ['clients-list'],
+    queryFn: () => clientApi.list({ limit: 500 }).then((r) => r.data.data),
+    staleTime: 60000,
+  });
+
+  const { data: usersData } = useQuery({
+    queryKey: ['users-list-followup'],
+    queryFn: () => userApi.list({ limit: 200 }).then((r) => r.data.data),
+    enabled: canAssignUsers,
+    staleTime: 60000,
+  });
+
+  const actions = [
+    {
+      label: 'Log Visit',
+      to: '/visits/new',
+      icon: MapPinIcon,
+      color: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+    },
+    ...(canCreateFollowup
+      ? [
+          {
+            label: 'Create Followup',
+            onClick: () => {
+              setOpen(false);
+              setCreateFollowupOpen(true);
+            },
+            icon: CalendarDaysIcon,
+            color: 'bg-amber-600 hover:bg-amber-700 text-white',
+          },
+        ]
+      : []),
+    {
+      label: 'New Farmer',
+      to: '/clients/new',
+      icon: BuildingOfficeIcon,
+      color: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+    },
+  ];
 
   // Close when clicking outside
   useEffect(() => {
@@ -54,9 +90,13 @@ export default function SalesExecutiveFab() {
     setOpen(false);
   }, [location.pathname]);
 
-  const handleAction = (to) => {
-    setOpen(false);
-    navigate(to);
+  const handleAction = (act) => {
+    if (act.onClick) {
+      act.onClick();
+    } else if (act.to) {
+      setOpen(false);
+      navigate(act.to);
+    }
   };
 
   const navItems = [
@@ -125,8 +165,8 @@ export default function SalesExecutiveFab() {
                 const Icon = act.icon;
                 return (
                   <div
-                    key={act.to}
-                    onClick={() => handleAction(act.to)}
+                    key={act.label}
+                    onClick={() => handleAction(act)}
                     className="group flex items-center gap-3 cursor-pointer pointer-events-auto"
                   >
                     <span className="bg-white/95 backdrop-blur-sm text-gray-800 text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl shadow-lg border border-gray-200/90 group-hover:bg-white transition whitespace-nowrap">
@@ -162,6 +202,20 @@ export default function SalesExecutiveFab() {
           </button>
         </div>
       </div>
+
+      {/* Create Follow-up Modal */}
+      <CreateFollowupModal
+        open={createFollowupOpen}
+        onClose={() => setCreateFollowupOpen(false)}
+        clients={clients}
+        users={usersData}
+        currentUser={currentUser}
+        onCreate={() => {
+          qc.invalidateQueries(['followups']);
+          qc.invalidateQueries(['followups-today']);
+          qc.invalidateQueries(['followups-overdue']);
+        }}
+      />
     </>
   );
 }

@@ -149,12 +149,13 @@ const createClient = async (req, res) => {
         const stockQty = (p.stocking_quantity_lakhs !== undefined && p.stocking_quantity_lakhs !== '' && !isNaN(p.stocking_quantity_lakhs)) ? parseFloat(p.stocking_quantity_lakhs) : null;
         const latVal = (p.latitude !== undefined && p.latitude !== '' && !isNaN(p.latitude)) ? parseFloat(p.latitude) : null;
         const lngVal = (p.longitude !== undefined && p.longitude !== '' && !isNaN(p.longitude)) ? parseFloat(p.longitude) : null;
+        const polyCoords = p.polygon_coordinates ? (typeof p.polygon_coordinates === 'string' ? p.polygon_coordinates : JSON.stringify(p.polygon_coordinates)) : null;
 
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
            salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -166,7 +167,7 @@ const createClient = async (req, res) => {
               stockQty,
               p.feed_type || null,
               p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
-              latVal, lngVal, p.gps_address || null,
+              latVal, lngVal, polyCoords, p.gps_address || null,
               p.status || 'active', p.remarks || null, req.user.id
             ],
             transaction: t,
@@ -336,13 +337,15 @@ const updateClient = async (req, res) => {
         const latVal = (p.latitude !== undefined && p.latitude !== '' && !isNaN(p.latitude)) ? parseFloat(p.latitude) : null;
         const lngVal = (p.longitude !== undefined && p.longitude !== '' && !isNaN(p.longitude)) ? parseFloat(p.longitude) : null;
 
+        const polyCoords = p.polygon_coordinates ? (typeof p.polygon_coordinates === 'string' ? p.polygon_coordinates : JSON.stringify(p.polygon_coordinates)) : null;
+
         if (p.id) {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
              salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-             latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
+             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
               replacements: [
@@ -355,7 +358,7 @@ const updateClient = async (req, res) => {
                 stockQty,
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
-                latVal, lngVal, p.gps_address || null,
+                latVal, lngVal, polyCoords, p.gps_address || null,
                 p.status || 'active', p.remarks || null, p.id, req.params.id, req.params.id
               ],
               transaction: t,
@@ -366,8 +369,8 @@ const updateClient = async (req, res) => {
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
              salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -379,7 +382,7 @@ const updateClient = async (req, res) => {
                 stockQty,
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
-                latVal, lngVal, p.gps_address || null,
+                latVal, lngVal, polyCoords, p.gps_address || null,
                 p.status || 'active', p.remarks || null, req.user.id
               ],
               transaction: t,
@@ -616,12 +619,13 @@ const createPond = async (req, res) => {
     const stockQty = (stocking_quantity_lakhs !== undefined && stocking_quantity_lakhs !== '' && !isNaN(stocking_quantity_lakhs)) ? parseFloat(stocking_quantity_lakhs) : null;
     const latVal = (latitude !== undefined && latitude !== '' && !isNaN(latitude)) ? parseFloat(latitude) : null;
     const lngVal = (longitude !== undefined && longitude !== '' && !isNaN(longitude)) ? parseFloat(longitude) : null;
+    const polyCoords = req.body.polygon_coordinates ? (typeof req.body.polygon_coordinates === 'string' ? req.body.polygon_coordinates : JSON.stringify(req.body.polygon_coordinates)) : null;
 
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
        salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, water_source, latitude, longitude, gps_address, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -633,7 +637,7 @@ const createPond = async (req, res) => {
           stockQty,
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
-          latVal, lngVal, gps_address || null, status || 'active', remarks || null, req.user.id
+          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, req.user.id
         ]
       }
     );
