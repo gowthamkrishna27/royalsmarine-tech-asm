@@ -127,16 +127,21 @@ const createVisit = async (req, res) => {
 
     const visitId = typeof insertResult === 'number' ? insertResult : (insertResult?.insertId || insertResult);
 
-    // Auto-create follow-up only if admin and next_followup_date provided
+    // Auto-create follow-up only if admin set a due/overdue follow-up date
     if (next_followup_date && ['super_admin', 'admin'].includes(req.user.role)) {
-      await sequelize.query(
-        `INSERT INTO followups (uuid, title, client_id, visit_id, assigned_salesperson_id, followup_date, created_by)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        {
-          replacements: [uuidv4(), `Follow-up after ${meeting_type} visit`, client_id, visitId, req.user.id, next_followup_date, req.user.id],
-          transaction: t,
-        }
-      );
+      const followupDate = new Date(`${String(next_followup_date).slice(0, 10)}T00:00:00`);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (!Number.isNaN(followupDate.getTime()) && followupDate <= today) {
+        await sequelize.query(
+          `INSERT INTO followups (uuid, title, client_id, visit_id, assigned_salesperson_id, followup_date, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          {
+            replacements: [uuidv4(), `Follow-up after ${meeting_type} visit`, client_id, visitId, req.user.id, next_followup_date, req.user.id],
+            transaction: t,
+          }
+        );
+      }
     }
 
     await t.commit();

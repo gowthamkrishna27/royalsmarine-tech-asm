@@ -316,27 +316,28 @@ const updateClient = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const [existing] = await sequelize.query(
-      'SELECT id, assigned_salesperson_id, assigned_manager_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      'SELECT * FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
       { replacements: [req.params.id], transaction: t }
     );
     if (!existing[0]) {
       await t.rollback();
       return sendError(res, 'Client not found', 404);
     }
+    const cur = existing[0];
 
-    if (req.user.role === 'sales_executive' && existing[0].assigned_salesperson_id && existing[0].assigned_salesperson_id !== req.user.id && existing[0].created_by !== req.user.id) {
+    if (req.user.role === 'sales_executive' && cur.assigned_salesperson_id && cur.assigned_salesperson_id !== req.user.id && cur.created_by !== req.user.id) {
       await t.rollback();
       return sendError(res, 'Access denied: not your client', 403);
     }
 
-    // Preserve existing assignments if not explicitly passed
+    // Preserve existing values/assignments when not explicitly passed (supports status-only close)
     const salespersonId = (assigned_salesperson_id !== undefined && assigned_salesperson_id !== null && assigned_salesperson_id !== '')
       ? parseInt(assigned_salesperson_id, 10)
-      : existing[0].assigned_salesperson_id;
+      : cur.assigned_salesperson_id;
 
     let managerId = (assigned_manager_id !== undefined && assigned_manager_id !== null && assigned_manager_id !== '')
       ? parseInt(assigned_manager_id, 10)
-      : existing[0].assigned_manager_id;
+      : cur.assigned_manager_id;
 
     if (!managerId && salespersonId) {
       const [u] = await sequelize.query('SELECT manager_id FROM users WHERE id = ?', {
@@ -356,15 +357,31 @@ const updateClient = async (req, res) => {
        status=?, notes=?, updated_at=NOW() WHERE id = ? AND deleted_at IS NULL`,
       {
         replacements: [
-          company_name, contact_person || null, designation || null, mobile || null,
-          alternate_mobile || null, email || null, address || null, city || null,
-          state || null, pincode || null, latitude || null, longitude || null, gps_address || null,
-          area || null, village || null,
-          farm_extent_acres ? parseFloat(farm_extent_acres) : null,
-          number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0),
-          water_source || 'bore',
-          industry_type || null, client_type, salespersonId,
-          managerId, status || 'active', notes || null, req.params.id,
+          company_name !== undefined ? company_name : cur.company_name,
+          contact_person !== undefined ? (contact_person || null) : (cur.contact_person ?? null),
+          designation !== undefined ? (designation || null) : (cur.designation ?? null),
+          mobile !== undefined ? (mobile || null) : (cur.mobile ?? null),
+          alternate_mobile !== undefined ? (alternate_mobile || null) : (cur.alternate_mobile ?? null),
+          email !== undefined ? (email || null) : (cur.email ?? null),
+          address !== undefined ? (address || null) : (cur.address ?? null),
+          city !== undefined ? (city || null) : (cur.city ?? null),
+          state !== undefined ? (state || null) : (cur.state ?? null),
+          pincode !== undefined ? (pincode || null) : (cur.pincode ?? null),
+          latitude !== undefined ? (latitude || null) : (cur.latitude ?? null),
+          longitude !== undefined ? (longitude || null) : (cur.longitude ?? null),
+          gps_address !== undefined ? (gps_address || null) : (cur.gps_address ?? null),
+          area !== undefined ? (area || null) : (cur.area ?? null),
+          village !== undefined ? (village || null) : (cur.village ?? null),
+          farm_extent_acres !== undefined ? (farm_extent_acres ? parseFloat(farm_extent_acres) : null) : (cur.farm_extent_acres ?? null),
+          number_of_tanks !== undefined ? (number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0)) : (cur.number_of_tanks ?? 0),
+          water_source !== undefined ? (water_source || 'bore') : (cur.water_source || 'bore'),
+          industry_type !== undefined ? (industry_type || null) : (cur.industry_type ?? null),
+          client_type !== undefined ? client_type : cur.client_type,
+          salespersonId,
+          managerId,
+          status !== undefined ? (status || 'active') : (cur.status || 'active'),
+          notes !== undefined ? (notes || null) : (cur.notes ?? null),
+          req.params.id,
         ],
         transaction: t,
       }

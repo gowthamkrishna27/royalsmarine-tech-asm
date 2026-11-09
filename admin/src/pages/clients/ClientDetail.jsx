@@ -1,11 +1,12 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { clientApi, visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Badge from '../../components/common/Badge';
 import { CLIENT_TYPES } from '../../constants';
-import { PhoneIcon, EnvelopeIcon, MapPinIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { PhoneIcon, EnvelopeIcon, MapPinIcon, PencilIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
+import toast from 'react-hot-toast';
 
 const CLIENT_TYPE_COLOR = { existing_client: 'green', new_prospect: 'blue', retailer: 'orange', corporate: 'purple', distributor: 'indigo', government: 'yellow', other: 'gray' };
 
@@ -21,6 +22,7 @@ function InfoRow({ label, value }) {
 
 export default function ClientDetail() {
   const { id } = useParams();
+  const qc = useQueryClient();
   const { user } = useAuth();
   const isExec = user?.role === 'sales_executive';
 
@@ -32,6 +34,26 @@ export default function ClientDetail() {
     queryKey: ['client-visits', id],
     queryFn: () => visitApi.list({ client_id: id, limit: 5 }).then(r => r.data.data),
   });
+
+  const closeFarmer = useMutation({
+    mutationFn: () => clientApi.update(id, { status: 'forcely_closed' }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['client-profile', id] }),
+        qc.invalidateQueries({ queryKey: ['client', id] }),
+        qc.invalidateQueries({ queryKey: ['clients'] }),
+        qc.invalidateQueries({ queryKey: ['clients-list'] }),
+      ]);
+      toast.success('Farmer marked as closed');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to close farmer'),
+  });
+
+  const handleCloseFarmer = () => {
+    if (window.confirm('Close this farmer? They will be moved to Forcely Closed Farmers.')) {
+      closeFarmer.mutate();
+    }
+  };
 
   if (isLoading) return <PageSpinner />;
   if (!profile) return <div className="text-center py-16 text-gray-500">Farmer not found</div>;
@@ -48,15 +70,29 @@ export default function ClientDetail() {
             <Badge color={CLIENT_TYPE_COLOR[c.client_type] || 'gray'}>
               {CLIENT_TYPES.find(t => t.value === c.client_type)?.label || 'Farmer'}
             </Badge>
-            <Badge color={c.status === 'active' ? 'green' : 'red'}>{c.status}</Badge>
+            <Badge color={c.status === 'active' ? 'green' : c.status === 'inactive' ? 'red' : 'amber'}>
+              {c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}
+            </Badge>
           </div>
           <p className="text-sm text-gray-500">
             {[c.village, c.area, c.city].filter(Boolean).join(' · ') || 'Aquaculture Farmer'}
           </p>
         </div>
-        <Link to={`/clients/${id}/edit`} className="btn-secondary btn-sm">
-          <PencilIcon className="w-4 h-4" /> Edit Farmer
-        </Link>
+        <div className="flex items-center gap-2">
+          {!['forcely_closed', 'forced_closed', 'closed'].includes(c.status) && (
+            <button
+              type="button"
+              onClick={handleCloseFarmer}
+              disabled={closeFarmer.isPending}
+              className="btn-secondary btn-sm text-amber-700 border-amber-200 hover:bg-amber-50"
+            >
+              <NoSymbolIcon className="w-4 h-4" /> {closeFarmer.isPending ? 'Closing...' : 'Close Farmer'}
+            </button>
+          )}
+          <Link to={`/clients/${id}/edit`} className="btn-secondary btn-sm">
+            <PencilIcon className="w-4 h-4" /> Edit Farmer
+          </Link>
+        </div>
       </div>
 
       {/* Stats row */}
