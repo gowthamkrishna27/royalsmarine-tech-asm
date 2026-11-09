@@ -44,6 +44,7 @@ export default function ClientForm() {
             seed_date: '',
             stocking_quantity_lakhs: '',
             feed_type: '',
+            doc: '',
             status: 'active',
             latitude: '',
             longitude: '',
@@ -86,6 +87,7 @@ export default function ClientForm() {
           seed_date: p.seed_date ? p.seed_date.substring(0, 10) : '',
           stocking_quantity_lakhs: p.stocking_quantity_lakhs ?? '',
           feed_type: p.feed_type || '',
+          doc: p.doc ?? '',
         }));
         setTanks(loadedTanks);
         setValue('number_of_tanks', existing.number_of_tanks || loadedTanks.length);
@@ -110,6 +112,7 @@ export default function ClientForm() {
           seed_date: '',
           stocking_quantity_lakhs: '',
           feed_type: '',
+          doc: '',
           status: 'active',
           latitude: '',
           longitude: '',
@@ -166,6 +169,7 @@ export default function ClientForm() {
               seed_date: '',
               stocking_quantity_lakhs: '',
               feed_type: '',
+              doc: '',
               status: 'active',
               latitude: '',
               longitude: '',
@@ -519,6 +523,23 @@ export default function ClientForm() {
                         onChange={(e) => updateTankField(idx, 'seed_date', e.target.value)}
                         className="input py-1.5 text-sm"
                       />
+                    </div>
+
+                    {/* DOC (Day of Culture) */}
+                    <div>
+                      <label className="label text-xs">DOC (Day of Culture)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={tank.doc ?? ''}
+                        onChange={(e) => updateTankField(idx, 'doc', e.target.value)}
+                        placeholder="e.g. 15"
+                        className="input py-1.5 text-sm"
+                      />
+                      {tank.doc !== '' && tank.doc != null && !tank.seed_date && (
+                        <p className="text-[10px] text-blue-600 mt-0.5">Auto-increments daily from today when saved</p>
+                      )}
                     </div>
 
                     {/* Seed Stocking Quantity in Lakhs */}

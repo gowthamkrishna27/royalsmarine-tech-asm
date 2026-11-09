@@ -3,283 +3,222 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { clientService } from '../../services/clientService';
 import { PageSpinner } from '../../components/common/Spinner';
+import EmptyState from '../../components/common/EmptyState';
 import {
-  ScaleIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   TableCellsIcon,
   Squares2X2Icon,
-  ArrowTopRightOnSquareIcon,
-  PhoneIcon,
-  MapPinIcon,
-  BuildingOfficeIcon,
+  ScaleIcon,
 } from '@heroicons/react/24/outline';
+
+const fmt = (v, fallback = '—') => (v === null || v === undefined || v === '' ? fallback : v);
 
 export default function FcrTracker() {
   const [docInput, setDocInput] = useState('');
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
+  const [viewMode, setViewMode] = useState('table');
   const [selectedTank, setSelectedTank] = useState(null);
 
   const { data: tanks = [], isLoading, error, refetch } = useQuery({
     queryKey: ['fcr-tanks', search],
     queryFn: () =>
       clientService
-        .getFcrTanks({
-          search: search || undefined,
-        })
+        .getFcrTanks({ search: search || undefined })
         .then((r) => r.data.data || []),
   });
 
-  // Extract distinct DOC values from current tanks
   const availableDocs = useMemo(() => {
     const docs = new Set();
     tanks.forEach((t) => {
-      if (t.current_doc !== undefined && t.current_doc !== null) {
-        docs.add(parseInt(t.current_doc, 10));
-      }
+      if (t.current_doc !== undefined && t.current_doc !== null) docs.add(parseInt(t.current_doc, 10));
     });
     return Array.from(docs).sort((a, b) => a - b);
   }, [tanks]);
 
-  // Filter tanks by DOC input
   const filteredTanks = useMemo(() => {
     if (!docInput.trim()) return tanks;
-    const targetDoc = parseInt(docInput, 10);
-    if (isNaN(targetDoc)) return tanks;
-
+    const target = parseInt(docInput, 10);
+    if (Number.isNaN(target)) return tanks;
     return tanks.filter((t) => {
-      const cDoc = parseInt(t.current_doc, 10);
-      const pDoc = parseInt(t.doc, 10);
-      const visitDocs = t.recorded_docs || [];
-      return cDoc === targetDoc || pDoc === targetDoc || visitDocs.includes(targetDoc);
+      const c = parseInt(t.current_doc, 10);
+      const p = parseInt(t.doc, 10);
+      const v = t.recorded_docs || [];
+      return c === target || p === target || v.includes(target);
     });
   }, [tanks, docInput]);
 
   return (
-    <div className="space-y-4 fade-in">
-      {/* Top Header */}
-      <div className="page-header mb-0">
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="page-title flex items-center gap-2">
-            <span>FCR</span>
-            <span className="text-xs font-normal text-gray-400 font-mono"></span>
-          </h1>
-          <p className="text-xs text-gray-500"></p>
+          <h1 className="text-lg font-semibold text-gray-900">FCR</h1>
+          <p className="text-sm text-gray-500">Track feed conversion by tank and DOC.</p>
         </div>
-
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded-md text-xs flex items-center gap-1 transition ${viewMode === 'table' ? 'bg-white text-gray-900 shadow-2xs font-semibold' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              title="Table View"
-            >
-              <TableCellsIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">Table</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded-md text-xs flex items-center gap-1 transition ${viewMode === 'grid' ? 'bg-white text-gray-900 shadow-2xs font-semibold' : 'text-gray-500 hover:text-gray-900'
-                }`}
-              title="Grid View"
-            >
-              <Squares2X2Icon className="w-4 h-4" />
-              <span className="hidden sm:inline">Cards</span>
-            </button>
-          </div>
+        <div className="inline-flex self-start rounded-lg border border-sky-100 bg-sky-50/50 p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+              viewMode === 'table' ? 'bg-sky-600 text-white shadow-sm' : 'text-sky-700/70 hover:text-sky-800 hover:bg-sky-100/60'
+            }`}
+            aria-pressed={viewMode === 'table'}
+          >
+            <TableCellsIcon className="h-4 w-4" /> <span className="hidden sm:inline">Table</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('grid')}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition ${
+              viewMode === 'grid' ? 'bg-sky-600 text-white shadow-sm' : 'text-sky-700/70 hover:text-sky-800 hover:bg-sky-100/60'
+            }`}
+            aria-pressed={viewMode === 'grid'}
+          >
+            <Squares2X2Icon className="h-4 w-4" /> <span className="hidden sm:inline">Cards</span>
+          </button>
         </div>
       </div>
 
-      {/* Minimal Filter Bar */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          {/* DOC Input */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">DOC:</span>
-            <div className="relative">
+      <div className="rounded-lg border border-sky-100 bg-white p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label className="text-xs font-medium uppercase tracking-wide text-sky-700/70">DOC</label>
+            <div className="relative w-full sm:w-28">
               <input
                 type="number"
                 min="0"
-                placeholder="Enter DOC..."
+                inputMode="numeric"
+                placeholder="Any"
                 value={docInput}
                 onChange={(e) => setDocInput(e.target.value)}
-                className="input py-1.5 px-3 text-sm font-bold font-mono text-emerald-900 w-32 bg-gray-50 border-gray-300 focus:bg-white"
+                className="input py-1.5 pr-8 text-sm"
+                aria-label="Filter by DOC"
               />
               {docInput && (
                 <button
                   type="button"
                   onClick={() => setDocInput('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                  aria-label="Clear DOC"
                 >
-                  <XMarkIcon className="w-4 h-4" />
+                  <XMarkIcon className="h-4 w-4" />
                 </button>
               )}
             </div>
-
-            {/* Quick DOC Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setDocInput('')}
-                className={`text-xs px-2.5 py-1 rounded-md border transition ${docInput === ''
-                    ? 'bg-emerald-700 text-white border-emerald-700 font-semibold'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                  }`}
-              >
-                All
-              </button>
-
-              {availableDocs.map((d) => (
+            {availableDocs.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
                 <button
-                  key={d}
                   type="button"
-                  onClick={() => setDocInput(String(d))}
-                  className={`text-xs px-2.5 py-1 rounded-md border font-mono font-bold transition ${docInput === String(d)
-                      ? 'bg-emerald-700 text-white border-emerald-700'
-                      : 'bg-emerald-50/60 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                    }`}
+                  onClick={() => setDocInput('')}
+                  className={`rounded-md border px-2 py-1 text-xs font-medium transition ${
+                    !docInput ? 'border-sky-600 bg-sky-600 text-white' : 'border-sky-100 bg-sky-50/50 text-sky-700 hover:border-sky-200 hover:bg-sky-50'
+                  }`}
                 >
-                  DOC {d}
+                  All
                 </button>
-              ))}
-            </div>
+                {availableDocs.slice(0, 8).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDocInput(String(d))}
+                    className={`rounded-md border px-2 py-1 text-xs font-medium tabular-nums transition ${
+                      docInput === String(d)
+                        ? 'border-sky-600 bg-sky-600 text-white'
+                        : 'border-sky-100 bg-sky-50/50 text-sky-700 hover:border-sky-200 hover:bg-sky-50'
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Search box & Results counter */}
           <div className="flex items-center gap-3">
-            <div className="relative flex-1 sm:w-60">
-              <MagnifyingGlassIcon className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <div className="relative w-full sm:w-64">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search farmer / tank..."
+                placeholder="Search farmer or tank"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="input py-1.5 pl-8 text-xs w-full"
+                className="input w-full py-1.5 pl-8 text-sm"
+                aria-label="Search"
               />
             </div>
-
-            <span className="text-xs text-gray-500 whitespace-nowrap">
-              <strong className="text-gray-900 font-semibold">{filteredTanks.length}</strong> tanks
-            </span>
+            <span className="shrink-0 text-xs text-gray-500 tabular-nums">{filteredTanks.length} shown</span>
           </div>
         </div>
       </div>
 
-      {/* Content */}
       {isLoading ? (
-        <div className="py-16 text-center">
+        <div className="rounded-lg border border-gray-200 bg-white py-14 text-center">
           <PageSpinner />
-          <p className="text-xs text-gray-500 mt-2">Loading tanks...</p>
+          <p className="mt-2 text-sm text-gray-500">Loading tanks</p>
         </div>
       ) : error ? (
-        <div className="p-6 text-center text-red-600 bg-red-50 border border-red-200 rounded-xl text-xs">
-          <p className="font-semibold">Failed to load tanks: {error.message}</p>
-          <button onClick={() => refetch()} className="btn-secondary btn-sm mt-2 text-xs">
-            Retry
-          </button>
+        <div className="rounded-lg border border-gray-200 bg-white p-6 text-center">
+          <p className="text-sm font-medium text-gray-900">Could not load FCR data</p>
+          <p className="mt-1 text-xs text-gray-500">{error.message}</p>
+          <button type="button" onClick={() => refetch()} className="btn-secondary btn-sm mt-3">Retry</button>
         </div>
       ) : filteredTanks.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-10 text-center">
-          <p className="text-sm font-semibold text-gray-800">No tanks match DOC {docInput}</p>
-          <p className="text-xs text-gray-500 mt-1">Try entering another DOC or view all tanks.</p>
-          <button
-            onClick={() => setDocInput('')}
-            className="btn-primary btn-sm mt-3 text-xs"
-          >
-            Show All Tanks
-          </button>
+        <div className="rounded-lg border border-gray-200 bg-white">
+          <EmptyState
+            icon={ScaleIcon}
+            title="No tanks found"
+            description={docInput ? `No tanks match DOC ${docInput}. Clear the filter to see all tanks.` : 'No tank data is available yet.'}
+            action={docInput ? <button type="button" onClick={() => setDocInput('')} className="btn-secondary btn-sm">Clear filter</button> : null}
+          />
         </div>
       ) : viewMode === 'table' ? (
-        /* Minimal Table View */
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+        <div className="overflow-hidden rounded-lg border border-sky-100 bg-white">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-xs text-left">
-              <thead className="bg-gray-50/80 font-bold text-gray-700 uppercase tracking-wider text-[10px]">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-sky-100 bg-sky-50/60 text-xs font-medium uppercase tracking-wide text-sky-800/70">
                 <tr>
-                  <th className="px-4 py-3">Tank</th>
-                  <th className="px-4 py-3">Farmer</th>
-                  <th className="px-4 py-3">DOC</th>
-                  <th className="px-4 py-3">FCR</th>
-                  <th className="px-4 py-3">ABW</th>
-                  <th className="px-4 py-3">Stocking</th>
-                  <th className="px-4 py-3">Feed Type</th>
-                  <th className="px-4 py-3">Area</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-2.5 font-medium">Tank</th>
+                  <th className="px-4 py-2.5 font-medium">Farmer</th>
+                  <th className="px-4 py-2.5 font-medium">DOC</th>
+                  <th className="px-4 py-2.5 font-medium">FCR</th>
+                  <th className="px-4 py-2.5 font-medium">ABW</th>
+                  <th className="px-4 py-2.5 font-medium">Stocking</th>
+                  <th className="px-4 py-2.5 font-medium">Feed</th>
+                  <th className="px-4 py-2.5 font-medium">Area</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className="divide-y divide-gray-100">
                 {filteredTanks.map((tank) => {
-                  const currentDoc = parseInt(tank.current_doc, 10);
-                  const fcrVal = tank.latest_feeding?.fcr || tank.fcr || null;
-                  const abwVal = tank.latest_feeding?.abw || tank.abw || null;
-
+                  const currentDoc = tank.current_doc;
+                  const fcrVal = tank.latest_feeding?.fcr || tank.fcr;
+                  const abwVal = tank.latest_feeding?.abw || tank.abw;
                   return (
-                    <tr key={tank.id} className="hover:bg-gray-50/70 transition-colors">
+                    <tr key={tank.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">
-                        <span className="font-bold text-gray-900 block">
-                          {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
-                        </span>
-                        <span className="text-[10px] text-gray-400 font-mono">ID: {tank.id}</span>
+                        <div className="font-medium text-gray-900">{fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}</div>
+                        <div className="text-xs text-gray-400">ID {tank.id}</div>
                       </td>
-
                       <td className="px-4 py-3">
-                        <Link
-                          to={`/clients/${tank.client_id}`}
-                          className="font-semibold text-primary-700 hover:underline block"
-                        >
-                          {tank.company_name || 'â€”'}
+                        <Link to={`/clients/${tank.client_id}`} className="font-medium text-gray-900 hover:underline">
+                          {fmt(tank.company_name)}
                         </Link>
-                        <span className="text-[11px] text-gray-500 font-mono">
-                          {tank.farmer_phone || tank.village || 'â€”'}
-                        </span>
+                        <div className="text-xs text-gray-500">{fmt(tank.farmer_phone || tank.village)}</div>
                       </td>
-
+                      <td className="px-4 py-3 tabular-nums">
+                        <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">{currentDoc ?? '—'}</span>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums font-medium text-gray-900">{fmt(fcrVal)}</td>
+                      <td className="px-4 py-3 tabular-nums text-gray-700">{abwVal ? `${abwVal} g` : '—'}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-mono font-bold bg-emerald-100 text-emerald-800">
-                          DOC {currentDoc}
-                        </span>
+                        <div className="tabular-nums text-gray-900">{tank.stocking_quantity_lakhs ? `${tank.stocking_quantity_lakhs} L` : '—'}</div>
+                        <div className="text-xs text-gray-400">{tank.seed_date ? String(tank.seed_date).slice(0, 10) : '—'}</div>
                       </td>
-
-                      <td className="px-4 py-3">
-                        <span className="font-mono font-bold text-gray-900">
-                          {fcrVal || '1.25*'}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 font-mono text-gray-700">
-                        {abwVal ? `${abwVal}g` : 'â€”'}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <span className="font-mono font-medium text-gray-900 block">
-                          {tank.stocking_quantity_lakhs ? `${tank.stocking_quantity_lakhs} L` : 'â€”'}
-                        </span>
-                        <span className="text-[10px] text-gray-400">
-                          {tank.seed_date ? String(tank.seed_date).substring(0, 10) : 'â€”'}
-                        </span>
-                      </td>
-
-                      <td className="px-4 py-3 text-gray-700">
-                        {tank.feed_type || 'CP / Avanti'}
-                      </td>
-
-                      <td className="px-4 py-3 font-mono text-gray-800">
-                        {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
-                      </td>
-
+                      <td className="px-4 py-3 text-gray-700">{fmt(tank.feed_type)}</td>
+                      <td className="px-4 py-3 tabular-nums text-gray-700">{Number(tank.area_acres || tank.area || 0).toFixed(2)} ac</td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTank(tank)}
-                          className="text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline inline-flex items-center gap-1"
-                        >
-                          <span>Details</span>
-                          <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+                        <button type="button" onClick={() => setSelectedTank(tank)} className="text-sm font-medium text-sky-700 hover:text-sky-900">
+                          Details
                         </button>
                       </td>
                     </tr>
@@ -290,213 +229,119 @@ export default function FcrTracker() {
           </div>
         </div>
       ) : (
-        /* Minimal Grid View */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {filteredTanks.map((tank) => {
-            const currentDoc = parseInt(tank.current_doc, 10);
-            const fcrVal = tank.latest_feeding?.fcr || tank.fcr || null;
-            const abwVal = tank.latest_feeding?.abw || tank.abw || null;
-
+            const currentDoc = tank.current_doc;
+            const fcrVal = tank.latest_feeding?.fcr || tank.fcr;
+            const abwVal = tank.latest_feeding?.abw || tank.abw;
             return (
-              <div
-                key={tank.id}
-                className="bg-white border border-gray-200 rounded-xl p-3.5 hover:border-gray-300 transition-all shadow-2xs space-y-2.5 text-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-gray-900 text-sm">
-                      {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800">
-                      DOC {currentDoc}
-                    </span>
+              <article key={tank.id} className="rounded-lg border border-sky-100 bg-white p-4 transition hover:border-sky-200">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate font-medium text-gray-900">{fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}</h3>
+                    <Link to={`/clients/${tank.client_id}`} className="block truncate text-sm text-gray-600 hover:text-sky-700">
+                      {fmt(tank.company_name)}
+                    </Link>
                   </div>
-                  <span className="text-gray-500 font-mono text-[11px]">
-                    {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
+                  <span className="shrink-0 rounded-md bg-sky-50 px-2 py-0.5 text-xs font-medium tabular-nums text-sky-700">
+                    DOC {currentDoc ?? '—'}
                   </span>
                 </div>
-
-                <div>
-                  <Link
-                    to={`/clients/${tank.client_id}`}
-                    className="font-semibold text-primary-700 hover:underline block"
-                  >
-                    {tank.company_name}
-                  </Link>
-                  <span className="text-gray-500 text-[11px]">
-                    {[tank.village, tank.farmer_phone].filter(Boolean).join(' â€¢ ')}
-                  </span>
+                <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3 text-center">
+                  <div><dt className="text-[11px] uppercase tracking-wide text-gray-500">FCR</dt><dd className="mt-0.5 font-medium tabular-nums text-gray-900">{fmt(fcrVal)}</dd></div>
+                  <div><dt className="text-[11px] uppercase tracking-wide text-gray-500">ABW</dt><dd className="mt-0.5 font-medium tabular-nums text-gray-900">{abwVal ? `${abwVal}g` : '—'}</dd></div>
+                  <div><dt className="text-[11px] uppercase tracking-wide text-gray-500">Area</dt><dd className="mt-0.5 font-medium tabular-nums text-gray-900">{Number(tank.area_acres || tank.area || 0).toFixed(2)}</dd></div>
+                </dl>
+                <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+                  <span className="truncate">{fmt(tank.feed_type, 'Feed —')}</span>
+                  <button type="button" onClick={() => setSelectedTank(tank)} className="shrink-0 font-medium text-sky-700 hover:text-sky-900">Details</button>
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
-                  <div>
-                    <span className="text-[10px] text-gray-500 block">FCR</span>
-                    <span className="font-mono font-bold text-emerald-900">{fcrVal || '1.25*'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-500 block">ABW</span>
-                    <span className="font-mono font-bold text-gray-900">{abwVal ? `${abwVal}g` : 'â€”'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-gray-500 block">Feed</span>
-                    <span className="font-medium text-gray-800 truncate block">{tank.feed_type || 'Avanti'}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1 border-t border-gray-100">
-                  <span className="text-[10px] text-gray-400">
-                    Seed: {tank.seed_date ? String(tank.seed_date).substring(0, 10) : 'â€”'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTank(tank)}
-                    className="text-xs text-primary-600 hover:text-primary-800 font-medium hover:underline"
-                  >
-                    View Details â†’
-                  </button>
-                </div>
-              </div>
+              </article>
             );
           })}
         </div>
       )}
 
-      {/* Minimal Details Modal */}
-      {selectedTank && (
-        <MinimalTankModal
-          tank={selectedTank}
-          onClose={() => setSelectedTank(null)}
-        />
-      )}
+      {selectedTank && <TankModal tank={selectedTank} onClose={() => setSelectedTank(null)} />}
     </div>
   );
 }
 
-// ----------------------------------------------------
-// MINIMAL TANK MODAL
-// ----------------------------------------------------
-function MinimalTankModal({ tank, onClose }) {
-  const currentDoc = parseInt(tank.current_doc, 10);
+function Detail({ label, value }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-gray-500">{label}</dt>
+      <dd className="mt-0.5 text-sm text-gray-900">{value}</dd>
+    </div>
+  );
+}
+
+function TankModal({ tank, onClose }) {
+  const currentDoc = tank.current_doc;
   const lf = tank.latest_feeding || {};
   const visits = Array.isArray(tank.visits) ? tank.visits : [];
+  const fcrVal = lf.fcr || tank.fcr;
+  const abwVal = lf.abw || tank.abw;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-center justify-center p-4 fade-in">
-      <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden text-xs">
-        {/* Modal Header */}
-        <div className="px-5 py-3.5 border-b border-gray-200 flex items-center justify-between bg-gray-50/80">
-          <div className="flex items-center gap-2.5">
-            <span className="font-bold text-gray-900 text-base">
-              {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
-            </span>
-            <span className="px-2 py-0.5 rounded-full font-mono font-bold text-xs bg-emerald-100 text-emerald-800">
-              DOC {currentDoc}
-            </span>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-0 sm:items-center sm:p-4" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white sm:max-w-2xl sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50/40 px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-gray-900">{fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}</h2>
+            <p className="text-sm text-gray-500">
+              <span className="font-medium text-sky-700">DOC {currentDoc ?? '—'}</span> · {fmt(tank.company_name)}
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 p-1"
-          >
-            <XMarkIcon className="w-5 h-5" />
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label="Close">
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-          {/* Farmer & Specs */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
-            <div>
-              <span className="text-gray-500 block text-[10px]">Farmer</span>
-              <strong className="text-gray-900">{tank.company_name}</strong>
-            </div>
-            <div>
-              <span className="text-gray-500 block text-[10px]">Mobile</span>
-              <span className="font-mono text-gray-800">{tank.farmer_phone || 'â€”'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block text-[10px]">Location</span>
-              <span className="text-gray-800 truncate block">{[tank.village, tank.district].filter(Boolean).join(', ') || 'â€”'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block text-[10px]">Water Area</span>
-              <strong className="text-gray-900">{Number(tank.area_acres || tank.area || 0).toFixed(2)} Acres</strong>
-            </div>
-            <div>
-              <span className="text-gray-500 block text-[10px]">Seed Date</span>
-              <span className="text-gray-800">{tank.seed_date ? String(tank.seed_date).substring(0, 10) : 'â€”'}</span>
-            </div>
-            <div>
-              <span className="text-gray-500 block text-[10px]">Stock Quantity</span>
-              <strong className="text-gray-900">{tank.stocking_quantity_lakhs ? `${tank.stocking_quantity_lakhs} Lakhs` : 'â€”'}</strong>
-            </div>
-          </div>
+        <div className="space-y-5 px-4 py-4 sm:px-5">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+            <Detail label="Farmer" value={fmt(tank.company_name)} />
+            <Detail label="Mobile" value={fmt(tank.farmer_phone)} />
+            <Detail label="Location" value={fmt([tank.village, tank.district].filter(Boolean).join(', '))} />
+            <Detail label="Area" value={`${Number(tank.area_acres || tank.area || 0).toFixed(2)} ac`} />
+            <Detail label="Seed date" value={tank.seed_date ? String(tank.seed_date).slice(0, 10) : '—'} />
+            <Detail label="Stocking" value={tank.stocking_quantity_lakhs ? `${tank.stocking_quantity_lakhs} L` : '—'} />
+          </dl>
 
-          {/* FCR & Feeding Metrics */}
-          <div className="border border-emerald-200 rounded-lg p-3 bg-emerald-50/30 space-y-2">
-            <span className="font-bold text-emerald-950 text-xs block">Feeding & Growth Performance</span>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="bg-white p-2 rounded border border-emerald-100">
-                <span className="text-[10px] text-gray-500 block">FCR</span>
-                <span className="font-mono font-bold text-emerald-900 text-sm">{lf.fcr || tank.fcr || '1.25'}</span>
-              </div>
-              <div className="bg-white p-2 rounded border border-emerald-100">
-                <span className="text-[10px] text-gray-500 block">ABW</span>
-                <span className="font-mono font-bold text-gray-900 text-sm">{lf.abw || tank.abw ? `${lf.abw || tank.abw}g` : 'â€”'}</span>
-              </div>
-              <div className="bg-white p-2 rounded border border-emerald-100">
-                <span className="text-[10px] text-gray-500 block">Daily Feed</span>
-                <span className="font-mono font-bold text-gray-900 text-sm">{lf.daily_feed_quantity ? `${lf.daily_feed_quantity}kg` : 'â€”'}</span>
-              </div>
-              <div className="bg-white p-2 rounded border border-emerald-100">
-                <span className="text-[10px] text-gray-500 block">Feed Brand</span>
-                <span className="font-bold text-gray-800 text-xs truncate block mt-0.5">{tank.feed_type || 'Avanti'}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Visits Timeline */}
           <div>
-            <span className="font-bold text-gray-800 block mb-2">Visits Logged ({visits.length})</span>
+            <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500">Feeding</h3>
+            <dl className="mt-2 grid grid-cols-2 gap-3 rounded-lg border border-sky-100 bg-sky-50/30 p-3 sm:grid-cols-4">
+              <Detail label="FCR" value={fmt(fcrVal)} />
+              <Detail label="ABW" value={abwVal ? `${abwVal} g` : '—'} />
+              <Detail label="Daily feed" value={lf.daily_feed_quantity ? `${lf.daily_feed_quantity} kg` : '—'} />
+              <Detail label="Feed" value={fmt(tank.feed_type)} />
+            </dl>
+          </div>
+
+          <div>
+            <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500">Visits ({visits.length})</h3>
             {visits.length === 0 ? (
-              <p className="text-gray-400 text-center py-3 bg-gray-50 rounded-lg">No visits logged for this tank.</p>
+              <p className="mt-2 text-sm text-gray-500">No visits logged.</p>
             ) : (
-              <div className="space-y-2">
+              <ul className="mt-2 divide-y divide-gray-100 rounded-lg border border-gray-200">
                 {visits.map((v) => (
-                  <div key={v.id} className="p-2.5 bg-gray-50 rounded-lg border border-gray-100 flex items-center justify-between">
-                    <div>
-                      <span className="font-semibold text-gray-900">{v.visit_date}</span>
-                      <span className="text-gray-500 ml-2">â€¢ Met by {v.salesperson_name || 'Technical Exec'}</span>
-                      {v.feeding_details?.fcr && (
-                        <span className="ml-2 font-mono text-emerald-800 font-bold">FCR: {v.feeding_details.fcr}</span>
-                      )}
+                  <li key={v.id} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <span className="font-medium text-gray-900">{v.visit_date}</span>
+                      <span className="text-gray-500"> · {fmt(v.salesperson_name, 'Technical Exec')}</span>
+                      {v.feeding_details?.fcr && <span className="text-gray-600 tabular-nums"> · FCR {v.feeding_details.fcr}</span>}
                     </div>
-                    <Link to={`/visits/${v.id}`} className="text-primary-600 hover:underline">
-                      View â†’
-                    </Link>
-                  </div>
+                    <Link to={`/visits/${v.id}`} className="shrink-0 font-medium text-sky-700 hover:text-sky-900">View</Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         </div>
 
-        {/* Modal Footer */}
-        <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-          <Link
-            to={`/clients/${tank.client_id}`}
-            className="text-xs text-primary-600 hover:underline font-medium"
-          >
-            Go to Farmer Profile
-          </Link>
-          <button
-            type="button"
-            onClick={onClose}
-            className="btn-secondary btn-sm text-xs py-1 px-4"
-          >
-            Close
-          </button>
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <Link to={`/clients/${tank.client_id}`} className="text-sm font-medium text-sky-700 hover:text-sky-900">Open farmer profile</Link>
+          <button type="button" onClick={onClose} className="btn-secondary btn-sm w-full sm:w-auto">Close</button>
         </div>
       </div>
     </div>

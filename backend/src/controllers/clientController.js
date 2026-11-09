@@ -5,6 +5,41 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
 
+let pondDocCols = null;
+const getPondDocCols = async () => {
+  if (pondDocCols) return pondDocCols;
+  try {
+    const [cols] = await sequelize.query('DESCRIBE ponds');
+    const set = new Set((cols || []).map(c => String(c.Field || '').toLowerCase()));
+    pondDocCols = { hasDoc: set.has('doc'), hasDocDate: set.has('doc_date') };
+  } catch {
+    pondDocCols = { hasDoc: false, hasDocDate: false };
+  }
+  return pondDocCols;
+};
+
+const pondCurrentDocExpr = ({ hasDoc, hasDocDate }, alias = 'p', as = 'current_doc') => {
+  if (hasDoc && hasDocDate) {
+    return `CASE
+          WHEN ${alias}.seed_date IS NOT NULL THEN GREATEST(0, DATEDIFF(CURDATE(), ${alias}.seed_date))
+          WHEN ${alias}.doc IS NOT NULL AND ${alias}.doc_date IS NOT NULL THEN GREATEST(0, ${alias}.doc + DATEDIFF(CURDATE(), ${alias}.doc_date))
+          WHEN ${alias}.doc IS NOT NULL THEN GREATEST(0, ${alias}.doc)
+          ELSE ${as === 'current_doc' ? '0' : 'NULL'}
+        END as ${as}`;
+  }
+  if (hasDoc) {
+    return `CASE
+          WHEN ${alias}.seed_date IS NOT NULL THEN GREATEST(0, DATEDIFF(CURDATE(), ${alias}.seed_date))
+          WHEN ${alias}.doc IS NOT NULL THEN GREATEST(0, ${alias}.doc)
+          ELSE ${as === 'current_doc' ? '0' : 'NULL'}
+        END as ${as}`;
+  }
+  return `CASE
+          WHEN ${alias}.seed_date IS NOT NULL THEN GREATEST(0, DATEDIFF(CURDATE(), ${alias}.seed_date))
+          ELSE ${as === 'current_doc' ? '0' : 'NULL'}
+        END as ${as}`;
+};
+
 const buildClientWhere = (query, userId, role) => {
   let where = 'c.deleted_at IS NULL';
   const replacements = [];
@@ -151,11 +186,14 @@ const createClient = async (req, res) => {
         const lngVal = (p.longitude !== undefined && p.longitude !== '' && !isNaN(p.longitude)) ? parseFloat(p.longitude) : null;
         const polyCoords = p.polygon_coordinates ? (typeof p.polygon_coordinates === 'string' ? p.polygon_coordinates : JSON.stringify(p.polygon_coordinates)) : null;
 
+        const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
+        const docDateVal = docVal !== null ? (p.doc_date && String(p.doc_date).trim() ? String(p.doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
            salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -168,7 +206,7 @@ const createClient = async (req, res) => {
               p.feed_type || null,
               p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
               latVal, lngVal, polyCoords, p.gps_address || null,
-              p.status || 'active', p.remarks || null, req.user.id
+              p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
             ],
             transaction: t,
           }
@@ -248,12 +286,19 @@ const getClient = async (req, res) => {
       return sendError(res, 'Access denied: not your client', 403);
     }
 
+  try {
+    const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
+      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
 
-    return sendSuccess(res, 'Client fetched', { ...client, brands: [], categories: [], ponds });
+    return sendSuccess(res, 'Client fetched', { ...client, brands: [], categories: [], ponds: ponds || [] });
+  } catch (pondErr) {
+    console.error('getClient ponds lookup failed:', pondErr);
+    return sendSuccess(res, 'Client fetched', { ...client, brands: [], categories: [], ponds: [] });
+  }
   } catch (err) {
     return sendError(res, err.message, 500);
   }
@@ -339,13 +384,18 @@ const updateClient = async (req, res) => {
 
         const polyCoords = p.polygon_coordinates ? (typeof p.polygon_coordinates === 'string' ? p.polygon_coordinates : JSON.stringify(p.polygon_coordinates)) : null;
 
+        const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
+        const docDateVal = docVal !== null ? new Date().toISOString().slice(0, 10) : null;
+
         if (p.id) {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
              salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
+             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?,
+             doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+             updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
               replacements: [
@@ -359,7 +409,9 @@ const updateClient = async (req, res) => {
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
-                p.status || 'active', p.remarks || null, p.id, req.params.id, req.params.id
+                p.status || 'active', p.remarks || null,
+                docVal, docVal, docVal, docDateVal,
+                p.id, req.params.id, req.params.id
               ],
               transaction: t,
             }
@@ -369,8 +421,8 @@ const updateClient = async (req, res) => {
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
              salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -383,7 +435,7 @@ const updateClient = async (req, res) => {
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
-                p.status || 'active', p.remarks || null, req.user.id
+                p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
               ],
               transaction: t,
             }
@@ -481,9 +533,11 @@ const getClientProfile = async (req, res) => {
       { replacements: [clientId] }
     );
 
+    const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
-      { replacements: [clientId, clientId] }
+      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
+      { replacements: [req.params.id, req.params.id] }
     );
     const total_acres = ponds.reduce((acc, p) => acc + (parseFloat(p.area_acres) || 0), 0);
     const active_ponds = ponds.filter(p => p.status === 'active').length;
@@ -582,8 +636,10 @@ const importClients = async (req, res) => {
 
 const listPonds = async (req, res) => {
   try {
+    const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
-      'SELECT *, COALESCE(area_acres, area) as area_acres FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC',
+      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
     return sendSuccess(res, 'Ponds fetched', ponds);
@@ -620,12 +676,14 @@ const createPond = async (req, res) => {
     const latVal = (latitude !== undefined && latitude !== '' && !isNaN(latitude)) ? parseFloat(latitude) : null;
     const lngVal = (longitude !== undefined && longitude !== '' && !isNaN(longitude)) ? parseFloat(longitude) : null;
     const polyCoords = req.body.polygon_coordinates ? (typeof req.body.polygon_coordinates === 'string' ? req.body.polygon_coordinates : JSON.stringify(req.body.polygon_coordinates)) : null;
+    const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
+    const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
 
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
        salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -637,7 +695,7 @@ const createPond = async (req, res) => {
           stockQty,
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
-          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, req.user.id
+          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, docVal, docDateVal, req.user.id
         ]
       }
     );
@@ -652,7 +710,7 @@ const updatePond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
     hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-    culture_type, water_type, latitude, longitude, gps_address, status, remarks
+    culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   try {
     const [clientRows] = await sequelize.query(
@@ -679,11 +737,16 @@ const updatePond = async (req, res) => {
     const latVal = (latitude !== undefined && latitude !== '' && !isNaN(latitude)) ? parseFloat(latitude) : null;
     const lngVal = (longitude !== undefined && longitude !== '' && !isNaN(longitude)) ? parseFloat(longitude) : null;
 
+    const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
+    const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
        salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
        stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-       latitude=?, longitude=?, gps_address=?, status=?, remarks=?, updated_at=NOW()
+       latitude=?, longitude=?, gps_address=?, status=?, remarks=?,
+       doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+       updated_at=NOW()
        WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
       {
         replacements: [
@@ -697,7 +760,7 @@ const updatePond = async (req, res) => {
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
           latVal, lngVal, gps_address || null, status || 'active',
-          remarks || null, req.params.pondId, req.params.id, req.params.id
+          remarks || null, docVal, docVal, docVal, docDateVal, req.params.pondId, req.params.id, req.params.id
         ]
       }
     );
@@ -988,8 +1051,9 @@ const listFcrTanks = async (req, res) => {
       replacements.push(status);
     }
 
+    const docCols = await getPondDocCols();
     const [tanks] = await sequelize.query(`
-      SELECT 
+      SELECT
         p.*,
         COALESCE(p.area_acres, p.area) as area_acres,
         c.id as client_id,
@@ -1005,10 +1069,7 @@ const listFcrTanks = async (req, res) => {
         c.address as farmer_address,
         u.full_name as salesperson_name,
         u.mobile as salesperson_phone,
-        CASE 
-          WHEN p.seed_date IS NOT NULL THEN GREATEST(0, DATEDIFF(CURDATE(), p.seed_date))
-          ELSE COALESCE(p.doc, 0)
-        END as current_doc
+        ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
       FROM ponds p
       JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
       LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)

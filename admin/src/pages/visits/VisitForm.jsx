@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { visitApi, clientApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import Spinner from '../../components/common/Spinner';
 import { MapPinIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -28,6 +29,10 @@ const MEDICATION_CATEGORIES = [
 ];
 
 export default function VisitForm() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('super_admin', 'admin');
+  // ASM (Area Sales Manager) and Technical Executive roles: DOC is auto-calculated only
+  const isDocAutoOnly = hasRole('sales_manager', 'sales_executive');
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -107,7 +112,7 @@ export default function VisitForm() {
   });
 
   // Load selected client's full details (tanks)
-  const { data: selectedClient } = useQuery({
+  const { data: selectedClient, isLoading: tanksLoading } = useQuery({
     queryKey: ['client', clientId],
     queryFn: () => clientApi.get(clientId).then(r => r.data.data),
     enabled: Boolean(clientId),
@@ -187,16 +192,15 @@ export default function VisitForm() {
   }, [paramTank, selectedClient, isEdit, setValue, visitDate]);
 
   // Handle Tank selection and auto-calculate DOC & Seed Qty
-  const handleTankSelection = (e) => {
-    const chosenTankNum = e.target.value;
-    setValue('tank_number', chosenTankNum);
+  const handleTankSelection = (chosenTankNum) => {
+    setValue('tank_number', chosenTankNum, { shouldDirty: true, shouldValidate: true });
 
     const foundTank = selectedClient?.ponds?.find(
       p => (p.tank_number || p.pond_name) === chosenTankNum
     );
 
     if (foundTank) {
-      setValue('tank_id', foundTank.id);
+      setValue('tank_id', foundTank.id, { shouldDirty: true });
 
       if (foundTank.seed_date && visitDate) {
         const seedDate = new Date(foundTank.seed_date);
@@ -209,8 +213,23 @@ export default function VisitForm() {
       if (foundTank.stocking_quantity_lakhs) {
         setFeedingDetails(prev => ({ ...prev, seed_quantity: foundTank.stocking_quantity_lakhs }));
       }
+    } else {
+      setValue('tank_id', null, { shouldDirty: true });
     }
   };
+
+  // Reset tank when farmer changes (skip initial/edit hydration)
+  useEffect(() => {
+    if (!clientId) {
+      setValue('tank_number', '');
+      setValue('tank_id', null);
+      return;
+    }
+    if (isEdit && !existingVisit) return;
+    if (isEdit && existingVisit && String(existingVisit.client_id) === String(clientId)) return;
+    setValue('tank_number', '');
+    setValue('tank_id', null);
+  }, [clientId, isEdit, existingVisit, setValue]);
 
   // Auto calculate FCR
   useEffect(() => {
@@ -457,10 +476,19 @@ export default function VisitForm() {
                 <label className="label text-[11px] mb-1">Tank / Pond</label>
                 <select
                   {...register('tank_number')}
-                  onChange={handleTankSelection}
+                  onChange={(e) => handleTankSelection(e.target.value)}
+                  disabled={!clientId}
                   className="input text-xs py-1"
                 >
-                  <option value="">Select tank...</option>
+                  <option value="">
+                    {!clientId
+                      ? 'Select farmer first'
+                      : tanksLoading
+                        ? 'Loading tanks...'
+                        : selectedClient?.ponds?.length
+                          ? 'Select tank...'
+                          : 'No tanks found for this farmer'}
+                  </option>
                   {selectedClient?.ponds?.map(p => (
                     <option key={p.id} value={p.tank_number || p.pond_name}>
                       {p.tank_number || p.pond_name} {p.area_acres ? `(${p.area_acres} ac)` : ''}
@@ -522,7 +550,8 @@ export default function VisitForm() {
                   value={waterQuality.doc ?? ''}
                   onChange={e => setWaterQuality(p => ({ ...p, doc: e.target.value }))}
                   placeholder="DOC"
-                  className="input text-xs py-1"
+                  readOnly={isDocAutoOnly && !isEdit}
+                  className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
                 />
               </div>
               <div>
@@ -670,7 +699,8 @@ export default function VisitForm() {
                   value={feedingDetails.doc ?? ''}
                   onChange={e => setFeedingDetails(p => ({ ...p, doc: e.target.value }))}
                   placeholder="DOC"
-                  className="input text-xs py-1"
+                  readOnly={isDocAutoOnly && !isEdit}
+                  className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
                 />
               </div>
               <div>
@@ -905,7 +935,8 @@ export default function VisitForm() {
                       value={ph.doc ?? ''}
                       onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
                       placeholder="DOC"
-                      className="input text-xs py-1"
+                      readOnly={isDocAutoOnly && !isEdit}
+                      className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
                     />
                     <input
                       type="number"
@@ -949,7 +980,8 @@ export default function VisitForm() {
                     value={finalHarvest.doc ?? ''}
                     onChange={e => updateFinalHarvest('doc', e.target.value)}
                     placeholder="DOC"
-                    className="input text-xs py-1"
+                    readOnly={isDocAutoOnly && !isEdit}
+                    className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
                   />
                   <input
                     type="number"

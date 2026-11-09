@@ -195,6 +195,19 @@ export default function ClientDetail() {
                           <span className="font-medium text-gray-800">{p.brooder}</span>
                         </div>
                       )}
+                      {(() => {
+                        const baseDoc = p.seed_date ? null : (p.doc ?? null);
+                        const docDate = p.doc_date ? String(p.doc_date).slice(0, 10) : null;
+                        const doc = baseDoc != null && docDate
+                          ? Math.max(0, Number(baseDoc) + Math.max(0, Math.floor((Date.now() - new Date(docDate).getTime()) / 86400000)))
+                          : baseDoc;
+                        return (doc != null && doc !== '' && !Number.isNaN(Number(doc))) ? (
+                          <div>
+                            <span className="text-gray-400">DOC:</span>{' '}
+                            <span className="font-semibold text-emerald-700">{Number(doc)} days</span>
+                          </div>
+                        ) : null;
+                      })()}
                       {p.seed_date && (
                         <div>
                           <span className="text-gray-400">Seed Date:</span>{' '}
