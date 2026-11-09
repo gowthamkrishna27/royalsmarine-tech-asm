@@ -165,6 +165,7 @@ CREATE TABLE visits (
   feeding_details JSON NULL,
   medication_details JSON NULL,
   harvest_details JSON NULL,
+  disease_details JSON NULL,
   approval_status ENUM('pending','approved','rejected') DEFAULT 'pending',
   approved_by INT NULL,
   approved_at TIMESTAMP NULL,

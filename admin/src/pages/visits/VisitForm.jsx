@@ -28,6 +28,22 @@ const MEDICATION_CATEGORIES = [
   { value: 'other', label: 'Other' },
 ];
 
+const DISEASE_OPTIONS = [
+  'White muscle',
+  'White gut',
+  'Moulting',
+  'Cramping',
+  'Black gill',
+  'Vibriosis',
+  'EHP',
+  'Hard shell',
+  'Soft shell',
+  'Black spots',
+  'ASDS',
+  'WSSV',
+  'Loose shell',
+];
+
 export default function VisitForm() {
   const { hasRole } = useAuth();
   const isAdmin = hasRole('super_admin', 'admin');
@@ -87,6 +103,9 @@ export default function VisitForm() {
     harvested_biomass: '',
   });
 
+  // 7. Disease Details state
+  const [diseaseDetails, setDiseaseDetails] = useState({ diseases: [] });
+
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm({
     defaultValues: {
       visit_date: new Date().toISOString().split('T')[0],
@@ -104,6 +123,7 @@ export default function VisitForm() {
   const showFeeding = meetingType === 'feeding_details' || meetingType === 'all';
   const showMedication = meetingType === 'medication_details' || meetingType === 'all';
   const showHarvest = meetingType === 'harvest_details' || meetingType === 'all';
+  const showDisease = meetingType === 'disease' || meetingType === 'all';
 
   // Load clients
   const { data: clients } = useQuery({
@@ -151,6 +171,17 @@ export default function VisitForm() {
         if (existingVisit.harvest_details.final_harvest) {
           setFinalHarvest(prev => ({ ...prev, ...existingVisit.harvest_details.final_harvest }));
         }
+      }
+      if (existingVisit.disease_details) {
+        const dd = existingVisit.disease_details;
+        const diseases = Array.isArray(dd?.diseases)
+          ? dd.diseases
+          : Array.isArray(dd)
+            ? dd
+            : typeof dd?.disease_identification === 'string'
+              ? dd.disease_identification.split(',').map(s => s.trim()).filter(Boolean)
+              : [];
+        setDiseaseDetails({ diseases });
       }
     }
   }, [existingVisit, setValue]);
@@ -419,6 +450,7 @@ export default function VisitForm() {
       water_quality: showWaterQuality ? waterQuality : null,
       feeding_details: showFeeding ? feedingDetails : null,
       medication_details: showMedication ? medications : null,
+      disease_details: showDisease ? diseaseDetails : null,
       harvest_details: showHarvest ? {
         partial_harvests: partialHarvests,
         final_harvest: finalHarvest,
@@ -507,6 +539,7 @@ export default function VisitForm() {
                   <option value="water_quality">Water Quality</option>
                   <option value="feeding_details">Feeding Details</option>
                   <option value="medication_details">Medication & Treatments</option>
+                  <option value="disease">Disease</option>
                   <option value="harvest_details">Harvest Details</option>
                   <option value="all">All Details (Full Inspection)</option>
                 </select>
@@ -889,6 +922,33 @@ export default function VisitForm() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {showDisease && (
+          <div className="card">
+            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Disease</h3></div>
+            <div className="card-body p-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                {DISEASE_OPTIONS.map((d) => {
+                  const checked = (diseaseDetails.diseases || []).includes(d);
+                  return (
+                    <label key={d} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs cursor-pointer select-none ${checked ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 shrink-0"
+                        checked={checked}
+                        onChange={() => setDiseaseDetails((prev) => {
+                          const cur = prev.diseases || [];
+                          return { ...prev, diseases: checked ? cur.filter(x => x !== d) : [...cur, d] };
+                        })}
+                      />
+                      <span className="leading-tight">{d}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}

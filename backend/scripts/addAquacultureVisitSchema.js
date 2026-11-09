@@ -17,6 +17,7 @@ async function migrate() {
       { name: 'feeding_details', def: 'JSON NULL' },
       { name: 'medication_details', def: 'JSON NULL' },
       { name: 'harvest_details', def: 'JSON NULL' },
+      { name: 'disease_details', def: 'JSON NULL' },
     ];
 
     for (const col of visitAdditions) {

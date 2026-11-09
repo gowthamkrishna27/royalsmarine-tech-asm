@@ -81,11 +81,13 @@ const createVisit = async (req, res) => {
     gps_captured_at, gps_denied_reason, person_met, designation_met,
     meeting_type, meeting_highlights, remarks, visit_outcome, next_action,
     next_followup_date, brands, categories,
-    tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
+    tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details, disease_details,
   } = req.body;
 
   const t = await sequelize.transaction();
   try {
+    const cols = await getVisitCols();
+    const hasDisease = cols.has('disease_details');
     const uuid = uuidv4();
     const formattedGpsCapturedAt = gps_captured_at ? new Date(gps_captured_at).toISOString().slice(0, 19).replace('T', ' ') : null;
 
@@ -93,27 +95,34 @@ const createVisit = async (req, res) => {
     const jsonFeeding = feeding_details ? JSON.stringify(feeding_details) : null;
     const jsonMedication = medication_details ? JSON.stringify(medication_details) : null;
     const jsonHarvest = harvest_details ? JSON.stringify(harvest_details) : null;
+    const jsonDisease = disease_details ? JSON.stringify(disease_details) : null;
+
+    const fields = [
+      'uuid', 'visit_date', 'visit_time', 'salesperson_id', 'client_id', 'latitude', 'longitude',
+      'gps_address', 'gps_captured_at', 'gps_denied_reason', 'person_met', 'designation_met', 'meeting_type',
+      'meeting_highlights', 'remarks', 'visit_outcome', 'next_action', 'next_followup_date',
+      'tank_id', 'tank_number', 'water_quality', 'feeding_details', 'medication_details', 'harvest_details',
+    ];
+    const replacements = [
+      uuid, visit_date, visit_time, req.user.id, client_id,
+      latitude || null, longitude || null, gps_address || null,
+      formattedGpsCapturedAt, gps_denied_reason || null,
+      person_met || null, designation_met || null, meeting_type,
+      meeting_highlights || null, remarks || null, visit_outcome || null,
+      next_action || null, next_followup_date || null,
+      tank_id || null, tank_number || null, jsonWaterQuality, jsonFeeding, jsonMedication, jsonHarvest,
+    ];
+    if (hasDisease) {
+      fields.push('disease_details');
+      replacements.push(jsonDisease);
+    }
+    fields.push('created_by');
+    replacements.push(req.user.id);
 
     const [insertResult] = await sequelize.query(
-      `INSERT INTO visits (uuid, visit_date, visit_time, salesperson_id, client_id, latitude, longitude,
-       gps_address, gps_captured_at, gps_denied_reason, person_met, designation_met, meeting_type,
-       meeting_highlights, remarks, visit_outcome, next_action, next_followup_date,
-       tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
-       created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      {
-        replacements: [
-          uuid, visit_date, visit_time, req.user.id, client_id,
-          latitude || null, longitude || null, gps_address || null,
-          formattedGpsCapturedAt, gps_denied_reason || null,
-          person_met || null, designation_met || null, meeting_type,
-          meeting_highlights || null, remarks || null, visit_outcome || null,
-          next_action || null, next_followup_date || null,
-          tank_id || null, tank_number || null, jsonWaterQuality, jsonFeeding, jsonMedication, jsonHarvest,
-          req.user.id,
-        ],
-        transaction: t,
-      }
+      `INSERT INTO visits (${fields.join(', ')})
+       VALUES (${fields.map(() => '?').join(', ')})`,
+      { replacements, transaction: t }
     );
 
     const visitId = typeof insertResult === 'number' ? insertResult : (insertResult?.insertId || insertResult);
@@ -189,6 +198,7 @@ const getVisit = async (req, res) => {
     visit.feeding_details = safeParse(visit.feeding_details);
     visit.medication_details = safeParse(visit.medication_details);
     visit.harvest_details = safeParse(visit.harvest_details);
+    visit.disease_details = safeParse(visit.disease_details);
 
     const secDb = Number(visit.seconds_since_creation);
     const secNode = visit.created_at ? Math.max(0, Math.floor((Date.now() - new Date(visit.created_at).getTime()) / 1000)) : 999999;
@@ -242,53 +252,62 @@ const updateVisit = async (req, res) => {
       return sendError(res, 'Visit update window has expired. Visits can only be edited within 5 minutes of submission.', 403);
     }
 
-    const {
-      visit_date, visit_time, person_met, designation_met, meeting_type,
-      meeting_highlights, remarks, visit_outcome, next_action, next_followup_date,
-      brands, categories,
-      tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details,
-    } = req.body;
+  const {
+    visit_date, visit_time, person_met, designation_met, meeting_type,
+    meeting_highlights, remarks, visit_outcome, next_action, next_followup_date,
+    brands, categories,
+    tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details, disease_details,
+  } = req.body;
 
+    const cols = await getVisitCols();
+    const hasDisease = cols.has('disease_details');
     const jsonWaterQuality = water_quality !== undefined ? (water_quality ? JSON.stringify(water_quality) : null) : undefined;
     const jsonFeeding = feeding_details !== undefined ? (feeding_details ? JSON.stringify(feeding_details) : null) : undefined;
     const jsonMedication = medication_details !== undefined ? (medication_details ? JSON.stringify(medication_details) : null) : undefined;
     const jsonHarvest = harvest_details !== undefined ? (harvest_details ? JSON.stringify(harvest_details) : null) : undefined;
+    const jsonDisease = disease_details !== undefined ? (disease_details ? JSON.stringify(disease_details) : null) : undefined;
 
     const t = await sequelize.transaction();
     try {
+      const setParts = [
+        'visit_date=?', 'visit_time=?', 'person_met=?', 'designation_met=?',
+        'meeting_type=?', 'meeting_highlights=?', 'remarks=?', 'visit_outcome=?', 'next_action=?',
+        'next_followup_date=?',
+        'tank_id = COALESCE(?, tank_id)',
+        'tank_number = COALESCE(?, tank_number)',
+        'water_quality = CASE WHEN ? IS NOT NULL THEN ? ELSE water_quality END',
+        'feeding_details = CASE WHEN ? IS NOT NULL THEN ? ELSE feeding_details END',
+        'medication_details = CASE WHEN ? IS NOT NULL THEN ? ELSE medication_details END',
+        'harvest_details = CASE WHEN ? IS NOT NULL THEN ? ELSE harvest_details END',
+      ];
+      const replacements = [
+        visit_date || null,
+        visit_time || null,
+        person_met || null,
+        designation_met || null,
+        meeting_type || null,
+        meeting_highlights || null,
+        remarks || null,
+        visit_outcome || null,
+        next_action || null,
+        next_followup_date || null,
+        tank_id || null,
+        tank_number || null,
+        jsonWaterQuality !== undefined ? 1 : null, jsonWaterQuality || null,
+        jsonFeeding !== undefined ? 1 : null, jsonFeeding || null,
+        jsonMedication !== undefined ? 1 : null, jsonMedication || null,
+        jsonHarvest !== undefined ? 1 : null, jsonHarvest || null,
+      ];
+      if (hasDisease) {
+        setParts.push('disease_details = CASE WHEN ? IS NOT NULL THEN ? ELSE disease_details END');
+        replacements.push(jsonDisease !== undefined ? 1 : null, jsonDisease || null);
+      }
+      setParts.push('updated_at=NOW()');
+      replacements.push(req.params.id);
+
       await sequelize.query(
-        `UPDATE visits SET visit_date=?, visit_time=?, person_met=?, designation_met=?,
-         meeting_type=?, meeting_highlights=?, remarks=?, visit_outcome=?, next_action=?,
-         next_followup_date=?,
-         tank_id = COALESCE(?, tank_id),
-         tank_number = COALESCE(?, tank_number),
-         water_quality = CASE WHEN ? IS NOT NULL THEN ? ELSE water_quality END,
-         feeding_details = CASE WHEN ? IS NOT NULL THEN ? ELSE feeding_details END,
-         medication_details = CASE WHEN ? IS NOT NULL THEN ? ELSE medication_details END,
-         harvest_details = CASE WHEN ? IS NOT NULL THEN ? ELSE harvest_details END,
-         updated_at=NOW() WHERE id=?`,
-        {
-          replacements: [
-            visit_date || null,
-            visit_time || null,
-            person_met || null,
-            designation_met || null,
-            meeting_type || null,
-            meeting_highlights || null,
-            remarks || null,
-            visit_outcome || null,
-            next_action || null,
-            next_followup_date || null,
-            tank_id || null,
-            tank_number || null,
-            jsonWaterQuality !== undefined ? 1 : null, jsonWaterQuality || null,
-            jsonFeeding !== undefined ? 1 : null, jsonFeeding || null,
-            jsonMedication !== undefined ? 1 : null, jsonMedication || null,
-            jsonHarvest !== undefined ? 1 : null, jsonHarvest || null,
-            req.params.id,
-          ],
-          transaction: t,
-        }
+        `UPDATE visits SET ${setParts.join(', ')} WHERE id=?`,
+        { replacements, transaction: t }
       );
 
       await t.commit();
