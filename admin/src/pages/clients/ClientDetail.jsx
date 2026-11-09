@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { clientApi, visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Badge from '../../components/common/Badge';
+import Modal from '../../components/common/Modal';
 import { CLIENT_TYPES } from '../../constants';
 import { PhoneIcon, EnvelopeIcon, MapPinIcon, PencilIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
@@ -35,8 +37,12 @@ export default function ClientDetail() {
     queryFn: () => visitApi.list({ client_id: id, limit: 5 }).then(r => r.data.data),
   });
 
+  const [closeModal, setCloseModal] = useState(false);
+  const [closeReason, setCloseReason] = useState('');
+  const [reactivateModal, setReactivateModal] = useState(false);
+
   const closeFarmer = useMutation({
-    mutationFn: () => clientApi.update(id, { status: 'forcely_closed' }),
+    mutationFn: (reason) => clientApi.update(id, { status: 'forcely_closed', close_reason: reason }),
     onSuccess: async () => {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['client-profile', id] }),
@@ -44,15 +50,40 @@ export default function ClientDetail() {
         qc.invalidateQueries({ queryKey: ['clients'] }),
         qc.invalidateQueries({ queryKey: ['clients-list'] }),
       ]);
+      setCloseModal(false);
+      setCloseReason('');
       toast.success('Farmer marked as closed');
     },
     onError: (err) => toast.error(err.response?.data?.message || 'Failed to close farmer'),
   });
 
+  const reactivateFarmer = useMutation({
+    mutationFn: () => clientApi.update(id, { status: 'active' }),
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['client-profile', id] }),
+        qc.invalidateQueries({ queryKey: ['client', id] }),
+        qc.invalidateQueries({ queryKey: ['clients'] }),
+        qc.invalidateQueries({ queryKey: ['clients-list'] }),
+      ]);
+      setReactivateModal(false);
+      toast.success('Farmer reactivated');
+    },
+    onError: (err) => toast.error(err.response?.data?.message || 'Failed to reactivate farmer'),
+  });
+
   const handleCloseFarmer = () => {
-    if (window.confirm('Close this farmer? They will be moved to Forcely Closed Farmers.')) {
-      closeFarmer.mutate();
+    setCloseReason('');
+    setCloseModal(true);
+  };
+
+  const submitCloseFarmer = () => {
+    const reason = closeReason.trim();
+    if (!reason) {
+      toast.error('Please enter a reason for closing');
+      return;
     }
+    closeFarmer.mutate(reason);
   };
 
   if (isLoading) return <PageSpinner />;
@@ -87,6 +118,16 @@ export default function ClientDetail() {
               className="btn-secondary btn-sm text-amber-700 border-amber-200 hover:bg-amber-50"
             >
               <NoSymbolIcon className="w-4 h-4" /> {closeFarmer.isPending ? 'Closing...' : 'Close Farmer'}
+            </button>
+          )}
+          {['super_admin', 'admin'].includes(user?.role) && ['forcely_closed', 'forced_closed', 'closed'].includes(c.status) && (
+            <button
+              type="button"
+              onClick={() => setReactivateModal(true)}
+              disabled={reactivateFarmer.isPending}
+              className="btn-secondary btn-sm text-green-700 border-green-200 hover:bg-green-50"
+            >
+              {reactivateFarmer.isPending ? 'Activating...' : 'Move to Active'}
             </button>
           )}
           <Link to={`/clients/${id}/edit`} className="btn-secondary btn-sm">
@@ -162,6 +203,7 @@ export default function ClientDetail() {
               </div>
             )}
             <InfoRow label="Technical Executive" value={c.salesperson_name} />
+            {c.close_reason && <InfoRow label="Close Reason" value={c.close_reason} />}
             {c.notes && (
               <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
                 <strong>Notes:</strong> {c.notes}
@@ -311,6 +353,59 @@ export default function ClientDetail() {
           </div>
         </div>
       </div>
+
+      <Modal
+        open={closeModal}
+        onClose={() => !closeFarmer.isPending && setCloseModal(false)}
+        title="Close Farmer"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Enter the reason for closing this farmer. They will be moved to <span className="font-medium text-gray-900">Forcely Closed Farmers</span>.
+          </p>
+          <div>
+            <label className="label text-xs">Reason for closing <span className="text-red-500">*</span></label>
+            <textarea
+              value={closeReason}
+              onChange={(e) => setCloseReason(e.target.value)}
+              rows={3}
+              className="input text-sm"
+              placeholder="Enter reason..."
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={() => setCloseModal(false)} disabled={closeFarmer.isPending} className="btn-secondary btn-sm">
+              Cancel
+            </button>
+            <button type="button" onClick={submitCloseFarmer} disabled={closeFarmer.isPending} className="btn-primary btn-sm bg-amber-600 hover:bg-amber-700 border-amber-600">
+              {closeFarmer.isPending ? 'Closing...' : 'Confirm Close'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={reactivateModal}
+        onClose={() => !reactivateFarmer.isPending && setReactivateModal(false)}
+        title="Move to Active"
+        size="sm"
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Reactivate this farmer? They will be removed from <span className="font-medium text-gray-900">Forcely Closed Farmers</span> and marked active.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={() => setReactivateModal(false)} disabled={reactivateFarmer.isPending} className="btn-secondary btn-sm">
+              Cancel
+            </button>
+            <button type="button" onClick={() => reactivateFarmer.mutate()} disabled={reactivateFarmer.isPending} className="btn-primary btn-sm">
+              {reactivateFarmer.isPending ? 'Activating...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

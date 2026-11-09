@@ -229,11 +229,15 @@ export default function TechExecReports() {
             const maxVisits = Math.max(...filtered.map((r) => r.visits), 1);
             const barPct = Math.round((row.visits / maxVisits) * 100);
 
-            return (
-              <div
-                key={row.id}
-                className="bg-white rounded-2xl border border-gray-200/70 shadow-xs p-4 flex items-center gap-3 active:scale-[0.99] transition"
-              >
+              return (
+                <div
+                  key={row.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/clients/${row.id}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clients/${row.id}`); } }}
+                  className="bg-white rounded-2xl border border-gray-200/70 shadow-xs p-4 flex items-center gap-3 active:scale-[0.99] transition cursor-pointer hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                >
                 {/* Avatar initial */}
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
@@ -271,6 +275,7 @@ export default function TechExecReports() {
                     {row.visits}
                   </span>
                   <p className="text-[10px] text-gray-400 mt-0.5">visits</p>
+                  <p className="text-[10px] text-blue-600 font-semibold mt-1">View</p>
                 </div>
               </div>
             );

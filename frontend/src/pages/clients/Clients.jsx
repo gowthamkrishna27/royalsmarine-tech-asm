@@ -22,21 +22,23 @@ export default function Clients() {
   const [search, setSearch] = useState('');
   const [clientType, setClientType] = useState('');
   const [status, setStatus] = useState(searchParams.get('status') || '');
+  const scope = searchParams.get('scope') || '';
   const [importModal, setImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
-  const fileRef = useRef();
+  const fileRef = useRef(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clients', page, search, clientType, status],
-    queryFn: () => clientApi.list({ page, limit: 20, search, client_type: clientType, status }).then(r => r.data),
+    queryKey: ['clients', page, search, clientType, status, scope],
+    queryFn: () => clientApi.list({ page, limit: 20, search, client_type: clientType, status, scope: scope || undefined }).then(r => r.data),
   });
 
   const handleExport = async () => {
     try {
-      const res = await clientApi.export({ search, client_type: clientType, status });
+      const res = await clientApi.export({ search, client_type: clientType, status, scope: scope || undefined });
       downloadBlob(res.data, 'clients.xlsx');
+      toast.success('Exported successfully');
     } catch { toast.error('Export failed'); }
   };
 
