@@ -83,6 +83,10 @@ const buildClientWhere = (query, userId, role) => {
     }
   }
 
+  if (query.region) {
+    where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND deleted_at IS NULL)';
+    replacements.push(query.region);
+  }
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
   if (query.state) { where += ' AND c.state = ?'; replacements.push(query.state); }
   if (query.client_type) { where += ' AND c.client_type = ?'; replacements.push(query.client_type); }

@@ -7,7 +7,7 @@ const { log } = require('../utils/audit');
 
 const listUsers = async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { role, status, manager_id, search } = req.query;
+  const { role, status, manager_id, search, region } = req.query;
 
   let where = 'u.deleted_at IS NULL';
   const replacements = [];
@@ -15,6 +15,7 @@ const listUsers = async (req, res) => {
   if (role) { where += ' AND r.name = ?'; replacements.push(role); }
   if (status) { where += ' AND u.status = ?'; replacements.push(status); }
   if (manager_id) { where += ' AND u.manager_id = ?'; replacements.push(manager_id); }
+  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
   if (search) {
     where += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ? OR u.region LIKE ? OR u.area LIKE ?)';
     replacements.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);

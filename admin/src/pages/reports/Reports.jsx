@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { reportApi, userApi, masterApi } from '../../services/api';
+import { reportApi, userApi, clientApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import { downloadBlob } from '../../hooks/useApi';
@@ -19,8 +19,8 @@ import {
   Cell,
 } from 'recharts';
 
-const TABS = ['visits', 'followups', 'brand'];
-const TAB_LABELS = { visits: 'Visits', followups: 'Follow-ups', brand: 'Brand Visits' };
+const TABS = ['visits', 'followups'];
+const TAB_LABELS = { visits: 'Visits', followups: 'Follow-ups' };
 
 const BRAND_COLORS = [
   '#3b82f6',
@@ -81,40 +81,74 @@ export default function Reports() {
   const [tab, setTab] = useState('visits');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [salespersonId, setSalespersonId] = useState('');
-  const [brandId, setBrandId] = useState('');
+  const [region, setRegion] = useState('');
+  const [asmId, setAsmId] = useState('');
+  const [technicianId, setTechnicianId] = useState('');
+  const [farmerId, setFarmerId] = useState('');
 
-  const { data: salespeople } = useQuery({
-    queryKey: ['salespeople'],
-    queryFn: () => userApi.list({ role: 'sales_executive' }).then(r => r.data.data),
+  const { data: regions } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => userApi.list({ limit: 1000 }).then(r => {
+      const data = r.data.data || r.data || [];
+      const unique = [...new Set(data.map(u => u.region).filter(Boolean))];
+      return unique.map(r => ({ id: r, name: r }));
+    }),
+  });
+
+  const { data: asms } = useQuery({
+    queryKey: ['asms', region],
+    queryFn: () => userApi.list({ role: 'sales_manager', region: region || undefined, limit: 1000 }).then(r => r.data.data || r.data),
     enabled: !isSalesExec,
   });
-  const { data: brands } = useQuery({
-    queryKey: ['brands-list'],
-    queryFn: () => masterApi.brands({ status: 'active' }).then(r => r.data.data),
+
+  const { data: technicians } = useQuery({
+    queryKey: ['technicians', region, asmId],
+    queryFn: () => {
+      const params = { role: 'sales_executive', limit: 1000 };
+      if (region) params.region = region;
+      if (asmId) params.manager_id = asmId;
+      return userApi.list(params).then(r => r.data.data || r.data);
+    },
+    enabled: !isSalesExec,
+  });
+
+  const { data: farmers } = useQuery({
+    queryKey: ['farmers', region],
+    queryFn: () => clientApi.list({ limit: 1000, ...(region ? { region } : {}) }).then(r => r.data.data || r.data),
   });
 
   const { data: visitReport, isLoading: visitLoading } = useQuery({
-    queryKey: ['report-visits', fromDate, toDate, salespersonId],
-    queryFn: () => reportApi.visits({ from_date: fromDate, to_date: toDate, salesperson_id: salespersonId }).then(r => r.data.data),
+    queryKey: ['report-visits', fromDate, toDate, region, asmId, technicianId, farmerId],
+    queryFn: () => reportApi.visits({
+      from_date: fromDate, to_date: toDate,
+      region: region || undefined,
+      asm_id: asmId || undefined,
+      technician_id: technicianId || undefined,
+      farmer_id: farmerId || undefined,
+    }).then(r => r.data.data || r.data),
     enabled: tab === 'visits',
   });
 
   const { data: followupReport, isLoading: fuLoading } = useQuery({
-    queryKey: ['report-followups', fromDate, toDate, salespersonId],
-    queryFn: () => reportApi.followups({ from_date: fromDate, to_date: toDate, salesperson_id: salespersonId }).then(r => r.data.data),
+    queryKey: ['report-followups', fromDate, toDate],
+    queryFn: () => reportApi.followups({
+      from_date: fromDate, to_date: toDate,
+    }).then(r => r.data.data || r.data),
     enabled: tab === 'followups',
-  });
-
-  const { data: brandReport, isLoading: brandLoading } = useQuery({
-    queryKey: ['report-brand', fromDate, toDate, brandId],
-    queryFn: () => reportApi.brand({ from_date: fromDate, to_date: toDate, brand_id: brandId }).then(r => r.data.data),
-    enabled: tab === 'brand',
   });
 
   const handleExport = async () => {
     try {
-      const res = await reportApi.export({ type: tab, from_date: fromDate, to_date: toDate });
+      const params = {
+        type: tab, from_date: fromDate, to_date: toDate,
+      };
+      if (tab === 'visits') {
+        params.region = region || undefined;
+        params.asm_id = asmId || undefined;
+        params.technician_id = technicianId || undefined;
+        params.farmer_id = farmerId || undefined;
+      }
+      const res = await reportApi.export(params);
       downloadBlob(res.data, `${tab}-report.xlsx`);
     } catch {
       toast.error('Export failed');
@@ -138,22 +172,6 @@ export default function Reports() {
     ].filter(d => d.value > 0);
     return { completed, overdue, pending, total, pieData };
   }, [followupReport]);
-
-  // Brand summary & pie data
-  const brandSummary = useMemo(() => {
-    if (!brandReport?.length) return null;
-    const total = brandReport.reduce((acc, b) => acc + Number(b.total_visits || 0), 0);
-    const topBrand = brandReport[0]?.brand_name || 'N/A';
-    const pieData = brandReport
-      .filter(b => Number(b.total_visits) > 0)
-      .slice(0, 7)
-      .map((b, idx) => ({
-        name: b.brand_name || 'Untagged',
-        value: Number(b.total_visits),
-        fill: BRAND_COLORS[idx % BRAND_COLORS.length],
-      }));
-    return { total, topBrand, pieData };
-  }, [brandReport]);
 
   // Visit summary with pie data
   const [visitChartType, setVisitChartType] = useState('pie'); // 'pie' or 'bar'
@@ -193,7 +211,7 @@ export default function Reports() {
 
       {/* Tabs - No horizontal scrolling */}
       <div className="w-full">
-        <div className="grid grid-cols-3 bg-gray-100 p-1 rounded-xl w-full sm:w-fit sm:flex gap-1">
+        <div className="grid grid-cols-2 bg-gray-100 p-1 rounded-xl w-full sm:w-fit sm:flex gap-1">
           {TABS.map(t => (
             <button
               key={t}
@@ -210,14 +228,44 @@ export default function Reports() {
 
       {/* Filters - Responsive Grid, No Overflow */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5">
-        {!isSalesExec && tab !== 'brand' && (
+        {tab === 'visits' && !isSalesExec && (
           <select
-            value={salespersonId}
-            onChange={e => setSalespersonId(e.target.value)}
+            value={region}
+            onChange={e => { setRegion(e.target.value); setAsmId(''); setTechnicianId(''); }}
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
-            <option value="">All Technical Executives</option>
-            {salespeople?.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            <option value="">All Regions</option>
+            {regions?.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+        )}
+        {tab === 'visits' && !isSalesExec && (
+          <select
+            value={asmId}
+            onChange={e => { setAsmId(e.target.value); setTechnicianId(''); }}
+            className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
+          >
+            <option value="">All ASMs</option>
+            {asms?.map(a => <option key={a.id} value={a.id}>{a.full_name}</option>)}
+          </select>
+        )}
+        {tab === 'visits' && !isSalesExec && (
+          <select
+            value={technicianId}
+            onChange={e => setTechnicianId(e.target.value)}
+            className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
+          >
+            <option value="">All Technicians</option>
+            {technicians?.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+          </select>
+        )}
+        {tab === 'visits' && !isSalesExec && (
+          <select
+            value={farmerId}
+            onChange={e => setFarmerId(e.target.value)}
+            className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
+          >
+            <option value="">All Farmers</option>
+            {farmers?.map(f => <option key={f.id} value={f.id}>{f.company_name}</option>)}
           </select>
         )}
         {isSalesExec && (
@@ -225,16 +273,6 @@ export default function Reports() {
             <span className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" />
             <span className="truncate">My Reports: <strong>{user?.full_name}</strong></span>
           </div>
-        )}
-        {tab === 'brand' && (
-          <select
-            value={brandId}
-            onChange={e => setBrandId(e.target.value)}
-            className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
-          >
-            <option value="">All Brands</option>
-            {brands?.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
         )}
         <input
           type="date"
@@ -263,11 +301,6 @@ export default function Reports() {
                 </div>
                 {isSalesExec ? (
                   <>
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                      <p className="text-xs text-gray-500 font-medium">Top Brand Logged</p>
-                      <p className="text-base sm:text-lg font-bold text-blue-600 mt-1 truncate">{brandSummary?.topBrand || 'N/A'}</p>
-                      <p className="text-[11px] text-gray-400">Most visited brand</p>
-                    </div>
                     <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
                       <p className="text-xs text-gray-500 font-medium">Completed Follow-ups</p>
                       <p className="text-2xl font-bold text-emerald-600 mt-1">{followupSummary?.completed || 0}</p>
@@ -585,131 +618,6 @@ export default function Reports() {
                     {!followupReport?.length && (
                       <tr><td colSpan={5} className="text-center text-gray-400 py-8">No follow-up data found</td></tr>
                     )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )
-      )}
-
-      {/* 3. BRAND VISITS TAB */}
-      {tab === 'brand' && (
-        brandLoading ? <PageSpinner /> : (
-          <div className="space-y-4">
-            {/* Minimal KPI Highlights */}
-            {brandSummary && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                  <p className="text-xs text-gray-500 font-medium">Total Brand Visits</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{brandSummary.total}</p>
-                </div>
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                  <p className="text-xs text-gray-500 font-medium">Leading Brand</p>
-                  <p className="text-lg font-bold text-purple-600 mt-1 truncate">{brandSummary.topBrand}</p>
-                </div>
-                <div className="col-span-2 sm:col-span-1 bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                  <p className="text-xs text-gray-500 font-medium">Tracked Brands</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{brandReport?.length || 0}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Minimal Brand Share Pie / Donut Chart */}
-            {brandSummary?.pieData?.length > 0 && (
-              <div className="bg-white p-4 rounded-xl border border-gray-200/80 shadow-xs">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Brand Share Distribution</h4>
-                  <span className="text-[11px] text-gray-400">By Field Visits</span>
-                </div>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 py-2">
-                  <div className="h-40 w-40 relative flex items-center justify-center flex-shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Tooltip content={<MinimalPieTooltip />} />
-                        <Pie
-                          data={brandSummary.pieData}
-                          innerRadius={46}
-                          outerRadius={68}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {brandSummary.pieData.map((entry, index) => (
-                            <Cell key={`brand-cell-${index}`} fill={entry.fill} />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="absolute text-center pointer-events-none">
-                      <p className="text-xs text-gray-400 font-medium">Visits</p>
-                      <p className="text-base font-bold text-gray-900">{brandSummary.total}</p>
-                    </div>
-                  </div>
-
-                  {/* Clean Minimal Brand Legend */}
-                  <div className="grid grid-cols-2 gap-2 w-full sm:w-auto text-xs">
-                    {brandSummary.pieData.map(item => (
-                      <div key={item.name} className="flex items-center justify-between gap-3 bg-gray-50 px-2.5 py-1.5 rounded-lg">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.fill }} />
-                          <span className="font-medium text-gray-700 truncate max-w-[100px]">{item.name}</span>
-                        </div>
-                        <span className="font-bold text-gray-900">{item.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Detailed Table - Zero horizontal scroll */}
-            <div className="card overflow-hidden">
-              <div className="card-header flex items-center justify-between">
-                <h3 className="font-semibold text-sm">{isSalesExec ? 'My Brand Visits' : 'Brand Field Visits'}</h3>
-                <span className="text-xs text-gray-400">{brandReport?.length || 0} Brands</span>
-              </div>
-              <div className="w-full">
-                <table className="table w-full">
-                  <thead>
-                    <tr>
-                      <th className="py-2.5">Brand Name</th>
-                      <th className="py-2.5 text-right">Total Visits</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {brandReport?.map((r, idx) => {
-                      const count = Number(r.total_visits || 0);
-                      const maxCount = Number(brandReport[0]?.total_visits || 1);
-                      const percent = Math.round((count / (brandSummary?.total || 1)) * 100);
-                      const relativeBar = Math.round((count / maxCount) * 100);
-                      const color = BRAND_COLORS[idx % BRAND_COLORS.length];
-                      return (
-                        <tr key={r.brand_id || r.brand_name || idx}>
-                          <td className="font-semibold text-gray-900 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                              <span className="truncate">{r.brand_name || 'Untagged'}</span>
-                            </div>
-                            {/* Inline Micro Share Bar */}
-                            <div className="flex items-center gap-2 mt-1 pl-4 max-w-[180px] sm:max-w-xs">
-                              <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
-                                <div
-                                  className="h-1 rounded-full transition-all duration-500"
-                                  style={{ width: `${relativeBar}%`, backgroundColor: color }}
-                                />
-                              </div>
-                              <span className="text-[10px] text-gray-400 font-medium flex-shrink-0">
-                                {percent}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="text-right py-3 align-middle">
-                            <Badge color="blue">{count}</Badge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {!brandReport?.length && <tr><td colSpan={2} className="text-center text-gray-400 py-8">No brand visit data</td></tr>}
                   </tbody>
                 </table>
               </div>
