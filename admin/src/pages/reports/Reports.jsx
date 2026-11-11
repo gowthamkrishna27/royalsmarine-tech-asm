@@ -88,7 +88,7 @@ export default function Reports() {
 
   const { data: regions } = useQuery({
     queryKey: ['regions'],
-    queryFn: () => userApi.list({ limit: 1000 }).then(r => {
+    queryFn: () => userApi.list({ role: 'sales_manager', status: 'active', limit: 1000 }).then(r => {
       const data = r.data.data || r.data || [];
       const unique = [...new Set(data.map(u => u.region).filter(Boolean))];
       return unique.map(r => ({ id: r, name: r }));
@@ -97,14 +97,14 @@ export default function Reports() {
 
   const { data: asms } = useQuery({
     queryKey: ['asms', region],
-    queryFn: () => userApi.list({ role: 'sales_manager', region: region || undefined, limit: 1000 }).then(r => r.data.data || r.data),
+    queryFn: () => userApi.list({ role: 'sales_manager', status: 'active', region: region || undefined, limit: 1000 }).then(r => r.data.data || r.data),
     enabled: !isSalesExec,
   });
 
   const { data: technicians } = useQuery({
     queryKey: ['technicians', region, asmId],
     queryFn: () => {
-      const params = { role: 'sales_executive', limit: 1000 };
+      const params = { role: 'sales_executive', status: 'active', limit: 1000 };
       if (region) params.region = region;
       if (asmId) params.manager_id = asmId;
       return userApi.list(params).then(r => r.data.data || r.data);
@@ -113,8 +113,13 @@ export default function Reports() {
   });
 
   const { data: farmers } = useQuery({
-    queryKey: ['farmers', region],
-    queryFn: () => clientApi.list({ limit: 1000, ...(region ? { region } : {}) }).then(r => r.data.data || r.data),
+    queryKey: ['farmers', region, technicianId],
+    queryFn: () => {
+      const params = { limit: 1000 };
+      if (region) params.region = region;
+      if (technicianId) params.salesperson_id = technicianId;
+      return clientApi.list(params).then(r => r.data.data || r.data);
+    },
   });
 
   const { data: visitReport, isLoading: visitLoading } = useQuery({
@@ -229,9 +234,9 @@ export default function Reports() {
       {/* Filters - Responsive Grid, No Overflow */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5">
         {tab === 'visits' && !isSalesExec && (
-          <select
+            <select
             value={region}
-            onChange={e => { setRegion(e.target.value); setAsmId(''); setTechnicianId(''); }}
+            onChange={e => { setRegion(e.target.value); setAsmId(''); setTechnicianId(''); setFarmerId(''); }}
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All Regions</option>
@@ -241,7 +246,7 @@ export default function Reports() {
         {tab === 'visits' && !isSalesExec && (
           <select
             value={asmId}
-            onChange={e => { setAsmId(e.target.value); setTechnicianId(''); }}
+            onChange={e => { setAsmId(e.target.value); setTechnicianId(''); setFarmerId(''); }}
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All ASMs</option>
@@ -251,7 +256,7 @@ export default function Reports() {
         {tab === 'visits' && !isSalesExec && (
           <select
             value={technicianId}
-            onChange={e => setTechnicianId(e.target.value)}
+            onChange={e => { setTechnicianId(e.target.value); setFarmerId(''); }}
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All Technicians</option>

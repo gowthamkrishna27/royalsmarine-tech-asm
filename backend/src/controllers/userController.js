@@ -15,7 +15,15 @@ const listUsers = async (req, res) => {
   if (role) { where += ' AND r.name = ?'; replacements.push(role); }
   if (status) { where += ' AND u.status = ?'; replacements.push(status); }
   if (manager_id) { where += ' AND u.manager_id = ?'; replacements.push(manager_id); }
-  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
+  if (region) {
+    if (role === 'sales_manager') {
+      where += ' AND u.region = ?';
+      replacements.push(region);
+    } else {
+      where += ' AND (u.region = ? OR u.id IN (SELECT id FROM users WHERE manager_id IN (SELECT id FROM users WHERE region = ? AND role_id = (SELECT id FROM roles WHERE name = \'sales_manager\'))))';
+      replacements.push(region, region);
+    }
+  }
   if (search) {
     where += ' AND (u.full_name LIKE ? OR u.email LIKE ? OR u.mobile LIKE ? OR u.region LIKE ? OR u.area LIKE ?)';
     replacements.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);

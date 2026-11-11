@@ -2,7 +2,7 @@ const router = require('express').Router();
 const { salespersonVisitReport, followupReport, billingReport, exportReport, brandReport, momReport, productMovementReport } = require('../controllers/reportController');
 const { authenticate, authorize } = require('../middleware/auth');
 
-const viewRoles = ['super_admin', 'admin', 'sales_manager', 'sales_executive', 'management'];
+const viewRoles = ['super_admin', 'admin', 'sales_manager', 'sales_executive', 'management', 'backend_ops'];
 
 router.get('/visits', authenticate, authorize(...viewRoles), salespersonVisitReport);
 router.get('/followups', authenticate, authorize(...viewRoles), followupReport);

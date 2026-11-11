@@ -10,7 +10,7 @@ const salespersonVisitReport = async (req, res) => {
   if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
   if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
   if (region) { where += ' AND u.region = ?'; replacements.push(region); }
-  if (asm_id) { where += ' AND u.manager_id = ?'; replacements.push(asm_id); }
+  if (asm_id) { where += ' AND (u.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
   if (technician_id) { where += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
 
   // Data isolation: Sales executive can only see their own reports
@@ -53,7 +53,7 @@ const followupReport = async (req, res) => {
   if (status) { where += ' AND f.status = ?'; replacements.push(status); }
   if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
   if (region) { where += ' AND u.region = ?'; replacements.push(region); }
-  if (asm_id) { where += ' AND u.manager_id = ?'; replacements.push(asm_id); }
+  if (asm_id) { where += ' AND (u.manager_id = ? OR f.assigned_salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
   if (technician_id) { where += ' AND f.assigned_salesperson_id = ?'; replacements.push(technician_id); }
 
   // Data isolation: Sales executive can only see their own followups
@@ -107,7 +107,7 @@ const exportReport = async (req, res) => {
       if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
       if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
       if (region) { where += ' AND sp.region = ?'; replacements.push(region); }
-      if (asm_id) { where += ' AND sp.manager_id = ?'; replacements.push(asm_id); }
+      if (asm_id) { where += ' AND (sp.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
       if (technician_id) { where += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
 
       if (req.user.role === 'sales_executive') {
@@ -134,7 +134,7 @@ const exportReport = async (req, res) => {
       if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
       if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
       if (region) { where += ' AND sp.region = ?'; replacements.push(region); }
-      if (asm_id) { where += ' AND sp.manager_id = ?'; replacements.push(asm_id); }
+      if (asm_id) { where += ' AND (sp.manager_id = ? OR f.assigned_salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
       if (technician_id) { where += ' AND f.assigned_salesperson_id = ?'; replacements.push(technician_id); }
 
       if (req.user.role === 'sales_executive') {
