@@ -7,6 +7,13 @@ const { log } = require('../utils/audit');
 
 const VISIT_EDIT_WINDOW_SECONDS = 5 * 60; // Visits can only be updated within 5 minutes of submission
 
+const getVisitCols = async () => {
+  const [cols] = await sequelize.query(
+    `SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_NAME = 'visits' AND TABLE_SCHEMA = DATABASE()`
+  );
+  return new Set(cols.map(c => c.COLUMN_NAME));
+};
+
 const buildVisitWhere = (query, userId, role) => {
   let where = 'v.deleted_at IS NULL';
   const replacements = [];
