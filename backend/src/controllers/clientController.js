@@ -957,7 +957,7 @@ const getMapLocations = async (req, res) => {
 
 const listHarvestedTanks = async (req, res) => {
   try {
-    const { search, district, culture_type } = req.query;
+    const { search, district, culture_type, harvest_type } = req.query;
 
     let scopingClause = '';
     const replacements = [];
@@ -1062,19 +1062,78 @@ const listHarvestedTanks = async (req, res) => {
         return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
       });
 
-      let latestHarvest = null;
+      let finalHarvest = null;
+      const allPartialHarvests = [];
+
       for (const v of parsedVisits) {
-        if (v.harvest_details && (v.harvest_details.final_harvest || (Array.isArray(v.harvest_details.partial_harvests) && v.harvest_details.partial_harvests.length))) {
-          latestHarvest = v.harvest_details;
-          break;
+        const hd = v.harvest_details;
+        if (hd) {
+          if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+            const hasFinalData = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+            if (hasFinalData) {
+              finalHarvest = {
+                ...hd.final_harvest,
+                date: hd.final_harvest.date || v.visit_date,
+                visit_id: v.id,
+              };
+            }
+          }
+
+          if (Array.isArray(hd.partial_harvests) && hd.partial_harvests.length) {
+            for (const p of hd.partial_harvests) {
+              allPartialHarvests.push({
+                ...p,
+                date: p.date || v.visit_date,
+                visit_id: v.id,
+              });
+            }
+          } else if (hd.partial_harvest && typeof hd.partial_harvest === 'object') {
+            const hasPartialData = Object.values(hd.partial_harvest).some(val => val !== null && val !== undefined && val !== '');
+            if (hasPartialData) {
+              allPartialHarvests.push({
+                ...hd.partial_harvest,
+                date: hd.partial_harvest.date || v.visit_date,
+                visit_id: v.id,
+              });
+            }
+          }
         }
       }
 
-      tank.harvest_info = latestHarvest || null;
+      // If tank status is marked harvested or inactive, but no visit recorded final_harvest, create fallback
+      if (!finalHarvest && (tank.status === 'harvested' || tank.status === 'inactive')) {
+        finalHarvest = {
+          doc: tank.doc || '',
+          abw: tank.abw || '',
+          total_biomass: tank.total_biomass || '',
+          count: tank.count || '',
+          fcr: tank.fcr || '',
+          survival_rate: tank.survival_rate || '',
+          remarks: tank.remarks || 'Pond status set to harvested',
+          date: tank.updated_at ? String(tank.updated_at).substring(0, 10) : ''
+        };
+      }
+
+      const hasPartial = allPartialHarvests.length > 0;
+      const hasFinal = !!finalHarvest || tank.status === 'harvested';
+
+      tank.harvest_info = {
+        final_harvest: finalHarvest,
+        partial_harvests: allPartialHarvests,
+      };
+      tank.has_partial_harvest = hasPartial;
+      tank.has_final_harvest = hasFinal;
       tank.visits_history = parsedVisits;
     }
 
-    return sendSuccess(res, 'Harvested tanks fetched successfully', tanks);
+    let resultTanks = tanks;
+    if (harvest_type === 'partial') {
+      resultTanks = tanks.filter(t => t.has_partial_harvest);
+    } else if (harvest_type === 'final') {
+      resultTanks = tanks.filter(t => t.has_final_harvest);
+    }
+
+    return sendSuccess(res, 'Harvested tanks fetched successfully', resultTanks);
   } catch (err) {
     console.error('Error fetching harvested tanks:', err);
     return sendError(res, err.message, 500);

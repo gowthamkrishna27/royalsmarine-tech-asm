@@ -449,7 +449,7 @@ export default function VisitForm() {
 
       gpsService.reverseGeocode(coords.lat, coords.lng).then(addr => {
         setValue('gps_address', addr);
-      }).catch(() => {});
+      }).catch(() => { });
 
       return coords;
     } catch (err) {
@@ -527,517 +527,562 @@ export default function VisitForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <fieldset disabled={isLocked} className="space-y-4 border-0 p-0 m-0 min-w-0">
-        {/* Visit Details */}
-        <div className="card">
-          <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Visit Details</h3></div>
-          <div className="card-body p-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="label text-[11px] mb-1">Date <span className="text-red-500">*</span></label>
-                <input type="date" {...register('visit_date', { required: true })} className="input text-xs py-1" />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Time <span className="text-red-500">*</span></label>
-                <input type="time" {...register('visit_time', { required: true })} className="input text-xs py-1" />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Farmer <span className="text-red-500">*</span></label>
-                <select {...register('client_id', { required: 'Farmer required' })} className={`input text-xs py-1 ${errors.client_id ? 'input-error' : ''}`}>
-                  <option value="">Select farmer...</option>
-                  {clients?.map(c => <option key={c.id} value={c.id}>{c.company_name} — {c.city || c.area || ''}</option>)}
-                </select>
-                {errors.client_id && <p className="form-error">{errors.client_id.message}</p>}
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Tank / Pond</label>
-                <select
-                  {...register('tank_number')}
-                  onChange={(e) => handleTankSelection(e.target.value)}
-                  disabled={!clientId}
-                  className="input text-xs py-1"
-                >
-                  <option value="">
-                    {!clientId
-                      ? 'Select farmer first'
-                      : tanksLoading
-                        ? 'Loading tanks...'
-                        : selectedClient?.ponds?.length
-                          ? 'Select tank...'
-                          : 'No tanks found for this farmer'}
-                  </option>
-                  {selectedClient?.ponds?.map(p => (
-                    <option key={p.id} value={p.tank_number || p.pond_name}>
-                      {p.tank_number || p.pond_name} {p.area_acres ? `(${p.area_acres} ac)` : ''}
+          {/* Visit Details */}
+          <div className="card">
+            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Visit Details</h3></div>
+            <div className="card-body p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="label text-[11px] mb-1">Date <span className="text-red-500">*</span></label>
+                  <input type="date" {...register('visit_date', { required: true })} className="input text-xs py-1" />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Time <span className="text-red-500">*</span></label>
+                  <input type="time" {...register('visit_time', { required: true })} className="input text-xs py-1" />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Farmer <span className="text-red-500">*</span></label>
+                  <select {...register('client_id', { required: 'Farmer required' })} className={`input text-xs py-1 ${errors.client_id ? 'input-error' : ''}`}>
+                    <option value="">Select farmer...</option>
+                    {clients?.map(c => <option key={c.id} value={c.id}>{c.company_name} — {c.city || c.area || ''}</option>)}
+                  </select>
+                  {errors.client_id && <p className="form-error">{errors.client_id.message}</p>}
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Tank / Pond</label>
+                  <select
+                    {...register('tank_number')}
+                    onChange={(e) => handleTankSelection(e.target.value)}
+                    disabled={!clientId}
+                    className="input text-xs py-1"
+                  >
+                    <option value="">
+                      {!clientId
+                        ? 'Select farmer first'
+                        : tanksLoading
+                          ? 'Loading tanks...'
+                          : selectedClient?.ponds?.length
+                            ? 'Select tank...'
+                            : 'No tanks found for this farmer'}
                     </option>
-                  ))}
-                </select>
+                    {selectedClient?.ponds?.map(p => (
+                      <option key={p.id} value={p.tank_number || p.pond_name}>
+                        {p.tank_number || p.pond_name} {p.area_acres ? `(${p.area_acres} ac)` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Meeting Type & GPS Row */}
+              <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
+                <div className="w-full sm:w-80">
+                  <label className="label text-[11px] mb-1">Meeting / Visit Type</label>
+                  <select {...register('meeting_type')} className="input text-xs py-1">
+                    <option value="casual">Casual Visit</option>
+                    <option value="water_quality">Water Quality</option>
+                    <option value="feeding_details">Feeding Details</option>
+                    <option value="medication_details">Medication & Treatments</option>
+                    <option value="disease">Disease</option>
+                    <option value="harvest_details">Harvest Details</option>
+                    <option value="all">All Details (Full Inspection)</option>
+                  </select>
+                </div>
+
+                {/* Automatic GPS Indicator */}
+                <div className="flex items-center gap-1.5 self-end text-xs text-gray-500">
+                  <MapPinIcon className="w-3.5 h-3.5 text-gray-400" />
+                  {gpsCoords ? (
+                    <span className="font-mono text-gray-600">
+                      {gpsCoords.lat.toFixed(4)}, {gpsCoords.lng.toFixed(4)} ✓
+                    </span>
+                  ) : (
+                    <span className="text-gray-400">
+                      {gpsLoading ? 'Acquiring GPS...' : 'Auto-captured on submit'}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
+          </div>
 
-            {/* Meeting Type & GPS Row */}
-            <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3">
-              <div className="w-full sm:w-80">
-                <label className="label text-[11px] mb-1">Meeting / Visit Type</label>
-                <select {...register('meeting_type')} className="input text-xs py-1">
-                  <option value="casual">Casual Visit</option>
-                  <option value="water_quality">Water Quality</option>
-                  <option value="feeding_details">Feeding Details</option>
-                  <option value="medication_details">Medication & Treatments</option>
-                  <option value="disease">Disease</option>
-                  <option value="harvest_details">Harvest Details</option>
-                  <option value="all">All Details (Full Inspection)</option>
-                </select>
+          {/* Water Quality (Only displays when selected) */}
+          {showWaterQuality && (
+            <div className="card">
+              <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Water Quality</h3></div>
+              <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                <div>
+                  <label className="label text-[11px] mb-1">Test Date</label>
+                  <input
+                    type="date"
+                    value={waterQuality.date || ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, date: e.target.value }))}
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">DOC</label>
+                  <input
+                    type="number"
+                    value={waterQuality.doc ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, doc: e.target.value }))}
+                    placeholder="DOC"
+                    readOnly={isDocAutoOnly && !isEdit}
+                    className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Salinity (ppt)<span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={waterQuality.salinity ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, salinity: e.target.value }))}
+                    placeholder="ppt"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">pH <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={waterQuality.ph ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, ph: e.target.value }))}
+                    placeholder="pH"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Alkalinity (ppm)</label>
+                  <input
+                    type="number"
+                    value={waterQuality.alkalinity ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, alkalinity: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Hardness (ppm)</label>
+                  <input
+                    type="number"
+                    value={waterQuality.hardness ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, hardness: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Ammonia (ppm)<span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={waterQuality.ammonia ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, ammonia: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Nitrite (ppm)<span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={waterQuality.nitrite ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, nitrite: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">DO (ppm)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={waterQuality.dissolved_oxygen ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, dissolved_oxygen: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Potassium (K)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={waterQuality.potassium ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, potassium: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">H₂S (ppm)</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={waterQuality.hydrogen_sulphide ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, hydrogen_sulphide: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Chlorine (Cl)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={waterQuality.chlorine ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, chlorine: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Iron (Fe)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={waterQuality.iron ?? ''}
+                    onChange={e => setWaterQuality(p => ({ ...p, iron: e.target.value }))}
+                    placeholder="ppm"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Water Colour</label>
+                  <select
+                    value={waterQuality.water_colour || 'Light Green'}
+                    onChange={e => setWaterQuality(p => ({ ...p, water_colour: e.target.value }))}
+                    className="input text-xs py-1"
+                  >
+                    {WATER_COLOUR_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  </select>
+                </div>
               </div>
+            </div>
+          )}
 
-              {/* Automatic GPS Indicator */}
-              <div className="flex items-center gap-1.5 self-end text-xs text-gray-500">
-                <MapPinIcon className="w-3.5 h-3.5 text-gray-400" />
-                {gpsCoords ? (
-                  <span className="font-mono text-gray-600">
-                    {gpsCoords.lat.toFixed(4)}, {gpsCoords.lng.toFixed(4)} ✓
-                  </span>
+          {/* Feeding Details (Only displays when selected) */}
+          {showFeeding && (
+            <div className="card">
+              <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Feeding Details</h3></div>
+              <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
+                <div>
+                  <label className="label text-[11px] mb-1">DOC</label>
+                  <input
+                    type="number"
+                    value={feedingDetails.doc ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, doc: e.target.value }))}
+                    placeholder="DOC"
+                    readOnly={isDocAutoOnly && !isEdit}
+                    className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={feedingDetails.date || ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, date: e.target.value }))}
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Seed Qty (Lakhs)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={feedingDetails.seed_quantity ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, seed_quantity: e.target.value }))}
+                    placeholder="Lakhs"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">ABW (g)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={feedingDetails.abw ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, abw: e.target.value }))}
+                    placeholder="grams"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Daily Feed (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={feedingDetails.daily_feed_quantity ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, daily_feed_quantity: e.target.value }))}
+                    placeholder="kg"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Cumulative Feed (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={feedingDetails.cumulative_feed ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, cumulative_feed: e.target.value }))}
+                    placeholder="kg"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Total Biomass (kg)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={feedingDetails.total_biomass ?? ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, total_biomass: e.target.value }))}
+                    placeholder="kg"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">FCR (Auto)</label>
+                  <input
+                    type="text"
+                    readOnly
+                    value={feedingDetails.fcr || '—'}
+                    className="input text-xs py-1 bg-gray-50 text-gray-700 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Check-Tray Qty</label>
+                  <input
+                    type="text"
+                    value={feedingDetails.check_tray_feed_quantity || ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, check_tray_feed_quantity: e.target.value }))}
+                    placeholder="e.g. 150g"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div>
+                  <label className="label text-[11px] mb-1">Check-Tray Obs. Time</label>
+                  <input
+                    type="text"
+                    value={feedingDetails.check_tray_observation_time || ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, check_tray_observation_time: e.target.value }))}
+                    placeholder="e.g. 1.5 hrs"
+                    className="input text-xs py-1"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-4 lg:col-span-5">
+                  <input
+                    type="text"
+                    value={feedingDetails.remarks || ''}
+                    onChange={e => setFeedingDetails(p => ({ ...p, remarks: e.target.value }))}
+                    placeholder="Feeding remarks..."
+                    className="input text-xs py-1"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Medication Details (Only displays when selected) */}
+          {showMedication && (
+            <div className="card">
+              <div className="card-header flex items-center justify-between py-2.5 px-4">
+                <h3 className="font-semibold text-gray-900 text-sm">Medication & Treatments</h3>
+                <button
+                  type="button"
+                  onClick={addMedication}
+                  className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
+                >
+                  <PlusIcon className="w-3 h-3" />
+                  <span>Add Entry</span>
+                </button>
+              </div>
+              <div className="card-body p-4 space-y-2">
+                {medications.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic">No medication entries added. Click &quot;Add Entry&quot; to add.</p>
                 ) : (
-                  <span className="text-gray-400">
-                    {gpsLoading ? 'Acquiring GPS...' : 'Auto-captured on submit'}
-                  </span>
+                  medications.map((med, idx) => (
+                    <div key={med.id || idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-center p-2 rounded-lg bg-gray-50 border border-gray-100">
+                      <select
+                        value={med.treatment_type || 'preventive'}
+                        onChange={e => updateMedication(idx, 'treatment_type', e.target.value)}
+                        className="input text-xs py-1"
+                      >
+                        <option value="preventive">Preventive</option>
+                        <option value="curative">Curative</option>
+                      </select>
+
+                      <select
+                        value={med.category || 'probiotics'}
+                        onChange={e => updateMedication(idx, 'category', e.target.value)}
+                        className="input text-xs py-1"
+                      >
+                        {MEDICATION_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+
+                      <input
+                        type="text"
+                        value={med.product_name || ''}
+                        onChange={e => updateMedication(idx, 'product_name', e.target.value)}
+                        placeholder="Product name"
+                        className="input text-xs py-1"
+                      />
+
+                      <input
+                        type="text"
+                        value={med.dosage || ''}
+                        onChange={e => updateMedication(idx, 'dosage', e.target.value)}
+                        placeholder="Dosage"
+                        className="input text-xs py-1"
+                      />
+
+                      <input
+                        type="text"
+                        value={med.disease_identification || ''}
+                        onChange={e => updateMedication(idx, 'disease_identification', e.target.value)}
+                        placeholder="Disease / target"
+                        className="input text-xs py-1"
+                      />
+
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={med.remarks || ''}
+                          onChange={e => updateMedication(idx, 'remarks', e.target.value)}
+                          placeholder="Remarks"
+                          className="input text-xs py-1 flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeMedication(idx)}
+                          className="p-1 text-gray-400 hover:text-red-600 rounded"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Water Quality (Only displays when selected) */}
-        {showWaterQuality && (
-          <div className="card">
-            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Water Quality</h3></div>
-            <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-              <div>
-                <label className="label text-[11px] mb-1">Test Date</label>
-                <input
-                  type="date"
-                  value={waterQuality.date || ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, date: e.target.value }))}
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">DOC</label>
-                <input
-                  type="number"
-                  value={waterQuality.doc ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, doc: e.target.value }))}
-                  placeholder="DOC"
-                  readOnly={isDocAutoOnly && !isEdit}
-                  className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Salinity (ppt)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={waterQuality.salinity ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, salinity: e.target.value }))}
-                  placeholder="ppt"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">pH</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={waterQuality.ph ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, ph: e.target.value }))}
-                  placeholder="pH"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Alkalinity (ppm)</label>
-                <input
-                  type="number"
-                  value={waterQuality.alkalinity ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, alkalinity: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Hardness (ppm)</label>
-                <input
-                  type="number"
-                  value={waterQuality.hardness ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, hardness: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Ammonia (ppm)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={waterQuality.ammonia ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, ammonia: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Nitrite (ppm)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={waterQuality.nitrite ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, nitrite: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">DO (ppm)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={waterQuality.dissolved_oxygen ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, dissolved_oxygen: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Potassium (K)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={waterQuality.potassium ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, potassium: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">H₂S (ppm)</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  value={waterQuality.hydrogen_sulphide ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, hydrogen_sulphide: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Chlorine (Cl)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={waterQuality.chlorine ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, chlorine: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Iron (Fe)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={waterQuality.iron ?? ''}
-                  onChange={e => setWaterQuality(p => ({ ...p, iron: e.target.value }))}
-                  placeholder="ppm"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Water Colour</label>
-                <select
-                  value={waterQuality.water_colour || 'Light Green'}
-                  onChange={e => setWaterQuality(p => ({ ...p, water_colour: e.target.value }))}
-                  className="input text-xs py-1"
-                >
-                  {WATER_COLOUR_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
+          {showDisease && (
+            <div className="card">
+              <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Disease</h3></div>
+              <div className="card-body p-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                  {DISEASE_OPTIONS.map((d) => {
+                    const checked = (diseaseDetails.diseases || []).includes(d);
+                    return (
+                      <label key={d} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs cursor-pointer select-none ${checked ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 shrink-0"
+                          checked={checked}
+                          onChange={() => setDiseaseDetails((prev) => {
+                            const cur = prev.diseases || [];
+                            return { ...prev, diseases: checked ? cur.filter(x => x !== d) : [...cur, d] };
+                          })}
+                        />
+                        <span className="leading-tight">{d}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Feeding Details (Only displays when selected) */}
-        {showFeeding && (
-          <div className="card">
-            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Feeding Details</h3></div>
-            <div className="card-body p-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2.5">
-              <div>
-                <label className="label text-[11px] mb-1">DOC</label>
-                <input
-                  type="number"
-                  value={feedingDetails.doc ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, doc: e.target.value }))}
-                  placeholder="DOC"
-                  readOnly={isDocAutoOnly && !isEdit}
-                  className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                />
+          {/* Harvest Details (Only displays when selected) */}
+          {showHarvest && (
+            <div className="card">
+              <div className="card-header flex items-center justify-between py-2.5 px-4">
+                <h3 className="font-semibold text-gray-900 text-sm">Harvest Details</h3>
+                {partialHarvests.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={addPartialHarvest}
+                    className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
+                  >
+                    <PlusIcon className="w-3 h-3" />
+                    <span>+ Partial Harvest</span>
+                  </button>
+                )}
               </div>
-              <div>
-                <label className="label text-[11px] mb-1">Date</label>
-                <input
-                  type="date"
-                  value={feedingDetails.date || ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, date: e.target.value }))}
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Seed Qty (Lakhs)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={feedingDetails.seed_quantity ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, seed_quantity: e.target.value }))}
-                  placeholder="Lakhs"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">ABW (g)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={feedingDetails.abw ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, abw: e.target.value }))}
-                  placeholder="grams"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Daily Feed (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={feedingDetails.daily_feed_quantity ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, daily_feed_quantity: e.target.value }))}
-                  placeholder="kg"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Cumulative Feed (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={feedingDetails.cumulative_feed ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, cumulative_feed: e.target.value }))}
-                  placeholder="kg"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Total Biomass (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={feedingDetails.total_biomass ?? ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, total_biomass: e.target.value }))}
-                  placeholder="kg"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">FCR (Auto)</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={feedingDetails.fcr || '—'}
-                  className="input text-xs py-1 bg-gray-50 text-gray-700 font-mono"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Check-Tray Qty</label>
-                <input
-                  type="text"
-                  value={feedingDetails.check_tray_feed_quantity || ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, check_tray_feed_quantity: e.target.value }))}
-                  placeholder="e.g. 150g"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div>
-                <label className="label text-[11px] mb-1">Check-Tray Obs. Time</label>
-                <input
-                  type="text"
-                  value={feedingDetails.check_tray_observation_time || ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, check_tray_observation_time: e.target.value }))}
-                  placeholder="e.g. 1.5 hrs"
-                  className="input text-xs py-1"
-                />
-              </div>
-              <div className="col-span-2 sm:col-span-4 lg:col-span-5">
-                <input
-                  type="text"
-                  value={feedingDetails.remarks || ''}
-                  onChange={e => setFeedingDetails(p => ({ ...p, remarks: e.target.value }))}
-                  placeholder="Feeding remarks..."
-                  className="input text-xs py-1"
-                />
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Medication Details (Only displays when selected) */}
-        {showMedication && (
-          <div className="card">
-            <div className="card-header flex items-center justify-between py-2.5 px-4">
-              <h3 className="font-semibold text-gray-900 text-sm">Medication & Treatments</h3>
-              <button
-                type="button"
-                onClick={addMedication}
-                className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-              >
-                <PlusIcon className="w-3 h-3" />
-                <span>Add Entry</span>
-              </button>
-            </div>
-            <div className="card-body p-4 space-y-2">
-              {medications.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">No medication entries added. Click &quot;Add Entry&quot; to add.</p>
-              ) : (
-                medications.map((med, idx) => (
-                  <div key={med.id || idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 items-center p-2 rounded-lg bg-gray-50 border border-gray-100">
-                    <select
-                      value={med.treatment_type || 'preventive'}
-                      onChange={e => updateMedication(idx, 'treatment_type', e.target.value)}
-                      className="input text-xs py-1"
-                    >
-                      <option value="preventive">Preventive</option>
-                      <option value="curative">Curative</option>
-                    </select>
-
-                    <select
-                      value={med.category || 'probiotics'}
-                      onChange={e => updateMedication(idx, 'category', e.target.value)}
-                      className="input text-xs py-1"
-                    >
-                      {MEDICATION_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                    </select>
-
-                    <input
-                      type="text"
-                      value={med.product_name || ''}
-                      onChange={e => updateMedication(idx, 'product_name', e.target.value)}
-                      placeholder="Product name"
-                      className="input text-xs py-1"
-                    />
-
-                    <input
-                      type="text"
-                      value={med.dosage || ''}
-                      onChange={e => updateMedication(idx, 'dosage', e.target.value)}
-                      placeholder="Dosage"
-                      className="input text-xs py-1"
-                    />
-
-                    <input
-                      type="text"
-                      value={med.disease_identification || ''}
-                      onChange={e => updateMedication(idx, 'disease_identification', e.target.value)}
-                      placeholder="Disease / target"
-                      className="input text-xs py-1"
-                    />
-
-                    <div className="flex items-center gap-1">
-                      <input
-                        type="text"
-                        value={med.remarks || ''}
-                        onChange={e => updateMedication(idx, 'remarks', e.target.value)}
-                        placeholder="Remarks"
-                        className="input text-xs py-1 flex-1"
-                      />
+              <div className="card-body p-4 space-y-3">
+                {partialHarvests.map((ph, idx) => (
+                  <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
+                      <span>Partial Harvest #{idx + 1}</span>
                       <button
                         type="button"
-                        onClick={() => removeMedication(idx)}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                        onClick={() => removePartialHarvest(idx)}
+                        className="text-gray-400 hover:text-red-600 p-0.5"
                       >
                         <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {showDisease && (
-          <div className="card">
-            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Disease</h3></div>
-            <div className="card-body p-3">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
-                {DISEASE_OPTIONS.map((d) => {
-                  const checked = (diseaseDetails.diseases || []).includes(d);
-                  return (
-                    <label key={d} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs cursor-pointer select-none ${checked ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                       <input
-                        type="checkbox"
-                        className="h-3.5 w-3.5 shrink-0"
-                        checked={checked}
-                        onChange={() => setDiseaseDetails((prev) => {
-                          const cur = prev.diseases || [];
-                          return { ...prev, diseases: checked ? cur.filter(x => x !== d) : [...cur, d] };
-                        })}
+                        type="date"
+                        value={ph.date || ''}
+                        onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                        className="input text-xs py-1"
                       />
-                      <span className="leading-tight">{d}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Harvest Details (Only displays when selected) */}
-        {showHarvest && (
-          <div className="card">
-            <div className="card-header flex items-center justify-between py-2.5 px-4">
-              <h3 className="font-semibold text-gray-900 text-sm">Harvest Details</h3>
-              {partialHarvests.length < 3 && (
-                <button
-                  type="button"
-                  onClick={addPartialHarvest}
-                  className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-                >
-                  <PlusIcon className="w-3 h-3" />
-                  <span>+ Partial Harvest</span>
-                </button>
-              )}
-            </div>
-
-            <div className="card-body p-4 space-y-3">
-              {partialHarvests.map((ph, idx) => (
-                <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
-                    <span>Partial Harvest #{idx + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => removePartialHarvest(idx)}
-                      className="text-gray-400 hover:text-red-600 p-0.5"
-                    >
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
+                      <input
+                        type="number"
+                        value={ph.doc ?? ''}
+                        onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                        placeholder="DOC"
+                        readOnly={isDocAutoOnly && !isEdit}
+                        className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={ph.abw ?? ''}
+                        onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                        placeholder="ABW (g)"
+                        className="input text-xs py-1"
+                      />
+                      <input
+                        type="number"
+                        value={ph.harvested_quantity ?? ''}
+                        onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                        placeholder="Qty (pcs)"
+                        className="input text-xs py-1"
+                      />
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={ph.harvested_biomass ?? ''}
+                        onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                        placeholder="Biomass (kg)"
+                        className="input text-xs py-1 font-mono"
+                      />
+                    </div>
                   </div>
+                ))}
+
+                {/* Final Harvest */}
+                <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
+                  <span className="text-xs text-gray-600 font-medium block">Final Harvest</span>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <input
                       type="date"
-                      value={ph.date || ''}
-                      onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                      value={finalHarvest.date || ''}
+                      onChange={e => updateFinalHarvest('date', e.target.value)}
                       className="input text-xs py-1"
                     />
                     <input
                       type="number"
-                      value={ph.doc ?? ''}
-                      onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                      value={finalHarvest.doc ?? ''}
+                      onChange={e => updateFinalHarvest('doc', e.target.value)}
                       placeholder="DOC"
                       readOnly={isDocAutoOnly && !isEdit}
                       className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
@@ -1045,100 +1090,55 @@ export default function VisitForm() {
                     <input
                       type="number"
                       step="0.01"
-                      value={ph.abw ?? ''}
-                      onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                      value={finalHarvest.abw ?? ''}
+                      onChange={e => updateFinalHarvest('abw', e.target.value)}
                       placeholder="ABW (g)"
                       className="input text-xs py-1"
                     />
                     <input
                       type="number"
-                      value={ph.harvested_quantity ?? ''}
-                      onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                      value={finalHarvest.harvested_quantity ?? ''}
+                      onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
                       placeholder="Qty (pcs)"
                       className="input text-xs py-1"
                     />
                     <input
                       type="number"
                       step="0.1"
-                      value={ph.harvested_biomass ?? ''}
-                      onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                      value={finalHarvest.harvested_biomass ?? ''}
+                      onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
                       placeholder="Biomass (kg)"
                       className="input text-xs py-1 font-mono"
                     />
                   </div>
                 </div>
-              ))}
 
-              {/* Final Harvest */}
-              <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-                <span className="text-xs text-gray-600 font-medium block">Final Harvest</span>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  <input
-                    type="date"
-                    value={finalHarvest.date || ''}
-                    onChange={e => updateFinalHarvest('date', e.target.value)}
-                    className="input text-xs py-1"
-                  />
-                  <input
-                    type="number"
-                    value={finalHarvest.doc ?? ''}
-                    onChange={e => updateFinalHarvest('doc', e.target.value)}
-                    placeholder="DOC"
-                    readOnly={isDocAutoOnly && !isEdit}
-                    className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={finalHarvest.abw ?? ''}
-                    onChange={e => updateFinalHarvest('abw', e.target.value)}
-                    placeholder="ABW (g)"
-                    className="input text-xs py-1"
-                  />
-                  <input
-                    type="number"
-                    value={finalHarvest.harvested_quantity ?? ''}
-                    onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
-                    placeholder="Qty (pcs)"
-                    className="input text-xs py-1"
-                  />
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={finalHarvest.harvested_biomass ?? ''}
-                    onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
-                    placeholder="Biomass (kg)"
-                    className="input text-xs py-1 font-mono"
-                  />
+                {/* Minimal Summary Strip */}
+                <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
+                  <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_biomass} kg</span></div>
+                  <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_feed} kg</span></div>
+                  <div>Overall FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
+                  <div>Total Pieces: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_harvest_qty}</span></div>
+                  <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival_percentage}</span></div>
                 </div>
               </div>
+            </div>
+          )}
 
-              {/* Minimal Summary Strip */}
-              <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
-                <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_biomass} kg</span></div>
-                <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_feed} kg</span></div>
-                <div>Overall FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
-                <div>Total Pieces: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_harvest_qty}</span></div>
-                <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival_percentage}</span></div>
+          {/* Meeting Notes */}
+          <div className="card">
+            <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Notes</h3></div>
+            <div className="card-body p-4 space-y-3">
+              <textarea {...register('meeting_highlights')} className="input text-xs" rows={2} placeholder="Meeting highlights / discussion..." />
+              <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5`}>
+                <input {...register('visit_outcome')} className="input text-xs py-1" placeholder="Visit outcome" />
+                <input {...register('next_action')} className="input text-xs py-1" placeholder="Next action" />
+                {isAdmin && (
+                  <input type="date" {...register('next_followup_date')} className="input text-xs py-1" title="Next Follow-up Date" />
+                )}
               </div>
             </div>
           </div>
-        )}
-
-        {/* Meeting Notes */}
-        <div className="card">
-          <div className="card-header py-2.5 px-4"><h3 className="font-semibold text-gray-900 text-sm">Notes</h3></div>
-          <div className="card-body p-4 space-y-3">
-            <textarea {...register('meeting_highlights')} className="input text-xs" rows={2} placeholder="Meeting highlights / discussion..." />
-            <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2.5`}>
-              <input {...register('visit_outcome')} className="input text-xs py-1" placeholder="Visit outcome" />
-              <input {...register('next_action')} className="input text-xs py-1" placeholder="Next action" />
-              {isAdmin && (
-                <input type="date" {...register('next_followup_date')} className="input text-xs py-1" title="Next Follow-up Date" />
-              )}
-            </div>
-          </div>
-        </div>
         </fieldset>
 
         {/* Action Buttons */}
