@@ -63,6 +63,14 @@ const pondCurrentDocExpr = ({ hasDoc, hasDocDate }, alias = 'p', as = 'current_d
         END as ${as}`;
 };
 
+const pondDocParts = (hasDoc, hasDocDate, docVal, docDateVal) => {
+  const cols = [];
+  const vals = [];
+  if (hasDoc) { cols.push('doc'); vals.push(docVal); }
+  if (hasDocDate) { cols.push('doc_date'); vals.push(docDateVal); }
+  return { cols, vals };
+};
+
 const buildClientWhere = (query, userId, role) => {
   let where = 'c.deleted_at IS NULL';
   const replacements = [];
@@ -201,6 +209,7 @@ const createClient = async (req, res) => {
     const clientId = typeof result === 'number' ? result : (result?.insertId || result);
 
     if (ponds && Array.isArray(ponds) && ponds.length) {
+      const pondCols = await getPondDocCols();
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
         if (!pondName) continue;
@@ -215,12 +224,13 @@ const createClient = async (req, res) => {
 
         const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
         const docDateVal = docVal !== null ? (p.doc_date && String(p.doc_date).trim() ? String(p.doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+        const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
 
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
            salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -233,7 +243,8 @@ const createClient = async (req, res) => {
               p.feed_type || null,
               p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
               latVal, lngVal, polyCoords, p.gps_address || null,
-              p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
+              p.status || 'active', p.remarks || null, req.user.id,
+              ...docParts.vals
             ],
             transaction: t,
           }
@@ -435,6 +446,7 @@ const updateClient = async (req, res) => {
     );
 
     if (ponds !== undefined && Array.isArray(ponds)) {
+      const pondCols = await getPondDocCols();
       const activePondIds = [];
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
@@ -450,6 +462,17 @@ const updateClient = async (req, res) => {
 
         const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
         const docDateVal = docVal !== null ? new Date().toISOString().slice(0, 10) : null;
+        const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
+        let docSet = '';
+        let docRepls = [];
+        if (pondCols.hasDoc) {
+          docSet += ', doc=?';
+          docRepls.push(docVal);
+          if (pondCols.hasDocDate) {
+            docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
+            docRepls.push(docVal, docVal, docVal, docDateVal);
+          }
+        }
 
         if (p.id) {
           activePondIds.push(p.id);
@@ -457,8 +480,7 @@ const updateClient = async (req, res) => {
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
              salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?,
-             doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?${docSet},
              updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
@@ -474,7 +496,7 @@ const updateClient = async (req, res) => {
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
                 p.status || 'active', p.remarks || null,
-                docVal, docVal, docVal, docDateVal,
+                ...docRepls,
                 p.id, req.params.id, req.params.id
               ],
               transaction: t,
@@ -485,8 +507,8 @@ const updateClient = async (req, res) => {
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
              salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -499,7 +521,8 @@ const updateClient = async (req, res) => {
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
-                p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
+                p.status || 'active', p.remarks || null, req.user.id,
+                ...docParts.vals
               ],
               transaction: t,
             }
@@ -722,7 +745,7 @@ const createPond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
     hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-    culture_type, water_type, latitude, longitude, gps_address, status, remarks
+    culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   const finalName = tank_number || pond_name;
   if (!finalName) return sendError(res, 'Tank number or name is required', 400);
@@ -748,12 +771,14 @@ const createPond = async (req, res) => {
     const polyCoords = req.body.polygon_coordinates ? (typeof req.body.polygon_coordinates === 'string' ? req.body.polygon_coordinates : JSON.stringify(req.body.polygon_coordinates)) : null;
     const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
     const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+    const pondCols = await getPondDocCols();
+    const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
 
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
        salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -765,7 +790,8 @@ const createPond = async (req, res) => {
           stockQty,
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
-          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, docVal, docDateVal, req.user.id
+          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, req.user.id,
+          ...docParts.vals
         ]
       }
     );
@@ -809,13 +835,23 @@ const updatePond = async (req, res) => {
 
     const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
     const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+    const pondCols = await getPondDocCols();
+    let docSet = '';
+    let docRepls = [];
+    if (pondCols.hasDoc) {
+      docSet += ', doc=?';
+      docRepls.push(docVal);
+      if (pondCols.hasDocDate) {
+        docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
+        docRepls.push(docVal, docVal, docVal, docDateVal);
+      }
+    }
 
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
        salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
        stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-       latitude=?, longitude=?, gps_address=?, status=?, remarks=?,
-       doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+       latitude=?, longitude=?, gps_address=?, status=?, remarks=?${docSet},
        updated_at=NOW()
        WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
       {
@@ -830,7 +866,9 @@ const updatePond = async (req, res) => {
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
           latVal, lngVal, gps_address || null, status || 'active',
-          remarks || null, docVal, docVal, docVal, docDateVal, req.params.pondId, req.params.id, req.params.id
+          remarks || null,
+          ...docRepls,
+          req.params.pondId, req.params.id, req.params.id
         ]
       }
     );
