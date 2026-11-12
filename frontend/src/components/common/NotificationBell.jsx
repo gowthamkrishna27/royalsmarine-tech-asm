@@ -63,7 +63,7 @@ export default function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-12 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 fade-in text-xs">
+          <div className="absolute right-0 top-12 w-80 sm:w-96 max-w-[90vw] bg-white rounded-2xl shadow-2xl border border-gray-100 py-2 z-50 fade-in text-xs">
             {/* Header */}
             <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
