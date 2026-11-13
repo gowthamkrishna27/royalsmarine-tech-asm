@@ -119,6 +119,7 @@ CREATE TABLE ponds (
   client_id INT NOT NULL,
   pond_name VARCHAR(100) NOT NULL,
   area_acres DECIMAL(8,2) NULL,
+  dealer_name VARCHAR(200) NULL,
   culture_type VARCHAR(100) NULL,
   water_type VARCHAR(100) NULL,
   latitude DECIMAL(10,8) NULL,

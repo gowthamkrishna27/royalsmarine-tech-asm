@@ -1,6 +1,35 @@
 const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 
+const getDealersStats = async (whereClause = '', replacements = []) => {
+  try {
+    const where = whereClause ? `AND ${whereClause}` : '';
+    const [dealers] = await sequelize.query(`
+      SELECT 
+        TRIM(p.dealer_name) as dealer_name,
+        COUNT(DISTINCT p.id) as tank_count,
+        COUNT(DISTINCT COALESCE(p.client_id, p.farmer_id)) as farmer_count
+      FROM ponds p
+      JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+      WHERE p.dealer_name IS NOT NULL 
+        AND TRIM(p.dealer_name) != '' 
+        AND p.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
+        ${where}
+      GROUP BY TRIM(p.dealer_name)
+      ORDER BY tank_count DESC, dealer_name ASC
+    `, { replacements });
+    const list = dealers || [];
+    return {
+      total_dealers: list.length,
+      dealers_list: list,
+    };
+  } catch (err) {
+    return { total_dealers: 0, dealers_list: [] };
+  }
+};
+
+
 const getSalesExecutiveDashboard = async (userId) => {
   const [farmerStats] = await sequelize.query(
     `SELECT 
@@ -229,6 +258,7 @@ const getSalesManagerDashboard = async (userId) => {
 };
 
 const getManagementDashboard = async () => {
+  const dealersStats = await getDealersStats();
   const [farmerStats] = await sequelize.query(`
     SELECT 
       COUNT(*) as total_farmers,
@@ -296,6 +326,8 @@ const getManagementDashboard = async () => {
     field_executives: executivesCount[0]?.count || salespersonPerf.length,
     salesperson_performance: salespersonPerf,
     recent_visits: recentVisits,
+    total_dealers: dealersStats.total_dealers,
+    dealers_list: dealersStats.dealers_list,
   };
 };
 

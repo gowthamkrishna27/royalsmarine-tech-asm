@@ -228,9 +228,9 @@ const createClient = async (req, res) => {
 
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-           salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+           salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
            culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -238,6 +238,7 @@ const createClient = async (req, res) => {
               p.soil_type || null,
               p.hatchery_name || null,
               p.brooder || null,
+              p.dealer_name || null,
               seedDate,
               stockQty,
               p.feed_type || null,
@@ -478,7 +479,7 @@ const updateClient = async (req, res) => {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
-             salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
+             salinity=?, soil_type=?, hatchery_name=?, brooder=?, dealer_name=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
              latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?${docSet},
              updated_at=NOW()
@@ -490,6 +491,7 @@ const updateClient = async (req, res) => {
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
+                p.dealer_name || null,
                 seedDate,
                 stockQty,
                 p.feed_type || null,
@@ -506,9 +508,9 @@ const updateClient = async (req, res) => {
           const pondUuid = uuidv4();
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-             salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+             salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
              culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -516,6 +518,7 @@ const updateClient = async (req, res) => {
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
+                p.dealer_name || null,
                 seedDate,
                 stockQty,
                 p.feed_type || null,
@@ -744,7 +747,7 @@ const listPonds = async (req, res) => {
 const createPond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
-    hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+    hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
     culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   const finalName = tank_number || pond_name;
@@ -776,9 +779,9 @@ const createPond = async (req, res) => {
 
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-       salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+       salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
        culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -786,6 +789,7 @@ const createPond = async (req, res) => {
           soil_type || null,
           hatchery_name || null,
           brooder || null,
+          dealer_name || null,
           seedDate,
           stockQty,
           feed_type || null,
@@ -805,7 +809,7 @@ const createPond = async (req, res) => {
 const updatePond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
-    hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+    hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
     culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   try {
@@ -849,7 +853,7 @@ const updatePond = async (req, res) => {
 
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
-       salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
+       salinity=?, soil_type=?, hatchery_name=?, brooder=?, dealer_name=?, seed_date=?,
        stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
        latitude=?, longitude=?, gps_address=?, status=?, remarks=?${docSet},
        updated_at=NOW()
@@ -861,6 +865,7 @@ const updatePond = async (req, res) => {
           soil_type || null,
           hatchery_name || null,
           brooder || null,
+          dealer_name || null,
           seedDate,
           stockQty,
           feed_type || null,

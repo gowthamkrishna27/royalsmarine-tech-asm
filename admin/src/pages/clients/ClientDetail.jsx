@@ -273,6 +273,12 @@ export default function ClientDetail() {
                           <span className="font-medium text-gray-800">{p.brooder}</span>
                         </div>
                       )}
+                      {p.dealer_name && (
+                        <div>
+                          <span className="text-gray-400">Dealer:</span>{' '}
+                          <span className="font-medium text-gray-800">{p.dealer_name}</span>
+                        </div>
+                      )}
                       {(() => {
                         const baseDoc = p.seed_date ? null : (p.doc ?? null);
                         const docDate = p.doc_date ? String(p.doc_date).slice(0, 10) : null;
