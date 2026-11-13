@@ -107,6 +107,26 @@ app.listen(PORT, async () => {
     await sequelize.query('CREATE OR REPLACE VIEW clients AS SELECT * FROM farmers;');
     await sequelize.query('SET FOREIGN_KEY_CHECKS = 1;');
     logger.info('Database tables verified: farmers table active with compatibility view.');
+    // Ensure ponds columns (dealer_name, doc, doc_date) exist
+    try {
+      const [pondCols] = await sequelize.query('DESCRIBE ponds;');
+      const colNames = pondCols.map(c => c.Field);
+      if (!colNames.includes('dealer_name')) {
+        await sequelize.query('ALTER TABLE ponds ADD COLUMN dealer_name VARCHAR(200) NULL;');
+        logger.info('Added dealer_name column to ponds table.');
+      }
+      if (!colNames.includes('doc')) {
+        await sequelize.query('ALTER TABLE ponds ADD COLUMN doc INT NULL;');
+        logger.info('Added doc column to ponds table.');
+      }
+      if (!colNames.includes('doc_date')) {
+        await sequelize.query('ALTER TABLE ponds ADD COLUMN doc_date DATE NULL;');
+        logger.info('Added doc_date column to ponds table.');
+      }
+    } catch (colErr) {
+      logger.warn('Ponds column verify note: ' + colErr.message);
+    }
+
   } catch (err) {
     logger.warn('Table cleanup note: ' + err.message);
   }

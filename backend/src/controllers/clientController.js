@@ -146,7 +146,7 @@ const createClient = async (req, res) => {
     address, city, district, state, pincode, latitude, longitude, gps_address,
     area, mandal, village, farm_extent_acres, number_of_tanks, water_source,
     industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
-    notes, brands, categories, ponds,
+    notes, brands, categories, ponds, status,
   } = req.body;
 
   const t = await sequelize.transaction();
@@ -293,6 +293,31 @@ const createClient = async (req, res) => {
       );
     } catch (farmerErr) {
       console.warn('Warning saving to farmers table:', farmerErr.message);
+    }
+
+    
+    // Link to dealer_farmers if user is a dealer
+    if (req.user && req.user.role === 'dealer') {
+      try {
+        const [d] = await sequelize.query('SELECT id FROM dealers WHERE user_id = ? AND deleted_at IS NULL LIMIT 1', {
+          replacements: [req.user.id],
+          transaction: t
+        });
+        if (d[0]?.id) {
+          const connDate = req.body.connected_date || req.body.connection_date || new Date().toISOString().slice(0, 10);
+          await sequelize.query(
+            `INSERT INTO dealer_farmers (dealer_id, farmer_id, connection_date, status, created_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE connection_date = VALUES(connection_date), status = VALUES(status), updated_at = NOW()`,
+            {
+              replacements: [d[0].id, clientId, connDate, status || 'active', req.user.id],
+              transaction: t
+            }
+          );
+        }
+      } catch (dfErr) {
+        console.warn('Warning linking dealer_farmers in createClient:', dfErr.message);
+      }
     }
 
     await t.commit();
