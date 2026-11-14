@@ -6,16 +6,39 @@ const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
 
 let pondDocCols = null;
+let clientCols = null;
+const getClientCols = async () => {
+  if (clientCols) return clientCols;
+  try {
+    const [cols] = await sequelize.query('DESCRIBE clients');
+    clientCols = new Set((cols || []).map(c => String(c.Field || '').toLowerCase()));
+  } catch {
+    clientCols = new Set();
+  }
+  return clientCols;
+};
 const getPondDocCols = async () => {
   if (pondDocCols) return pondDocCols;
   try {
     const [cols] = await sequelize.query('DESCRIBE ponds');
     const set = new Set((cols || []).map(c => String(c.Field || '').toLowerCase()));
-    pondDocCols = { hasDoc: set.has('doc'), hasDocDate: set.has('doc_date') };
+    pondDocCols = {
+      hasDoc: set.has('doc'),
+      hasDocDate: set.has('doc_date'),
+      hasArea: set.has('area'),
+      hasAreaAcres: set.has('area_acres'),
+    };
   } catch {
-    pondDocCols = { hasDoc: false, hasDocDate: false };
+    pondDocCols = { hasDoc: false, hasDocDate: false, hasArea: false, hasAreaAcres: false };
   }
   return pondDocCols;
+};
+const pondAreaExpr = ({ hasArea, hasAreaAcres }, alias = '') => {
+  const a = alias ? `${alias}.` : '';
+  if (hasAreaAcres && hasArea) return `COALESCE(${a}area_acres, ${a}area) as area_acres`;
+  if (hasAreaAcres) return `${a}area_acres as area_acres`;
+  if (hasArea) return `${a}area as area_acres`;
+  return `NULL as area_acres`;
 };
 
 const pondCurrentDocExpr = ({ hasDoc, hasDocDate }, alias = 'p', as = 'current_doc') => {
@@ -60,6 +83,10 @@ const buildClientWhere = (query, userId, role) => {
     }
   }
 
+  if (query.region) {
+    where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND deleted_at IS NULL)';
+    replacements.push(query.region);
+  }
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
   if (query.state) { where += ' AND c.state = ?'; replacements.push(query.state); }
   if (query.client_type) { where += ' AND c.client_type = ?'; replacements.push(query.client_type); }
@@ -289,7 +316,7 @@ const getClient = async (req, res) => {
   try {
     const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
-      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+      `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
        FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
@@ -310,7 +337,7 @@ const updateClient = async (req, res) => {
     address, city, district, state, pincode, latitude, longitude, gps_address,
     area, mandal, village, farm_extent_acres, number_of_tanks, water_source,
     industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
-    status, notes, brands, categories, ponds,
+    status, notes, close_reason, brands, categories, ponds,
   } = req.body;
 
   const t = await sequelize.transaction();
@@ -328,6 +355,15 @@ const updateClient = async (req, res) => {
     if (req.user.role === 'sales_executive' && cur.assigned_salesperson_id && cur.assigned_salesperson_id !== req.user.id && cur.created_by !== req.user.id) {
       await t.rollback();
       return sendError(res, 'Access denied: not your client', 403);
+    }
+
+    const cols = await getClientCols();
+    const hasCloseReason = cols.has('close_reason');
+    const isAdmin = ['super_admin', 'admin'].includes(req.user.role);
+    const curClosed = ['forcely_closed', 'forced_closed', 'closed'].includes(cur.status);
+    if (!isAdmin && curClosed && status !== undefined && !['forcely_closed', 'forced_closed', 'closed'].includes(status || '')) {
+      await t.rollback();
+      return sendError(res, 'Only administrators can reactivate a forcibly closed farmer', 403);
     }
 
     // Preserve existing values/assignments when not explicitly passed (supports status-only close)
@@ -349,42 +385,53 @@ const updateClient = async (req, res) => {
       }
     }
 
+    const setParts = [
+      'company_name=?', 'contact_person=?', 'designation=?', 'mobile=?', 'alternate_mobile=?',
+      'email=?', 'address=?', 'city=?', 'state=?', 'pincode=?', 'latitude=?', 'longitude=?', 'gps_address=?',
+      'area=?', 'village=?', 'farm_extent_acres=?', 'number_of_tanks=?', 'water_source=?',
+      'industry_type=?', 'client_type=?', 'assigned_salesperson_id=?', 'assigned_manager_id=?',
+      'status=?', 'notes=?',
+    ];
+    const updateReplacements = [
+      company_name !== undefined ? company_name : cur.company_name,
+      contact_person !== undefined ? (contact_person || null) : (cur.contact_person ?? null),
+      designation !== undefined ? (designation || null) : (cur.designation ?? null),
+      mobile !== undefined ? (mobile || null) : (cur.mobile ?? null),
+      alternate_mobile !== undefined ? (alternate_mobile || null) : (cur.alternate_mobile ?? null),
+      email !== undefined ? (email || null) : (cur.email ?? null),
+      address !== undefined ? (address || null) : (cur.address ?? null),
+      city !== undefined ? (city || null) : (cur.city ?? null),
+      state !== undefined ? (state || null) : (cur.state ?? null),
+      pincode !== undefined ? (pincode || null) : (cur.pincode ?? null),
+      latitude !== undefined ? (latitude || null) : (cur.latitude ?? null),
+      longitude !== undefined ? (longitude || null) : (cur.longitude ?? null),
+      gps_address !== undefined ? (gps_address || null) : (cur.gps_address ?? null),
+      area !== undefined ? (area || null) : (cur.area ?? null),
+      village !== undefined ? (village || null) : (cur.village ?? null),
+      farm_extent_acres !== undefined ? (farm_extent_acres ? parseFloat(farm_extent_acres) : null) : (cur.farm_extent_acres ?? null),
+      number_of_tanks !== undefined ? (number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0)) : (cur.number_of_tanks ?? 0),
+      water_source !== undefined ? (water_source || 'bore') : (cur.water_source || 'bore'),
+      industry_type !== undefined ? (industry_type || null) : (cur.industry_type ?? null),
+      client_type !== undefined ? client_type : cur.client_type,
+      salespersonId,
+      managerId,
+      status !== undefined ? (status || 'active') : (cur.status || 'active'),
+      notes !== undefined ? (notes || null) : (cur.notes ?? null),
+    ];
+    if (hasCloseReason) {
+      setParts.push('close_reason=?');
+      const nextStatus = status !== undefined ? (status || 'active') : (cur.status || 'active');
+      const nextClosed = ['forcely_closed', 'forced_closed', 'closed'].includes(nextStatus);
+      if (close_reason !== undefined) updateReplacements.push(close_reason || null);
+      else if (nextClosed) updateReplacements.push(cur.close_reason ?? null);
+      else updateReplacements.push(isAdmin ? null : (cur.close_reason ?? null));
+    }
+    setParts.push('updated_at=NOW()');
+    updateReplacements.push(req.params.id);
+
     await sequelize.query(
-      `UPDATE clients SET company_name=?, contact_person=?, designation=?, mobile=?, alternate_mobile=?,
-       email=?, address=?, city=?, state=?, pincode=?, latitude=?, longitude=?, gps_address=?,
-       area=?, village=?, farm_extent_acres=?, number_of_tanks=?, water_source=?,
-       industry_type=?, client_type=?, assigned_salesperson_id=?, assigned_manager_id=?,
-       status=?, notes=?, updated_at=NOW() WHERE id = ? AND deleted_at IS NULL`,
-      {
-        replacements: [
-          company_name !== undefined ? company_name : cur.company_name,
-          contact_person !== undefined ? (contact_person || null) : (cur.contact_person ?? null),
-          designation !== undefined ? (designation || null) : (cur.designation ?? null),
-          mobile !== undefined ? (mobile || null) : (cur.mobile ?? null),
-          alternate_mobile !== undefined ? (alternate_mobile || null) : (cur.alternate_mobile ?? null),
-          email !== undefined ? (email || null) : (cur.email ?? null),
-          address !== undefined ? (address || null) : (cur.address ?? null),
-          city !== undefined ? (city || null) : (cur.city ?? null),
-          state !== undefined ? (state || null) : (cur.state ?? null),
-          pincode !== undefined ? (pincode || null) : (cur.pincode ?? null),
-          latitude !== undefined ? (latitude || null) : (cur.latitude ?? null),
-          longitude !== undefined ? (longitude || null) : (cur.longitude ?? null),
-          gps_address !== undefined ? (gps_address || null) : (cur.gps_address ?? null),
-          area !== undefined ? (area || null) : (cur.area ?? null),
-          village !== undefined ? (village || null) : (cur.village ?? null),
-          farm_extent_acres !== undefined ? (farm_extent_acres ? parseFloat(farm_extent_acres) : null) : (cur.farm_extent_acres ?? null),
-          number_of_tanks !== undefined ? (number_of_tanks ? parseInt(number_of_tanks, 10) : (ponds?.length || 0)) : (cur.number_of_tanks ?? 0),
-          water_source !== undefined ? (water_source || 'bore') : (cur.water_source || 'bore'),
-          industry_type !== undefined ? (industry_type || null) : (cur.industry_type ?? null),
-          client_type !== undefined ? client_type : cur.client_type,
-          salespersonId,
-          managerId,
-          status !== undefined ? (status || 'active') : (cur.status || 'active'),
-          notes !== undefined ? (notes || null) : (cur.notes ?? null),
-          req.params.id,
-        ],
-        transaction: t,
-      }
+      `UPDATE clients SET ${setParts.join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+      { replacements: updateReplacements, transaction: t }
     );
 
     if (ponds !== undefined && Array.isArray(ponds)) {
@@ -550,12 +597,18 @@ const getClientProfile = async (req, res) => {
       { replacements: [clientId] }
     );
 
-    const docCols = await getPondDocCols();
-    const [ponds] = await sequelize.query(
-      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
-       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
-      { replacements: [req.params.id, req.params.id] }
-    );
+    let ponds = [];
+    try {
+      const docCols = await getPondDocCols();
+      [ponds] = await sequelize.query(
+        `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+         FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
+        { replacements: [req.params.id, req.params.id] }
+      );
+    } catch (pondErr) {
+      console.error('getClientProfile ponds lookup failed:', pondErr);
+      ponds = [];
+    }
     const total_acres = ponds.reduce((acc, p) => acc + (parseFloat(p.area_acres) || 0), 0);
     const active_ponds = ponds.filter(p => p.status === 'active').length;
 
@@ -655,7 +708,7 @@ const listPonds = async (req, res) => {
   try {
     const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
-      `SELECT *, COALESCE(area_acres, area) as area_acres, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
+      `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
        FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
       { replacements: [req.params.id, req.params.id] }
     );
@@ -942,10 +995,11 @@ const listHarvestedTanks = async (req, res) => {
       replacements.push(culture_type);
     }
 
+    const docCols = await getPondDocCols();
     const [tanks] = await sequelize.query(`
       SELECT 
         p.*,
-        COALESCE(p.area_acres, p.area) as area_acres,
+        ${pondAreaExpr(docCols, 'p')},
         c.id as client_id,
         c.company_name,
         c.contact_person,
@@ -1072,7 +1126,7 @@ const listFcrTanks = async (req, res) => {
     const [tanks] = await sequelize.query(`
       SELECT
         p.*,
-        COALESCE(p.area_acres, p.area) as area_acres,
+        ${pondAreaExpr(docCols, 'p')},
         c.id as client_id,
         c.company_name,
         c.contact_person,

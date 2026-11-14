@@ -7,7 +7,7 @@ const adminRoles = ['super_admin', 'admin'];
 const { sendError } = require('../utils/response');
 
 router.get('/roles', authenticate, getRoles);
-router.get('/', authenticate, authorize(...adminRoles, 'sales_manager'), listUsers);
+router.get('/', authenticate, authorize(...adminRoles, 'sales_manager', 'management', 'backend_ops'), listUsers);
 router.post('/', authenticate, authorize(...adminRoles), createUser);
 router.get('/:id', authenticate, getUser);
 router.put('/:id', authenticate, authorize(...adminRoles), updateUser);

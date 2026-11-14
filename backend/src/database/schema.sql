@@ -89,6 +89,7 @@ CREATE TABLE farmers (
   assigned_salesperson_id INT NULL,
   assigned_manager_id INT NULL,
   status ENUM('active','inactive') DEFAULT 'active',
+  close_reason TEXT,
   notes TEXT,
   created_by INT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

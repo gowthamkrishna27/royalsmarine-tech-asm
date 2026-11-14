@@ -31,6 +31,7 @@ export const MEETING_TYPES = [
   { value: 'water_quality', label: 'Water Quality' },
   { value: 'feeding_details', label: 'Feeding Details' },
   { value: 'medication_details', label: 'Medication & Treatments' },
+  { value: 'disease', label: 'Disease' },
   { value: 'harvest_details', label: 'Harvest Details' },
   { value: 'all', label: 'All Details (Full Inspection)' },
   { value: 'follow_up', label: 'Follow-up' },

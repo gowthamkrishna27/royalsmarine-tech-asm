@@ -7,6 +7,13 @@ const { log } = require('../utils/audit');
 
 const VISIT_EDIT_WINDOW_SECONDS = 5 * 60; // Visits can only be updated within 5 minutes of submission
 
+const getVisitCols = async () => {
+  const [cols] = await sequelize.query(
+    `SELECT COLUMN_NAME FROM information_schema.columns WHERE TABLE_NAME = 'visits' AND TABLE_SCHEMA = DATABASE()`
+  );
+  return new Set(cols.map(c => c.COLUMN_NAME));
+};
+
 const buildVisitWhere = (query, userId, role) => {
   let where = 'v.deleted_at IS NULL';
   const replacements = [];
@@ -90,6 +97,19 @@ const createVisit = async (req, res) => {
     const hasDisease = cols.has('disease_details');
     const uuid = uuidv4();
     const formattedGpsCapturedAt = gps_captured_at ? new Date(gps_captured_at).toISOString().slice(0, 19).replace('T', ' ') : null;
+
+    // Water quality mandatory field validation
+    if (meeting_type === 'water_quality' || meeting_type === 'all') {
+      const wq = water_quality || {};
+      const missing = [];
+      if (!wq.ph) missing.push('pH');
+      if (!wq.ammonia) missing.push('Ammonia');
+      if (!wq.salinity) missing.push('Salinity');
+      if (!wq.nitrite) missing.push('Nitrite');
+      if (missing.length > 0) {
+        return sendError(res, `Water quality fields are required: ${missing.join(', ')}`, 400);
+      }
+    }
 
     const jsonWaterQuality = water_quality ? JSON.stringify(water_quality) : null;
     const jsonFeeding = feeding_details ? JSON.stringify(feeding_details) : null;

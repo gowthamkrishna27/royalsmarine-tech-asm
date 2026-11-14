@@ -3,11 +3,15 @@ const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 
 const salespersonVisitReport = async (req, res) => {
-  const { from_date, to_date, salesperson_id } = req.query;
+  const { from_date, to_date, salesperson_id, region, asm_id, technician_id, farmer_id } = req.query;
   let where = 'v.deleted_at IS NULL';
   const replacements = [];
   if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
   if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
+  if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
+  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
+  if (asm_id) { where += ' AND (u.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
+  if (technician_id) { where += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
 
   // Data isolation: Sales executive can only see their own reports
   if (req.user.role === 'sales_executive') {
@@ -41,12 +45,16 @@ const salespersonVisitReport = async (req, res) => {
 
 
 const followupReport = async (req, res) => {
-  const { from_date, to_date, salesperson_id, status } = req.query;
+  const { from_date, to_date, salesperson_id, status, region, asm_id, technician_id, farmer_id } = req.query;
   let where = 'f.deleted_at IS NULL';
   const replacements = [];
   if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
   if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
   if (status) { where += ' AND f.status = ?'; replacements.push(status); }
+  if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
+  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
+  if (asm_id) { where += ' AND (u.manager_id = ? OR f.assigned_salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
+  if (technician_id) { where += ' AND f.assigned_salesperson_id = ?'; replacements.push(technician_id); }
 
   // Data isolation: Sales executive can only see their own followups
   if (req.user.role === 'sales_executive') {
@@ -87,7 +95,7 @@ const billingReport = async (req, res) => {
 };
 
 const exportReport = async (req, res) => {
-  const { type, from_date, to_date } = req.query;
+  const { type, from_date, to_date, region, asm_id, technician_id, farmer_id } = req.query;
   try {
     let data = [], headers = [], filename = 'report.xlsx';
 
@@ -97,6 +105,10 @@ const exportReport = async (req, res) => {
       const replacements = [];
       if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
       if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
+      if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
+      if (region) { where += ' AND sp.region = ?'; replacements.push(region); }
+      if (asm_id) { where += ' AND (sp.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
+      if (technician_id) { where += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
 
       if (req.user.role === 'sales_executive') {
         where += ' AND v.salesperson_id = ?';
@@ -120,6 +132,10 @@ const exportReport = async (req, res) => {
       const replacements = [];
       if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
       if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
+      if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
+      if (region) { where += ' AND sp.region = ?'; replacements.push(region); }
+      if (asm_id) { where += ' AND (sp.manager_id = ? OR f.assigned_salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
+      if (technician_id) { where += ' AND f.assigned_salesperson_id = ?'; replacements.push(technician_id); }
 
       if (req.user.role === 'sales_executive') {
         where += ' AND f.assigned_salesperson_id = ?';
