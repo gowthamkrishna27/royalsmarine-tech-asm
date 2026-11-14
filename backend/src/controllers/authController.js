@@ -89,6 +89,7 @@ const refreshToken = async (req, res) => {
     );
 
     if (!users[0]) return sendError(res, 'Invalid refresh token', 401);
+    if (users[0].status !== 'active') return sendError(res, 'Account deactivated. Contact admin.', 403);
 
     const { accessToken, refreshToken: newRefresh } = generateTokens(users[0]);
     await sequelize.query('UPDATE users SET refresh_token = ? WHERE id = ?', {

@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { followupApi, clientApi, userApi } from '../../services/api';
+import { followupApi, clientApi, userApi, visitApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
-import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import {
@@ -18,6 +17,7 @@ import {
   CalendarDaysIcon,
   ClockIcon,
   ArrowTopRightOnSquareIcon,
+  FunnelIcon,
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
@@ -217,24 +217,111 @@ export default function Followups() {
   const canAssignUsers = hasRole('super_admin', 'admin', 'sales_manager');
 
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('dues'); // Default to dues & overdues
+  const [status, setStatus] = useState('dues'); // Default to dues
+  const [asmId, setAsmId] = useState('');
+  const [techId, setTechId] = useState('');
+  const [date, setDate] = useState('');
   const [addModal, setAddModal] = useState(false);
   const [completeTarget, setCompleteTarget] = useState(null);
   const [completeNotes, setCompleteNotes] = useState('');
   const [completing, setCompleting] = useState(false);
 
+  // Fetch filter metadata (ASMs, techs)
+  const { data: filterMeta } = useQuery({
+    queryKey: ['visit-filters'],
+    queryFn: () => visitApi.getFilters().then((r) => r.data.data),
+    staleTime: 60000,
+  });
+
+  // 1. ASM dropdown options
+  const asmOptions = useMemo(() => {
+    const list = filterMeta?.asms || [];
+    return list.map((a) => ({
+      value: String(a.id),
+      label: a.name + (a.region ? ` (${a.region})` : ''),
+    }));
+  }, [filterMeta?.asms]);
+
+  // 2. Tech dropdown options (filtered by selected ASM)
+  const techOptions = useMemo(() => {
+    let list = filterMeta?.techs || [];
+    if (asmId) {
+      list = list.filter((t) => String(t.manager_id) === String(asmId));
+    }
+    return list.map((t) => ({
+      value: String(t.id),
+      label: t.name,
+    }));
+  }, [filterMeta?.techs, asmId]);
+
+  const handleAsmChange = (newAsmId) => {
+    setAsmId(newAsmId);
+    setPage(1);
+
+    if (techId && newAsmId) {
+      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
+      if (currentTech && String(currentTech.manager_id) !== String(newAsmId)) {
+        setTechId('');
+      }
+    }
+  };
+
+  const handleTechChange = (newTechId) => {
+    setTechId(newTechId);
+    setPage(1);
+
+    if (newTechId) {
+      const chosenTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(newTechId));
+      if (chosenTech && chosenTech.manager_id && !asmId) {
+        setAsmId(String(chosenTech.manager_id));
+      }
+    }
+  };
+
+  const handleResetFilters = () => {
+    setAsmId('');
+    setTechId('');
+    setDate('');
+    setStatus('dues');
+    setPage(1);
+  };
+
+  const hasActiveFilters = Boolean(asmId || techId || date || (status && status !== 'dues'));
+
   // Queries
   const { data, isLoading } = useQuery({
-    queryKey: ['followups', page, status],
-    queryFn: () => followupApi.list({ page, limit: 20, status }).then((r) => r.data),
+    queryKey: ['followups', page, status, asmId, techId, date],
+    queryFn: () =>
+      followupApi
+        .list({
+          page,
+          limit: 20,
+          status: status || undefined,
+          asm_id: asmId || undefined,
+          tech_id: techId || undefined,
+          date: date || undefined,
+        })
+        .then((r) => r.data),
   });
-  const { data: todayData } = useQuery({
-    queryKey: ['followups-today'],
-    queryFn: () => followupApi.today().then((r) => r.data.data),
+  const { data: duesData } = useQuery({
+    queryKey: ['followups-dues', asmId, techId],
+    queryFn: () =>
+      followupApi
+        .dues({
+          asm_id: asmId || undefined,
+          tech_id: techId || undefined,
+        })
+        .then((r) => r.data.data),
   });
   const { data: overdueData } = useQuery({
-    queryKey: ['followups-overdue'],
-    queryFn: () => followupApi.overdue().then((r) => r.data.data),
+    queryKey: ['followups-overdue', asmId, techId],
+    queryFn: () =>
+      followupApi
+        .overdue({
+          asm_id: asmId || undefined,
+          tech_id: techId || undefined,
+        })
+        .then((r) => r.data.data),
   });
   const { data: clients } = useQuery({
     queryKey: ['clients-list'],
@@ -242,7 +329,7 @@ export default function Followups() {
   });
   const { data: usersData } = useQuery({
     queryKey: ['users-list-followup'],
-    queryFn: () => userApi.list({ limit: 200 }).then((r) => r.data.data),
+    queryFn: () => userApi.list({ status: 'active', limit: 200 }).then((r) => r.data.data),
     enabled: canAssignUsers,
   });
 
@@ -262,7 +349,7 @@ export default function Followups() {
       setCompleteTarget(null);
       setCompleteNotes('');
       qc.invalidateQueries(['followups']);
-      qc.invalidateQueries(['followups-today']);
+      qc.invalidateQueries(['followups-dues']);
       qc.invalidateQueries(['followups-overdue']);
       qc.invalidateQueries(['notifications']);
     } catch (err) {
@@ -293,10 +380,13 @@ export default function Followups() {
         )}
       </div>
 
-      {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Quick Stats Grid: Dues and Overdues only */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div
-          onClick={() => setStatus('dues')}
+          onClick={() => {
+            setStatus('dues');
+            setPage(1);
+          }}
           className={`card p-4 flex items-center gap-3 border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
             status === 'dues' ? 'ring-2 ring-amber-500/20 bg-amber-50/40' : ''
           }`}
@@ -304,27 +394,17 @@ export default function Followups() {
           <ClockIcon className="w-8 h-8 text-amber-500 shrink-0" />
           <div className="min-w-0">
             <p className="text-2xl font-bold text-gray-900">
-              {(todayData?.length || 0) + (overdueData?.length || 0)}
+              {duesData?.length || 0}
             </p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">All Dues & Overdues</p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Dues</p>
           </div>
         </div>
 
         <div
-          onClick={() => setStatus('pending')}
-          className={`card p-4 flex items-center gap-3 border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'pending' ? 'ring-2 ring-blue-500/20 bg-blue-50/40' : ''
-          }`}
-        >
-          <BellIcon className="w-8 h-8 text-blue-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-2xl font-bold text-gray-900">{todayData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Today's Dues</p>
-          </div>
-        </div>
-
-        <div
-          onClick={() => setStatus('overdue')}
+          onClick={() => {
+            setStatus('overdue');
+            setPage(1);
+          }}
           className={`card p-4 flex items-center gap-3 border-l-4 border-red-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
             status === 'overdue' ? 'ring-2 ring-red-500/20 bg-red-50/40' : ''
           }`}
@@ -332,32 +412,126 @@ export default function Followups() {
           <ExclamationTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
           <div className="min-w-0">
             <p className="text-2xl font-bold text-gray-900">{overdueData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Overdue Dues</p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Overdues</p>
           </div>
         </div>
       </div>
 
-      {/* Filter Bar & List */}
+      {/* Filter Toolbar: asm's, techs, single date, and status (no region) */}
       <div className="fade-in space-y-4">
-        <FilterBar
-          onReset={() => {
-            setStatus('dues');
-          }}
-        >
-          <SelectFilter
-            label="Followup Status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              { value: 'dues', label: 'All Dues & Overdues' },
-              { value: 'pending', label: 'Pending Dues Only' },
-              { value: 'overdue', label: 'Overdue Dues Only' },
-              { value: 'completed', label: 'Completed' },
-              { value: 'cancelled', label: 'Cancelled' },
-              { value: '', label: 'All Records' },
-            ]}
-          />
-        </FilterBar>
+        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-2.5">
+          <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 w-full">
+            {/* 1. ASM's */}
+            <select
+              value={asmId}
+              onChange={(e) => handleAsmChange(e.target.value)}
+              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                asmId
+                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
+              title="Filter by ASM"
+            >
+              <option value="">All ASM's</option>
+              {asmOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            {/* 2. Techs */}
+            <select
+              value={techId}
+              onChange={(e) => handleTechChange(e.target.value)}
+              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                techId
+                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
+              title="Filter by Technical Executive"
+            >
+              <option value="">All Techs</option>
+              {techOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+
+            {/* 3. Single Date Filter */}
+            <div
+              className={`flex items-center gap-1.5 bg-white border rounded-lg px-2.5 h-[38px] shadow-xs text-xs transition shrink-0 ${
+                date
+                  ? 'border-blue-300 bg-blue-50/40 ring-1 ring-blue-100'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <CalendarDaysIcon
+                className={`w-3.5 h-3.5 shrink-0 ${date ? 'text-blue-600' : 'text-gray-400'}`}
+              />
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Date</span>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => {
+                    setDate(e.target.value);
+                    setPage(1);
+                  }}
+                  className="bg-transparent border-0 text-xs text-gray-800 focus:outline-none focus:ring-0 p-0 cursor-pointer w-[110px]"
+                  title="Follow-up Date"
+                />
+              </div>
+              {date && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDate('');
+                    setPage(1);
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-0.5 ml-0.5 text-sm leading-none"
+                  title="Clear date"
+                >
+                  &times;
+                </button>
+              )}
+            </div>
+
+            {/* 4. Followup Status */}
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
+              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[130px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+                status && status !== 'dues'
+                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
+              title="Followup Status"
+            >
+              <option value="dues">Dues</option>
+              <option value="overdue">Overdues</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="">All Records</option>
+            </select>
+
+            {/* Reset Filters Button */}
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="btn-secondary btn-sm text-red-600 hover:bg-red-50 hover:border-red-200 transition shrink-0 h-[38px] px-3 flex items-center gap-1.5"
+                title="Reset all filters"
+              >
+                <FunnelIcon className="w-4 h-4" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+        </div>
 
         {isLoading ? (
           <PageSpinner />
@@ -365,10 +539,18 @@ export default function Followups() {
           <div className="card">
             {data?.data?.length === 0 ? (
               <EmptyState
-                title={status === 'dues' ? 'No pending dues or overdues' : 'No follow-ups found'}
+                title={
+                  status === 'dues'
+                    ? 'No pending dues'
+                    : status === 'overdue'
+                    ? 'No overdue follow-ups'
+                    : 'No follow-ups found'
+                }
                 description={
                   status === 'dues'
-                    ? 'Great job! All follow-ups for ASMs and Technical Executives are up to date.'
+                    ? 'Great job! All follow-ups within the week are up to date.'
+                    : status === 'overdue'
+                    ? 'Great job! No follow-ups are overdue beyond 1 week.'
                     : 'There are no records matching your current filter.'
                 }
                 icon={BellIcon}
@@ -387,6 +569,7 @@ export default function Followups() {
               <>
                 <div className="divide-y divide-gray-100">
                   {data.data.map((f) => {
+                    const isOverdue = f.status === 'overdue' || (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');
                     const isDue = f.status === 'pending' || f.status === 'overdue';
                     const roleDisplay =
                       f.salesperson_role_name ||
@@ -400,7 +583,7 @@ export default function Followups() {
                       <div
                         key={f.id}
                         className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 transition hover:bg-gray-50/70 ${
-                          f.status === 'overdue' ? 'bg-red-50/20' : ''
+                          isOverdue ? 'bg-red-50/20' : ''
                         }`}
                       >
                         <div className="flex-1 min-w-0">
@@ -419,16 +602,24 @@ export default function Followups() {
                               color={
                                 f.status === 'completed'
                                   ? 'green'
-                                  : f.status === 'overdue'
-                                  ? 'red'
                                   : f.status === 'cancelled'
                                   ? 'gray'
+                                  : isOverdue
+                                  ? 'red'
                                   : 'yellow'
                               }
                             >
-                              {f.status === 'overdue' && f.days_overdue
+                              {f.status === 'completed'
+                                ? 'COMPLETED'
+                                : f.status === 'cancelled'
+                                ? 'CANCELLED'
+                                : isOverdue
                                 ? `${f.days_overdue}d Overdue`
-                                : f.status?.toUpperCase()}
+                                : Number(f.days_overdue) > 0
+                                ? `${f.days_overdue}d Due`
+                                : Number(f.days_overdue) === 0
+                                ? 'Due Today'
+                                : 'Upcoming'}
                             </Badge>
                           </div>
 
@@ -534,7 +725,7 @@ export default function Followups() {
           currentUser={currentUser}
           onCreate={() => {
             qc.invalidateQueries(['followups']);
-            qc.invalidateQueries(['followups-today']);
+            qc.invalidateQueries(['followups-dues']);
             qc.invalidateQueries(['followups-overdue']);
           }}
         />

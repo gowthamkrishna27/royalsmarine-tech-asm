@@ -2,8 +2,10 @@ import api from './api';
 
 export const followupService = {
   list: (params) => api.get('/followups', { params }),
-  today: () => api.get('/followups/today'),
-  overdue: () => api.get('/followups/overdue'),
+  today: (params) => api.get('/followups/today', { params }),
+  dues: (params) => api.get('/followups/dues', { params }),
+  overdue: (params) => api.get('/followups/overdue', { params }),
+  getFilters: () => api.get('/visits/filters'),
   create: (data) => api.post('/followups', data),
   update: (id, data) => api.put(`/followups/${id}`, data),
   complete: (id, notes) => api.patch(`/followups/${id}/complete`, { completion_notes: notes }),

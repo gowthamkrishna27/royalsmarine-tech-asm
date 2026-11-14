@@ -6,9 +6,9 @@ const logger = require('../utils/logger');
 cron.schedule('0 0 * * *', async () => {
   logger.info('Running daily followup job...');
   try {
-    // Mark pending past-due followups as overdue
+    // Mark followups incomplete for > 1 week as overdue
     const [updated] = await sequelize.query(
-      "UPDATE followups SET status='overdue', updated_at=NOW() WHERE status='pending' AND followup_date < CURDATE() AND deleted_at IS NULL"
+      "UPDATE followups SET status='overdue', updated_at=NOW() WHERE status='pending' AND DATEDIFF(CURDATE(), followup_date) > 7 AND deleted_at IS NULL"
     );
     logger.info(`Marked ${updated.affectedRows} followups as overdue`);
 

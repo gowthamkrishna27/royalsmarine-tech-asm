@@ -10,6 +10,7 @@ import {
   BuildingOfficeIcon,
   DocumentTextIcon,
   UsersIcon,
+  BuildingStorefrontIcon,
   CheckCircleIcon,
   XCircleIcon,
   CircleStackIcon,
@@ -606,15 +607,136 @@ function ManagerDashboard({ data }) {
   );
 }
 
+
+function DealersModal({ dealers, totalCount, searchTerm, onSearchChange, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-xs animate-fade-in">
+      <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col max-h-[85vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 bg-gradient-to-r from-blue-50/80 via-white to-gray-50 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 shrink-0">
+              <BuildingStorefrontIcon className="w-6 h-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">Registered Dealers</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                  {totalCount} {totalCount === 1 ? 'Dealer' : 'Dealers'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Dealers recorded during farmer and tank registration
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center transition shrink-0"
+            title="Close"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="p-3 sm:p-4 border-b border-gray-100 bg-white shrink-0">
+          <div className="relative">
+            <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Search dealers by name..."
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+              autoFocus
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Dealers List */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-2.5">
+          {dealers.length === 0 ? (
+            <div className="py-12 text-center text-gray-400">
+              <BuildingStorefrontIcon className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+              <p className="font-semibold text-gray-600">No dealers found</p>
+              <p className="text-xs text-gray-400 mt-1">
+                {searchTerm
+                  ? 'No dealer matches your search.'
+                  : 'No dealers recorded yet. When ASM or technicians add a dealer name while creating/editing farmers, they will appear here.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {dealers.map((dealer, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 rounded-xl border border-gray-200/80 bg-white hover:border-blue-300 hover:shadow-xs transition flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0 border border-blue-100">
+                      <BuildingStorefrontIcon className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-gray-900 truncate" title={dealer.dealer_name}>
+                        {dealer.dealer_name}
+                      </h4>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {dealer.farmer_count} {dealer.farmer_count === 1 ? 'farmer' : 'farmers'} · {dealer.tank_count} {dealer.tank_count === 1 ? 'tank' : 'tanks'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 shrink-0">
+                    {dealer.tank_count} {dealer.tank_count === 1 ? 'Tank' : 'Tanks'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-4 py-3 bg-gray-50/90 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+          <span>Total: <strong>{totalCount}</strong> distinct dealers</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-1.5 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition shadow-2xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ManagementDashboard({ data }) {
+  const [showDealersModal, setShowDealersModal] = useState(false);
+  const [dealerSearchTerm, setDealerSearchTerm] = useState('');
   const { data: users } = useQuery({
-    queryKey: ['admin-users-list'],
-    queryFn: () => userApi.list({}).then((r) => r.data.data),
+    queryKey: ['admin-users-list', 'active'],
+    queryFn: () => userApi.list({ status: 'active', limit: 1000 }).then((r) => r.data.data),
     staleTime: 60000,
   });
 
-  const techExecs = (users || []).filter((u) => u.role === 'sales_executive');
-  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager');
+  const techExecs = (users || []).filter((u) => u.role === 'sales_executive' && u.status === 'active');
+  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager' && u.status === 'active');
+
+  const dealersList = data.dealers_list || [];
+  const filteredDealers = dealersList.filter((d) =>
+    d.dealer_name?.toLowerCase().includes(dealerSearchTerm.toLowerCase().trim())
+  );
 
   return (
     <div className="fade-in space-y-6">
@@ -688,6 +810,16 @@ function ManagementDashboard({ data }) {
           color="indigo"
           to="/users"
         />
+        <StatCard
+          label="Dealers"
+          value={data.total_dealers ?? dealersList.length ?? 0}
+          icon={BuildingStorefrontIcon}
+          color="blue"
+          onClick={() => {
+            setDealerSearchTerm('');
+            setShowDealersModal(true);
+          }}
+        />
 
         {/* Row 4: Management & Leadership */}
         <StatCard
@@ -733,18 +865,43 @@ function ManagementDashboard({ data }) {
           </div>
         )}
       </div>
+
+      {/* Dealers Modal */}
+      {showDealersModal && (
+        <DealersModal
+          dealers={filteredDealers}
+          totalCount={dealersList.length}
+          searchTerm={dealerSearchTerm}
+          onSearchChange={setDealerSearchTerm}
+          onClose={() => setShowDealersModal(false)}
+        />
+      )}
     </div>
   );
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard', user?.id],
     queryFn: () => dashboardApi.get().then((r) => r.data.data),
   });
 
   if (isLoading) return <PageSpinner />;
+
+  if (isError || !data) {
+    return (
+      <div className="card p-8 text-center space-y-3 max-w-lg mx-auto mt-8">
+        <p className="text-sm font-medium text-gray-900">Could not load dashboard data</p>
+        <p className="text-xs text-gray-500">
+          {error?.response?.data?.message || error?.message || 'Failed to fetch dashboard data'}
+        </p>
+        <button type="button" onClick={() => refetch()} className="btn-primary btn-sm mx-auto">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   const role = user?.role;
 

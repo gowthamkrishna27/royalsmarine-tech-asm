@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardApi, userApi } from '../../services/api';
+import { clientService } from '../../services/clientService';
 import { PageSpinner } from '../../components/common/Spinner';
 import StatCard from '../../components/common/StatCard';
+import { TankDetailModal } from '../tanks/HarvestedTanks';
 import {
   ClockIcon,
   BuildingOfficeIcon,
   DocumentTextIcon,
   UsersIcon,
+  BuildingStorefrontIcon,
   CheckCircleIcon,
   XCircleIcon,
   CircleStackIcon,
@@ -22,6 +25,9 @@ import {
   ArrowTopRightOnSquareIcon,
   UserIcon,
   UserGroupIcon,
+  ScaleIcon,
+  BeakerIcon,
+  CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
 
 function DashboardStatCards({ data }) {
@@ -84,9 +90,8 @@ function FarmersModal({ type, farmers, totalCount, searchTerm, onSearchChange, o
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">{title}</h2>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                isMyFarmers ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-              }`}>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${isMyFarmers ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                }`}>
                 {farmers.length} of {totalCount} {farmers.length === 1 ? 'farmer' : 'farmers'}
               </span>
             </div>
@@ -155,9 +160,8 @@ function FarmersModal({ type, farmers, totalCount, searchTerm, onSearchChange, o
                         >
                           {f.company_name}
                         </Link>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${
-                          f.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
-                        }`}>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0 ${f.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+                          }`}>
                           {f.status || 'Active'}
                         </span>
                       </div>
@@ -421,9 +425,8 @@ function TechsModal({ techs, totalCount, searchTerm, onSearchChange, onClose }) 
                             )}
                           </div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                          tech.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${tech.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
                           {tech.status || 'active'}
                         </span>
                       </div>
@@ -497,6 +500,441 @@ function TechsModal({ techs, totalCount, searchTerm, onSearchChange, onClose }) 
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HarvestedTanksModal({ onClose }) {
+  const [activeFilter, setActiveFilter] = useState('partial'); // 'partial' | 'final'
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTankForDetail, setSelectedTankForDetail] = useState(null);
+
+  const { data: tanks = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['admin-harvested-tanks'],
+    queryFn: () => clientService.getHarvestedTanks().then((r) => r.data.data || []),
+  });
+
+  const partialTanks = useMemo(() => {
+    return tanks.filter((t) => {
+      const partials = t.harvest_info?.partial_harvests;
+      return t.has_partial_harvest || (Array.isArray(partials) && partials.length > 0);
+    });
+  }, [tanks]);
+
+  const finalTanks = useMemo(() => {
+    return tanks.filter((t) => {
+      const finalH = t.harvest_info?.final_harvest;
+      const hasFinalData = finalH && typeof finalH === 'object' && Object.values(finalH).some(Boolean);
+      return t.has_final_harvest || hasFinalData || t.status === 'harvested';
+    });
+  }, [tanks]);
+
+  const activeList = activeFilter === 'partial' ? partialTanks : finalTanks;
+
+  const filteredTanks = useMemo(() => {
+    if (!searchTerm.trim()) return activeList;
+    const q = searchTerm.toLowerCase();
+    return activeList.filter((t) => {
+      const tankName = (t.tank_number || t.pond_name || '').toLowerCase();
+      const farmer = (t.company_name || '').toLowerCase();
+      const contact = (t.contact_person || '').toLowerCase();
+      const phone = (t.farmer_phone || '').toLowerCase();
+      const village = (t.village || '').toLowerCase();
+      const district = (t.district || '').toLowerCase();
+      const exec = (t.salesperson_name || '').toLowerCase();
+      return (
+        tankName.includes(q) ||
+        farmer.includes(q) ||
+        contact.includes(q) ||
+        phone.includes(q) ||
+        village.includes(q) ||
+        district.includes(q) ||
+        exec.includes(q)
+      );
+    });
+  }, [activeList, searchTerm]);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="fixed inset-0" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-gray-100 max-w-5xl w-full max-h-[92vh] sm:max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom sm:zoom-in-95 duration-200">
+        {/* Mobile Pull Bar */}
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-gray-50/90 shrink-0">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+        </div>
+
+        {/* Modal Header */}
+        <div className="px-4 sm:px-6 py-3.5 border-b border-gray-100 flex items-center justify-between gap-3 bg-gradient-to-r from-amber-50/80 via-white to-gray-50 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+              <ArchiveBoxArrowDownIcon className="w-6 h-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">Harvested Tanks</h2>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5 truncate"></p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-200 flex items-center justify-center transition shrink-0"
+            title="Close"
+          >
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* The Two Filters: Partial and Final + Search */}
+        <div className="p-3 sm:p-4 border-b border-gray-100 bg-white shrink-0 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Filter Tabs */}
+            <div className="inline-flex items-center p-1 bg-gray-100 rounded-xl gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveFilter('partial')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 ${activeFilter === 'partial'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                <span>Partial</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${activeFilter === 'partial' ? 'bg-gray-100 text-gray-700' : 'text-gray-400'
+                  }`}>
+                  {partialTanks.length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveFilter('final')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center gap-1.5 ${activeFilter === 'final'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-600 hover:text-gray-900'
+                  }`}
+              >
+                <span>Final</span>
+                <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${activeFilter === 'final' ? 'bg-gray-100 text-gray-700' : 'text-gray-400'
+                  }`}>
+                  {finalTanks.length}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative">
+            <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={`Search ${activeFilter} harvested tanks by farmer, tank #, phone, village, tech exec...`}
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Body / Tanks List */}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-5">
+          {isLoading ? (
+            <div className="py-16 text-center">
+              <PageSpinner />
+              <p className="text-sm text-gray-500 mt-3">Loading harvested tanks...</p>
+            </div>
+          ) : error ? (
+            <div className="p-8 text-center text-red-600 bg-red-50 border border-red-200 rounded-2xl">
+              <p className="font-semibold">Failed to load harvested tanks</p>
+              <p className="text-xs mt-1 text-gray-600">{error.message}</p>
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="btn-secondary btn-sm mt-3"
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredTanks.length === 0 ? (
+            <div className="py-14 text-center text-gray-400">
+              <ArchiveBoxArrowDownIcon className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+              <h3 className="font-bold text-gray-700 text-base">
+                {activeFilter === 'partial'
+                  ? 'No Partial Harvested Tanks Found'
+                  : 'No Final Harvested Tanks Found'}
+              </h3>
+              <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1">
+                {searchTerm
+                  ? 'No results matched your search query. Try clearing the search filter.'
+                  : activeFilter === 'partial'
+                    ? 'No tanks currently have partial harvest logs recorded.'
+                    : 'No tanks currently have final harvest records logged.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-4">
+              {filteredTanks.map((tank) => {
+                const finalH = tank.harvest_info?.final_harvest || null;
+                const partials = Array.isArray(tank.harvest_info?.partial_harvests)
+                  ? tank.harvest_info.partial_harvests
+                  : [];
+
+                return (
+                  <div
+                    key={tank.id}
+                    className={`p-4 rounded-2xl border transition flex flex-col justify-between gap-3 shadow-2xs hover:shadow-md ${activeFilter === 'partial'
+                      ? 'border-amber-200/80 bg-white hover:border-amber-300'
+                      : 'border-emerald-200/80 bg-white hover:border-emerald-300'
+                      }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2 border-b border-gray-100 pb-2.5">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900 text-sm sm:text-base">
+                            {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${activeFilter === 'partial'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            }`}>
+                            {activeFilter === 'partial' ? 'Partial Harvest' : 'Final Harvest'}
+                          </span>
+                        </div>
+                        <Link
+                          to={`/clients/${tank.client_id}`}
+                          className="text-xs font-semibold text-primary-700 hover:underline mt-0.5 block"
+                        >
+                          {tank.company_name || 'Unknown Farmer'}
+                        </Link>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-sm font-bold text-gray-900 font-mono">
+                          {Number(tank.area_acres || tank.area || 0).toFixed(2)}
+                        </span>
+                        <span className="text-[10px] text-gray-500 block -mt-0.5">Acres</span>
+                      </div>
+                    </div>
+
+                    {/* Farmer & Location Details */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-600 bg-gray-50/70 p-2.5 rounded-xl border border-gray-100">
+                      <div className="flex items-center gap-1.5">
+                        <PhoneIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        {tank.farmer_phone ? (
+                          <a href={`tel:${tank.farmer_phone}`} className="hover:underline font-mono text-gray-800">
+                            {tank.farmer_phone}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400">No phone</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <MapPinIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                        <span className="truncate">
+                          {[tank.village, tank.mandal, tank.district].filter(Boolean).join(', ') || 'Location unrecorded'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-gray-500">
+                        <BeakerIcon className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span className="truncate">
+                          Species: <strong className="text-gray-800 font-medium">{tank.culture_type || 'Shrimp / Vannamei'}</strong>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-gray-500">
+                        <UserIcon className="w-3.5 h-3.5 text-purple-500 shrink-0" />
+                        <span className="truncate">
+                          Tech: <strong className="text-gray-800 font-medium">{tank.salesperson_name || 'Unassigned'}</strong>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* DETAILS: PARTIAL HARVEST */}
+                    {activeFilter === 'partial' ? (
+                      <div className="bg-gradient-to-br from-amber-50/60 to-white border border-amber-200/90 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                            <ScaleIcon className="w-4 h-4 text-amber-700" />
+                            Partial Harvest Sessions ({partials.length})
+                          </span>
+                          {partials.length > 0 && (
+                            <span className="text-[11px] font-semibold text-amber-800">
+                              Total: {partials.reduce((sum, p) => sum + (parseFloat(p.harvested_biomass || p.biomass || 0) || 0), 0).toLocaleString()} kg
+                            </span>
+                          )}
+                        </div>
+
+                        {partials.length === 0 ? (
+                          <div className="text-xs text-gray-500 italic py-2 text-center bg-white/60 rounded-lg border border-dashed border-amber-200">
+                            Partial harvest recorded without itemized visit logs.
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            {partials.map((p, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-2.5 border border-amber-100 shadow-2xs space-y-1.5">
+                                <div className="flex items-center justify-between text-[11px] border-b border-gray-100 pb-1">
+                                  <span className="font-bold text-amber-950">
+                                    Harvest #{idx + 1} {p.date ? `• ${p.date}` : ''}
+                                  </span>
+                                  {p.reason && (
+                                    <span className="text-[10px] text-gray-500 italic truncate max-w-[150px]">
+                                      {p.reason}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5 text-center text-xs">
+                                  <div className="bg-amber-50/50 p-1 rounded">
+                                    <span className="text-[10px] text-gray-500 block">DOC</span>
+                                    <span className="font-bold text-gray-900">{p.doc || '-'}</span>
+                                  </div>
+                                  <div className="bg-amber-50/50 p-1 rounded">
+                                    <span className="text-[10px] text-gray-500 block">ABW</span>
+                                    <span className="font-bold text-gray-900">{p.abw ? `${p.abw}g` : '-'}</span>
+                                  </div>
+                                  <div className="bg-amber-50/50 p-1 rounded">
+                                    <span className="text-[10px] text-gray-500 block">Biomass</span>
+                                    <span className="font-bold text-amber-800">
+                                      {p.harvested_biomass || p.biomass ? `${p.harvested_biomass || p.biomass}kg` : '-'}
+                                    </span>
+                                  </div>
+                                  <div className="bg-amber-50/50 p-1 rounded">
+                                    <span className="text-[10px] text-gray-500 block">Count</span>
+                                    <span className="font-bold text-gray-900">{p.count || '-'}</span>
+                                  </div>
+                                  <div className="bg-amber-50/50 p-1 rounded col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] text-gray-500 block">Survival</span>
+                                    <span className="font-bold text-emerald-700">{p.survival_rate ? `${p.survival_rate}%` : '-'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* DETAILS: FINAL HARVEST */
+                      <div className="bg-gradient-to-br from-emerald-50/50 via-white to-emerald-50/20 border border-emerald-200/90 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-950 flex items-center gap-1.5">
+                            <ScaleIcon className="w-4 h-4 text-emerald-700" />
+                            Final Harvest Yield & Performance
+                          </span>
+                          {finalH?.date && (
+                            <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                              Date: {finalH.date}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs">
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">Final DOC</span>
+                            <span className="font-bold text-gray-900 text-xs sm:text-sm">
+                              {finalH?.doc || tank.doc || '-'}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">Final ABW</span>
+                            <span className="font-bold text-gray-900 text-xs sm:text-sm">
+                              {finalH?.abw ? `${finalH.abw}g` : (tank.abw ? `${tank.abw}g` : '-')}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">Total Biomass</span>
+                            <span className="font-bold text-emerald-800 text-xs sm:text-sm">
+                              {finalH?.total_biomass || finalH?.harvested_biomass ? `${finalH.total_biomass || finalH.harvested_biomass}kg` : '-'}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">Count/kg</span>
+                            <span className="font-bold text-gray-900 text-xs sm:text-sm">
+                              {finalH?.count || '-'}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">FCR</span>
+                            <span className="font-bold text-gray-900 text-xs sm:text-sm">
+                              {finalH?.fcr || tank.fcr || '-'}
+                            </span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg border border-emerald-100 shadow-2xs">
+                            <span className="text-[10px] text-gray-500 block">Survival</span>
+                            <span className="font-bold text-emerald-700 text-xs sm:text-sm">
+                              {finalH?.survival_rate ? `${finalH.survival_rate}%` : '-'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {(finalH?.remarks || tank.remarks) && (
+                          <div className="bg-white/90 p-2 rounded-lg border border-emerald-100 text-[11px] text-gray-700">
+                            <strong className="text-gray-900 font-semibold">Remarks: </strong>
+                            <span>{finalH?.remarks || tank.remarks}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Action Footer */}
+                    <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                      <Link
+                        to={`/clients/${tank.client_id}`}
+                        className="text-primary-600 hover:text-primary-800 font-medium hover:underline flex items-center gap-1"
+                      >
+                        <UserIcon className="w-3.5 h-3.5" />
+                        <span>Farmer Profile</span>
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTankForDetail(tank)}
+                        className="btn-primary btn-sm py-1 px-3 text-xs flex items-center gap-1 shadow-2xs"
+                      >
+                        <span>Full Pond Specs</span>
+                        <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Modal Footer */}
+        <div className="px-4 py-3 bg-gray-50/90 border-t border-gray-100 flex items-center justify-between">
+          <Link
+            to={`/harvested-tanks?type=${activeFilter}`}
+            onClick={onClose}
+            className="text-xs text-primary-600 hover:text-primary-800 font-semibold hover:underline flex items-center gap-1"
+          >
+            <span>Open Full Harvested Tanks Page →</span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-100 transition shadow-xs"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      {/* Embedded Full Pond Specs Modal if requested */}
+      {selectedTankForDetail && (
+        <TankDetailModal
+          tank={selectedTankForDetail}
+          onClose={() => setSelectedTankForDetail(null)}
+        />
+      )}
     </div>
   );
 }
@@ -604,22 +1042,55 @@ function ManagerDashboard({ data }) {
   );
 }
 
+
 function ManagementDashboard({ data }) {
-  // Query users to integrate admin features directly into minimal stat cards
+      const [showHarvestedModal, setShowHarvestedModal] = useState(false);
+
+  // Query active users to integrate admin features directly into minimal stat cards
   const { data: users } = useQuery({
-    queryKey: ['admin-users-list'],
-    queryFn: () => userApi.list({}).then((r) => r.data.data),
+    queryKey: ['admin-users-list', 'active'],
+    queryFn: () => userApi.list({ status: 'active', limit: 1000 }).then((r) => r.data.data),
     staleTime: 60000,
   });
 
-  const techExecs = (users || []).filter((u) => u.role === 'sales_executive');
-  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager');
+  const techExecs = (users || []).filter((u) => u.role === 'sales_executive' && u.status === 'active');
+  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager' && u.status === 'active');
+
+  const dealersList = data.dealers_list || [];
 
   return (
     <div className="fade-in space-y-6">
       {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Row 1: Farmers */}
+        <StatCard
+          label="Area Managers"
+          value={areaManagers.length}
+          icon={UsersIcon}
+          color="purple"
+          to="/users"
+        />
+        <StatCard
+          label="Field Executives"
+          value={techExecs.length}
+          icon={UsersIcon}
+          color="indigo"
+          to="/users"
+        />
+        <StatCard
+          label="Dealers"
+          value={data.total_dealers ?? dealersList.length ?? 0}
+          icon={BuildingStorefrontIcon}
+          color="blue"
+          to="/dealers"
+        />
+        <StatCard
+          label="Total Submissions"
+          value={data.total_submissions ?? 0}
+          icon={DocumentTextIcon}
+          color="emerald"
+          to="/visits"
+        />
         <StatCard
           label="Total Farmers"
           value={data.total_farmers ?? 0}
@@ -667,35 +1138,15 @@ function ManagementDashboard({ data }) {
 
         {/* Row 3: Submissions & Operations */}
         <StatCard
-          label="Total Submissions"
-          value={data.total_submissions ?? 0}
-          icon={DocumentTextIcon}
-          color="emerald"
-          to="/visits"
-        />
-        <StatCard
           label="Due Follow-ups"
           value={data.due_followups ?? 0}
           icon={ClockIcon}
           color="amber"
           to="/followups"
         />
-        <StatCard
-          label="Field Executives"
-          value={techExecs.length}
-          icon={UsersIcon}
-          color="indigo"
-          to="/users"
-        />
 
         {/* Row 4: Management & Leadership */}
-        <StatCard
-          label="Area Managers"
-          value={areaManagers.length}
-          icon={UsersIcon}
-          color="purple"
-          to="/users"
-        />
+
         <StatCard
           label="Forcely Closed Farmer"
           value={data.forcely_closed_farmers ?? 0}
@@ -704,18 +1155,38 @@ function ManagementDashboard({ data }) {
           to="/clients?status=forcely_closed"
         />
       </div>
-    </div>
+
+      {/* Harvested Tanks Modal with Partial & Final Filters */}
+      {showHarvestedModal && (
+        <HarvestedTanksModal onClose={() => setShowHarvestedModal(false)} />
+      )}
+      {/* Dealers Modal */}
+          </div>
   );
 }
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['dashboard', user?.id],
     queryFn: () => dashboardApi.get().then((r) => r.data.data),
   });
 
   if (isLoading) return <PageSpinner />;
+
+  if (isError || !data) {
+    return (
+      <div className="card p-8 text-center space-y-3 max-w-lg mx-auto mt-8">
+        <p className="text-sm font-medium text-gray-900">Could not load dashboard data</p>
+        <p className="text-xs text-gray-500">
+          {error?.response?.data?.message || error?.message || 'Failed to fetch dashboard data'}
+        </p>
+        <button type="button" onClick={() => refetch()} className="btn-primary btn-sm mx-auto">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   const role = user?.role;
 

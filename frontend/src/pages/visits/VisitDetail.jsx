@@ -423,6 +423,7 @@ export default function VisitDetail() {
                       <tr>
                         <th>Date</th>
                         <th>DOC</th>
+                        <th>Count</th>
                         <th>ABW (g)</th>
                         <th>Quantity (pcs)</th>
                         <th>Biomass (kg)</th>
@@ -433,6 +434,7 @@ export default function VisitDetail() {
                         <tr key={idx}>
                           <td>{ph.date || '—'}</td>
                           <td>{ph.doc || '—'}</td>
+                          <td className="font-bold font-mono text-gray-900">{ph.count || '—'}</td>
                           <td>{ph.abw || '—'}</td>
                           <td>{ph.harvested_quantity || '—'}</td>
                           <td className="font-bold">{ph.harvested_biomass || '—'}</td>
@@ -447,9 +449,10 @@ export default function VisitDetail() {
             {finalHarvest && Object.keys(finalHarvest).some((k) => finalHarvest[k]) && (
               <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl text-xs">
                 <p className="font-bold text-amber-900 mb-2">Final Harvest</p>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-gray-700">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-gray-700">
                   <div>Date: <strong className="text-gray-900">{finalHarvest.date || '—'}</strong></div>
                   <div>DOC: <strong className="text-gray-900">{finalHarvest.doc || '—'}</strong></div>
+                  <div>Count: <strong className="text-gray-900 font-mono font-bold">{finalHarvest.count || '—'}</strong></div>
                   <div>ABW: <strong className="text-gray-900">{finalHarvest.abw || '—'} g</strong></div>
                   <div>Quantity: <strong className="text-gray-900">{finalHarvest.harvested_quantity || '—'}</strong></div>
                   <div>Biomass: <strong className="text-gray-900 font-bold">{finalHarvest.harvested_biomass || '—'} kg</strong></div>

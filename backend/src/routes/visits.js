@@ -1,11 +1,12 @@
 const router = require('express').Router();
-const { listVisits, createVisit, getVisit, updateVisit, approveVisit, uploadAttachment, exportVisits } = require('../controllers/visitController');
+const { listVisits, createVisit, getVisit, updateVisit, approveVisit, uploadAttachment, exportVisits, getVisitFilters } = require('../controllers/visitController');
 const { authenticate, authorize } = require('../middleware/auth');
 const { visitUpload } = require('../config/multer');
 
 const managerRoles = ['super_admin', 'admin', 'sales_manager'];
 
 router.get('/export', authenticate, exportVisits);
+router.get('/filters', authenticate, getVisitFilters);
 router.get('/', authenticate, listVisits);
 router.post('/', authenticate, authorize('sales_manager', 'sales_executive'), createVisit);
 router.get('/:id', authenticate, getVisit);

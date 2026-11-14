@@ -1,6 +1,35 @@
 const sequelize = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 
+const getDealersStats = async (whereClause = '', replacements = []) => {
+  try {
+    const where = whereClause ? `AND ${whereClause}` : '';
+    const [dealers] = await sequelize.query(`
+      SELECT 
+        TRIM(p.dealer_name) as dealer_name,
+        COUNT(DISTINCT p.id) as tank_count,
+        COUNT(DISTINCT COALESCE(p.client_id, p.farmer_id)) as farmer_count
+      FROM ponds p
+      JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+      WHERE p.dealer_name IS NOT NULL 
+        AND TRIM(p.dealer_name) != '' 
+        AND p.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
+        ${where}
+      GROUP BY TRIM(p.dealer_name)
+      ORDER BY tank_count DESC, dealer_name ASC
+    `, { replacements });
+    const list = dealers || [];
+    return {
+      total_dealers: list.length,
+      dealers_list: list,
+    };
+  } catch (err) {
+    return { total_dealers: 0, dealers_list: [] };
+  }
+};
+
+
 const getSalesExecutiveDashboard = async (userId) => {
   const [farmerStats] = await sequelize.query(
     `SELECT 
@@ -154,27 +183,27 @@ const getSalesManagerDashboard = async (userId) => {
     { replacements: [userId, userId, userId, userId, userId] }
   );
   const [submissionsCount] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM visits WHERE (salesperson_id=? OR salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND deleted_at IS NULL",
+    "SELECT COUNT(*) as count FROM visits WHERE (salesperson_id=? OR salesperson_id IN (SELECT id FROM users WHERE manager_id=? AND status = 'active' AND deleted_at IS NULL)) AND deleted_at IS NULL",
     { replacements: [userId, userId] }
   );
   const [dueFollowups] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM followups WHERE (assigned_salesperson_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?)) AND status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL",
+    "SELECT COUNT(*) as count FROM followups WHERE (assigned_salesperson_id=? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=? AND status = 'active' AND deleted_at IS NULL)) AND status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL",
     { replacements: [userId, userId] }
   );
   const [teamVisits] = await sequelize.query(
-    "SELECT u.full_name, COUNT(v.id) as visit_count FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.manager_id=? GROUP BY u.id, u.full_name",
+    "SELECT u.full_name, COUNT(v.id) as visit_count FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.manager_id=? AND u.status = 'active' AND u.deleted_at IS NULL GROUP BY u.id, u.full_name",
     { replacements: [userId] }
   );
   const [teamVisitsMonth] = await sequelize.query(
-    "SELECT COUNT(v.id) as count FROM visits v JOIN users u ON v.salesperson_id=u.id WHERE u.manager_id=? AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL",
+    "SELECT COUNT(v.id) as count FROM visits v JOIN users u ON v.salesperson_id=u.id WHERE u.manager_id=? AND u.status = 'active' AND u.deleted_at IS NULL AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL",
     { replacements: [userId] }
   );
   const [overdueFollowups] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=?) AND followup_date<CURDATE() AND status IN ('pending','overdue') AND deleted_at IS NULL",
+    "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id=? AND status = 'active' AND deleted_at IS NULL) AND followup_date<CURDATE() AND status IN ('pending','overdue') AND deleted_at IS NULL",
     { replacements: [userId] }
   );
   const [teamMembers] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM users WHERE manager_id=? AND deleted_at IS NULL",
+    "SELECT COUNT(*) as count FROM users WHERE manager_id=? AND status = 'active' AND deleted_at IS NULL",
     { replacements: [userId] }
   );
   const [recentVisits] = await sequelize.query(
@@ -183,8 +212,8 @@ const getSalesManagerDashboard = async (userId) => {
      FROM visits v
      JOIN clients c ON v.client_id = c.id
      JOIN users sp ON v.salesperson_id = sp.id
-     WHERE (v.salesperson_id=? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id=?))
-       AND v.deleted_at IS NULL
+     WHERE (v.salesperson_id=? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id=? AND status = 'active' AND deleted_at IS NULL))
+       AND v.deleted_at IS NULL AND sp.status = 'active' AND sp.deleted_at IS NULL
      ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`,
     { replacements: [userId, userId] }
   );
@@ -197,7 +226,7 @@ const getSalesManagerDashboard = async (userId) => {
             (SELECT COUNT(*) FROM visits v WHERE v.salesperson_id = u.id AND v.deleted_at IS NULL) as total_visits,
             (SELECT COUNT(*) FROM visits v WHERE v.salesperson_id = u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL) as monthly_visits
      FROM users u
-     WHERE u.manager_id = :userId AND u.deleted_at IS NULL
+     WHERE u.manager_id = :userId AND u.status = 'active' AND u.deleted_at IS NULL
      ORDER BY u.full_name ASC`,
     { replacements: { userId } }
   );
@@ -229,6 +258,7 @@ const getSalesManagerDashboard = async (userId) => {
 };
 
 const getManagementDashboard = async () => {
+  const dealersStats = await getDealersStats();
   const [farmerStats] = await sequelize.query(`
     SELECT 
       COUNT(*) as total_farmers,
@@ -256,19 +286,19 @@ const getManagementDashboard = async () => {
     WHERE deleted_at IS NULL
   `);
   const [submissionsCount] = await sequelize.query(
-    "SELECT COUNT(*) as total FROM visits WHERE deleted_at IS NULL"
+    "SELECT COUNT(*) as total FROM visits v JOIN users sp ON v.salesperson_id = sp.id WHERE v.deleted_at IS NULL AND sp.status = 'active' AND sp.deleted_at IS NULL"
   );
   const [dueFollowups] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM followups WHERE status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL"
+    "SELECT COUNT(*) as count FROM followups f JOIN users sp ON f.assigned_salesperson_id = sp.id WHERE f.status IN ('pending','overdue') AND f.followup_date <= CURDATE() AND f.deleted_at IS NULL AND sp.status = 'active' AND sp.deleted_at IS NULL"
   );
   const [salespersonPerf] = await sequelize.query(
-    "SELECT u.full_name, COUNT(v.id) as visits FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY visits DESC"
+    "SELECT u.full_name, COUNT(v.id) as visits FROM users u LEFT JOIN visits v ON v.salesperson_id=u.id AND MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL WHERE u.role_id=(SELECT id FROM roles WHERE name='sales_executive') AND u.status = 'active' AND u.deleted_at IS NULL GROUP BY u.id, u.full_name ORDER BY visits DESC"
   );
   const [monthVisits] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM visits WHERE MONTH(visit_date)=MONTH(NOW()) AND YEAR(visit_date)=YEAR(NOW()) AND deleted_at IS NULL"
+    "SELECT COUNT(*) as count FROM visits v JOIN users sp ON v.salesperson_id = sp.id WHERE MONTH(v.visit_date)=MONTH(NOW()) AND YEAR(v.visit_date)=YEAR(NOW()) AND v.deleted_at IS NULL AND sp.status = 'active' AND sp.deleted_at IS NULL"
   );
   const [executivesCount] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM users WHERE role_id=(SELECT id FROM roles WHERE name='sales_executive') AND deleted_at IS NULL"
+    "SELECT COUNT(*) as count FROM users WHERE role_id=(SELECT id FROM roles WHERE name='sales_executive') AND status = 'active' AND deleted_at IS NULL"
   );
   const [recentVisits] = await sequelize.query(
     `SELECT v.id, v.client_id, v.visit_date, v.visit_time, v.meeting_type,
@@ -276,7 +306,7 @@ const getManagementDashboard = async () => {
      FROM visits v
      JOIN clients c ON v.client_id = c.id
      JOIN users sp ON v.salesperson_id = sp.id
-     WHERE v.deleted_at IS NULL
+     WHERE v.deleted_at IS NULL AND sp.status = 'active' AND sp.deleted_at IS NULL
      ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`
   );
 
@@ -296,6 +326,8 @@ const getManagementDashboard = async () => {
     field_executives: executivesCount[0]?.count || salespersonPerf.length,
     salesperson_performance: salespersonPerf,
     recent_visits: recentVisits,
+    total_dealers: dealersStats.total_dealers,
+    dealers_list: dealersStats.dealers_list,
   };
 };
 

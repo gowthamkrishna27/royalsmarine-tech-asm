@@ -63,6 +63,14 @@ const pondCurrentDocExpr = ({ hasDoc, hasDocDate }, alias = 'p', as = 'current_d
         END as ${as}`;
 };
 
+const pondDocParts = (hasDoc, hasDocDate, docVal, docDateVal) => {
+  const cols = [];
+  const vals = [];
+  if (hasDoc) { cols.push('doc'); vals.push(docVal); }
+  if (hasDocDate) { cols.push('doc_date'); vals.push(docDateVal); }
+  return { cols, vals };
+};
+
 const buildClientWhere = (query, userId, role) => {
   let where = 'c.deleted_at IS NULL';
   const replacements = [];
@@ -75,23 +83,60 @@ const buildClientWhere = (query, userId, role) => {
       where += ' AND (c.assigned_salesperson_id = ? OR (c.created_by = ? AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = ?)))';
       replacements.push(userId, userId, userId);
     } else if (query.scope === 'tech_exec_farmers' || query.scope === 'farmers') {
-      where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?)';
+      where += " AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL)";
       replacements.push(userId);
     } else {
-      where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ?))';
+      where += " AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
       replacements.push(userId, userId, userId, userId, userId);
     }
   }
 
-  if (query.region) {
-    where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND deleted_at IS NULL)';
-    replacements.push(query.region);
+  // Filter by Region
+  if (query.region && String(query.region).trim()) {
+    const reg = String(query.region).trim();
+    where += ` AND (
+      c.assigned_salesperson_id IN (
+        SELECT u.id FROM users u
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE (LOWER(TRIM(u.region)) = LOWER(TRIM(?)) OR LOWER(TRIM(m.region)) = LOWER(TRIM(?))) AND u.deleted_at IS NULL AND u.status = 'active'
+      )
+      OR c.assigned_manager_id IN (
+        SELECT id FROM users WHERE LOWER(TRIM(region)) = LOWER(TRIM(?)) AND deleted_at IS NULL AND status = 'active'
+      )
+      OR LOWER(TRIM(c.district)) = LOWER(TRIM(?))
+      OR LOWER(TRIM(c.city)) = LOWER(TRIM(?))
+    )`;
+    replacements.push(reg, reg, reg, reg, reg);
   }
+
+  // Filter by ASM (Sales Manager)
+  const asmId = query.asm_id || query.manager_id;
+  if (asmId) {
+    where += ` AND (
+      c.assigned_manager_id = ?
+      OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL)
+    )`;
+    replacements.push(asmId, asmId);
+  }
+
+  // Filter by Tech (Sales Executive)
+  const techId = query.tech_id || query.salesperson_id;
+  if (techId) {
+    where += ' AND c.assigned_salesperson_id = ?';
+    replacements.push(techId);
+  }
+
+  // Filter by Farmer (Client)
+  const farmerId = query.farmer_id || query.client_id;
+  if (farmerId) {
+    where += ' AND c.id = ?';
+    replacements.push(farmerId);
+  }
+
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
   if (query.state) { where += ' AND c.state = ?'; replacements.push(query.state); }
   if (query.client_type) { where += ' AND c.client_type = ?'; replacements.push(query.client_type); }
   if (query.status) { where += ' AND c.status = ?'; replacements.push(query.status); }
-  if (query.salesperson_id) { where += ' AND c.assigned_salesperson_id = ?'; replacements.push(query.salesperson_id); }
   if (query.search) {
     where += ' AND (c.company_name LIKE ? OR c.mobile LIKE ? OR c.email LIKE ? OR c.contact_person LIKE ?)';
     const s = `%${query.search}%`;
@@ -119,8 +164,8 @@ const listClients = async (req, res) => {
               c.assigned_salesperson_id, c.assigned_manager_id, c.created_by,
               sp.full_name as salesperson_name, m.full_name as manager_name
        FROM clients c
-       LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
-       LEFT JOIN users m ON c.assigned_manager_id = m.id
+       LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id AND sp.status = 'active'
+       LEFT JOIN users m ON c.assigned_manager_id = m.id AND m.status = 'active'
        WHERE ${where}
        ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
@@ -138,7 +183,7 @@ const createClient = async (req, res) => {
     address, city, district, state, pincode, latitude, longitude, gps_address,
     area, mandal, village, farm_extent_acres, number_of_tanks, water_source,
     industry_type, client_type, assigned_salesperson_id, assigned_manager_id,
-    notes, brands, categories, ponds,
+    notes, brands, categories, ponds, status,
   } = req.body;
 
   const t = await sequelize.transaction();
@@ -201,6 +246,7 @@ const createClient = async (req, res) => {
     const clientId = typeof result === 'number' ? result : (result?.insertId || result);
 
     if (ponds && Array.isArray(ponds) && ponds.length) {
+      const pondCols = await getPondDocCols();
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
         if (!pondName) continue;
@@ -215,12 +261,13 @@ const createClient = async (req, res) => {
 
         const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
         const docDateVal = docVal !== null ? (p.doc_date && String(p.doc_date).trim() ? String(p.doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+        const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
 
         await sequelize.query(
           `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-           salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
+           culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
           {
             replacements: [
               pondUuid, clientId, clientId, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -228,12 +275,14 @@ const createClient = async (req, res) => {
               p.soil_type || null,
               p.hatchery_name || null,
               p.brooder || null,
+              p.dealer_name || null,
               seedDate,
               stockQty,
               p.feed_type || null,
               p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
               latVal, lngVal, polyCoords, p.gps_address || null,
-              p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
+              p.status || 'active', p.remarks || null, req.user.id,
+              ...docParts.vals
             ],
             transaction: t,
           }
@@ -281,6 +330,31 @@ const createClient = async (req, res) => {
       );
     } catch (farmerErr) {
       console.warn('Warning saving to farmers table:', farmerErr.message);
+    }
+
+    
+    // Link to dealer_farmers if user is a dealer
+    if (req.user && req.user.role === 'dealer') {
+      try {
+        const [d] = await sequelize.query('SELECT id FROM dealers WHERE user_id = ? AND deleted_at IS NULL LIMIT 1', {
+          replacements: [req.user.id],
+          transaction: t
+        });
+        if (d[0]?.id) {
+          const connDate = req.body.connected_date || req.body.connection_date || new Date().toISOString().slice(0, 10);
+          await sequelize.query(
+            `INSERT INTO dealer_farmers (dealer_id, farmer_id, connection_date, status, created_by, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE connection_date = VALUES(connection_date), status = VALUES(status), updated_at = NOW()`,
+            {
+              replacements: [d[0].id, clientId, connDate, status || 'active', req.user.id],
+              transaction: t
+            }
+          );
+        }
+      } catch (dfErr) {
+        console.warn('Warning linking dealer_farmers in createClient:', dfErr.message);
+      }
     }
 
     await t.commit();
@@ -435,6 +509,7 @@ const updateClient = async (req, res) => {
     );
 
     if (ponds !== undefined && Array.isArray(ponds)) {
+      const pondCols = await getPondDocCols();
       const activePondIds = [];
       for (const p of ponds) {
         const pondName = p.tank_number || p.pond_name;
@@ -450,15 +525,25 @@ const updateClient = async (req, res) => {
 
         const docVal = (p.doc !== undefined && p.doc !== '' && p.doc !== null && !isNaN(p.doc)) ? Math.max(0, parseInt(p.doc, 10)) : null;
         const docDateVal = docVal !== null ? new Date().toISOString().slice(0, 10) : null;
+        const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
+        let docSet = '';
+        let docRepls = [];
+        if (pondCols.hasDoc) {
+          docSet += ', doc=?';
+          docRepls.push(docVal);
+          if (pondCols.hasDocDate) {
+            docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
+            docRepls.push(docVal, docVal, docDateVal);
+          }
+        }
 
         if (p.id) {
           activePondIds.push(p.id);
           await sequelize.query(
             `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
-             salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
+             salinity=?, soil_type=?, hatchery_name=?, brooder=?, dealer_name=?, seed_date=?,
              stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?,
-             doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+             latitude=?, longitude=?, polygon_coordinates=?, gps_address=?, status=?, remarks=?${docSet},
              updated_at=NOW()
              WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
             {
@@ -468,13 +553,14 @@ const updateClient = async (req, res) => {
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
+                p.dealer_name || null,
                 seedDate,
                 stockQty,
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
                 p.status || 'active', p.remarks || null,
-                docVal, docVal, docVal, docDateVal,
+                ...docRepls,
                 p.id, req.params.id, req.params.id
               ],
               transaction: t,
@@ -484,9 +570,9 @@ const updateClient = async (req, res) => {
           const pondUuid = uuidv4();
           const [insertRes] = await sequelize.query(
             `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-             salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
+             culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
             {
               replacements: [
                 pondUuid, req.params.id, req.params.id, pondName, p.tank_number || pondName, tankSize, tankSize, tankSize,
@@ -494,12 +580,14 @@ const updateClient = async (req, res) => {
                 p.soil_type || null,
                 p.hatchery_name || null,
                 p.brooder || null,
+                p.dealer_name || null,
                 seedDate,
                 stockQty,
                 p.feed_type || null,
                 p.culture_type || null, p.water_type || p.water_source || null, p.water_source || p.water_type || null,
                 latVal, lngVal, polyCoords, p.gps_address || null,
-                p.status || 'active', p.remarks || null, docVal, docDateVal, req.user.id
+                p.status || 'active', p.remarks || null, req.user.id,
+                ...docParts.vals
               ],
               transaction: t,
             }
@@ -721,8 +809,8 @@ const listPonds = async (req, res) => {
 const createPond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
-    hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-    culture_type, water_type, latitude, longitude, gps_address, status, remarks
+    hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
+    culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   const finalName = tank_number || pond_name;
   if (!finalName) return sendError(res, 'Tank number or name is required', 400);
@@ -748,12 +836,14 @@ const createPond = async (req, res) => {
     const polyCoords = req.body.polygon_coordinates ? (typeof req.body.polygon_coordinates === 'string' ? req.body.polygon_coordinates : JSON.stringify(req.body.polygon_coordinates)) : null;
     const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
     const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+    const pondCols = await getPondDocCols();
+    const docParts = pondDocParts(pondCols.hasDoc, pondCols.hasDocDate, docVal, docDateVal);
 
     const [result] = await sequelize.query(
       `INSERT INTO ponds (uuid, farmer_id, client_id, pond_name, tank_number, area, area_acres, tank_size,
-       salinity, soil_type, hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
-       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, doc, doc_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       salinity, soil_type, hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
+       culture_type, water_type, water_source, latitude, longitude, polygon_coordinates, gps_address, status, remarks, created_by${docParts.cols.length ? ', ' + docParts.cols.join(', ') : ''})
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${docParts.cols.length ? ', ' + docParts.cols.map(() => '?').join(', ') : ''})`,
       {
         replacements: [
           uuid, req.params.id, req.params.id, finalName, tank_number || finalName, finalSize, finalSize, finalSize,
@@ -761,11 +851,13 @@ const createPond = async (req, res) => {
           soil_type || null,
           hatchery_name || null,
           brooder || null,
+          dealer_name || null,
           seedDate,
           stockQty,
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
-          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, docVal, docDateVal, req.user.id
+          latVal, lngVal, polyCoords, gps_address || null, status || 'active', remarks || null, req.user.id,
+          ...docParts.vals
         ]
       }
     );
@@ -779,7 +871,7 @@ const createPond = async (req, res) => {
 const updatePond = async (req, res) => {
   const {
     pond_name, tank_number, area_acres, tank_size, salinity, soil_type,
-    hatchery_name, brooder, seed_date, stocking_quantity_lakhs, feed_type,
+    hatchery_name, brooder, dealer_name, seed_date, stocking_quantity_lakhs, feed_type,
     culture_type, water_type, latitude, longitude, gps_address, status, remarks, doc, doc_date
   } = req.body;
   try {
@@ -809,13 +901,23 @@ const updatePond = async (req, res) => {
 
     const docVal = (doc !== undefined && doc !== '' && doc !== null && !isNaN(doc)) ? Math.max(0, parseInt(doc, 10)) : null;
     const docDateVal = docVal !== null ? (doc_date && String(doc_date).trim() ? String(doc_date).trim().substring(0, 10) : new Date().toISOString().slice(0, 10)) : null;
+    const pondCols = await getPondDocCols();
+    let docSet = '';
+    let docRepls = [];
+    if (pondCols.hasDoc) {
+      docSet += ', doc=?';
+      docRepls.push(docVal);
+      if (pondCols.hasDocDate) {
+        docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
+        docRepls.push(docVal, docVal, docDateVal);
+      }
+    }
 
     await sequelize.query(
       `UPDATE ponds SET pond_name=?, tank_number=?, area=?, area_acres=?, tank_size=?,
-       salinity=?, soil_type=?, hatchery_name=?, brooder=?, seed_date=?,
+       salinity=?, soil_type=?, hatchery_name=?, brooder=?, dealer_name=?, seed_date=?,
        stocking_quantity_lakhs=?, feed_type=?, culture_type=?, water_type=?, water_source=?,
-       latitude=?, longitude=?, gps_address=?, status=?, remarks=?,
-       doc=?, doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END,
+       latitude=?, longitude=?, gps_address=?, status=?, remarks=?${docSet},
        updated_at=NOW()
        WHERE id=? AND (client_id=? OR farmer_id=?) AND deleted_at IS NULL`,
       {
@@ -825,12 +927,15 @@ const updatePond = async (req, res) => {
           soil_type || null,
           hatchery_name || null,
           brooder || null,
+          dealer_name || null,
           seedDate,
           stockQty,
           feed_type || null,
           culture_type || null, water_type || null, water_type || null,
           latVal, lngVal, gps_address || null, status || 'active',
-          remarks || null, docVal, docVal, docVal, docDateVal, req.params.pondId, req.params.id, req.params.id
+          remarks || null,
+          ...docRepls,
+          req.params.pondId, req.params.id, req.params.id
         ]
       }
     );
@@ -957,7 +1062,7 @@ const getMapLocations = async (req, res) => {
 
 const listHarvestedTanks = async (req, res) => {
   try {
-    const { search, district, culture_type } = req.query;
+    const { search, district, culture_type, harvest_type, region, asm_id, tech_id, farmer_id, client_id } = req.query;
 
     let scopingClause = '';
     const replacements = [];
@@ -995,6 +1100,26 @@ const listHarvestedTanks = async (req, res) => {
       replacements.push(culture_type);
     }
 
+    if (region && String(region).trim()) {
+      filterClause += " AND (LOWER(TRIM(COALESCE(u.region, m.region, c.district, c.city, ''))) = LOWER(TRIM(?)))";
+      replacements.push(String(region).trim());
+    }
+
+    if (asm_id) {
+      filterClause += " AND (c.assigned_manager_id = ? OR u.manager_id = ?)";
+      replacements.push(asm_id, asm_id);
+    }
+
+    if (tech_id) {
+      filterClause += " AND (c.assigned_salesperson_id = ? OR p.created_by = ? OR u.id = ?)";
+      replacements.push(tech_id, tech_id, tech_id);
+    }
+
+    if (farmer_id || client_id) {
+      filterClause += " AND (c.id = ?)";
+      replacements.push(farmer_id || client_id);
+    }
+
     const docCols = await getPondDocCols();
     const [tanks] = await sequelize.query(`
       SELECT 
@@ -1012,10 +1137,17 @@ const listHarvestedTanks = async (req, res) => {
         c.pincode,
         c.address as farmer_address,
         u.full_name as salesperson_name,
-        u.mobile as salesperson_phone
+        u.id as salesperson_id,
+        u.mobile as salesperson_phone,
+        u.region as salesperson_region,
+        c.area,
+        m.id as manager_id,
+        m.full_name as manager_name,
+        m.region as manager_region
       FROM ponds p
       JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
       LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      LEFT JOIN users m ON (c.assigned_manager_id = m.id OR u.manager_id = m.id)
       WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
         AND (
           p.status = 'harvested'
@@ -1036,6 +1168,7 @@ const listHarvestedTanks = async (req, res) => {
     `, { replacements });
 
     for (const tank of tanks) {
+      tank.region = (tank.salesperson_region || tank.manager_region || tank.district || tank.city || '').trim();
       const [visits] = await sequelize.query(`
         SELECT 
           v.id, v.visit_date, v.visit_time, v.meeting_type, v.meeting_highlights, v.remarks,
@@ -1062,19 +1195,78 @@ const listHarvestedTanks = async (req, res) => {
         return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
       });
 
-      let latestHarvest = null;
+      let finalHarvest = null;
+      const allPartialHarvests = [];
+
       for (const v of parsedVisits) {
-        if (v.harvest_details && (v.harvest_details.final_harvest || (Array.isArray(v.harvest_details.partial_harvests) && v.harvest_details.partial_harvests.length))) {
-          latestHarvest = v.harvest_details;
-          break;
+        const hd = v.harvest_details;
+        if (hd) {
+          if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+            const hasFinalData = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+            if (hasFinalData) {
+              finalHarvest = {
+                ...hd.final_harvest,
+                date: hd.final_harvest.date || v.visit_date,
+                visit_id: v.id,
+              };
+            }
+          }
+
+          if (Array.isArray(hd.partial_harvests) && hd.partial_harvests.length) {
+            for (const p of hd.partial_harvests) {
+              allPartialHarvests.push({
+                ...p,
+                date: p.date || v.visit_date,
+                visit_id: v.id,
+              });
+            }
+          } else if (hd.partial_harvest && typeof hd.partial_harvest === 'object') {
+            const hasPartialData = Object.values(hd.partial_harvest).some(val => val !== null && val !== undefined && val !== '');
+            if (hasPartialData) {
+              allPartialHarvests.push({
+                ...hd.partial_harvest,
+                date: hd.partial_harvest.date || v.visit_date,
+                visit_id: v.id,
+              });
+            }
+          }
         }
       }
 
-      tank.harvest_info = latestHarvest || null;
+      // If tank status is marked harvested or inactive, but no visit recorded final_harvest, create fallback
+      if (!finalHarvest && (tank.status === 'harvested' || tank.status === 'inactive')) {
+        finalHarvest = {
+          doc: tank.doc || '',
+          abw: tank.abw || '',
+          total_biomass: tank.total_biomass || '',
+          count: tank.count || '',
+          fcr: tank.fcr || '',
+          survival_rate: tank.survival_rate || '',
+          remarks: tank.remarks || 'Pond status set to harvested',
+          date: tank.updated_at ? String(tank.updated_at).substring(0, 10) : ''
+        };
+      }
+
+      const hasPartial = allPartialHarvests.length > 0;
+      const hasFinal = !!finalHarvest || tank.status === 'harvested';
+
+      tank.harvest_info = {
+        final_harvest: finalHarvest,
+        partial_harvests: allPartialHarvests,
+      };
+      tank.has_partial_harvest = hasPartial;
+      tank.has_final_harvest = hasFinal;
       tank.visits_history = parsedVisits;
     }
 
-    return sendSuccess(res, 'Harvested tanks fetched successfully', tanks);
+    let resultTanks = tanks;
+    if (harvest_type === 'partial') {
+      resultTanks = tanks.filter(t => t.has_partial_harvest);
+    } else if (harvest_type === 'final') {
+      resultTanks = tanks.filter(t => t.has_final_harvest);
+    }
+
+    return sendSuccess(res, 'Harvested tanks fetched successfully', resultTanks);
   } catch (err) {
     console.error('Error fetching harvested tanks:', err);
     return sendError(res, err.message, 500);
@@ -1082,9 +1274,296 @@ const listHarvestedTanks = async (req, res) => {
 };
 
 
+const getHarvestedFcrTanksData = async (query = {}, user = {}) => {
+  const { doc, search, feed_type, status, match_mode } = query;
+
+  let scopingClause = '';
+  const replacements = [];
+
+  if (user.role === 'sales_executive') {
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+    replacements.push(user.id, user.id, user.id);
+  } else if (user.role === 'sales_manager') {
+    scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    replacements.push(user.id, user.id, user.id, user.id, user.id);
+  }
+
+  let filterClause = '';
+  if (search) {
+    filterClause += ` AND (
+      p.pond_name LIKE ? OR 
+      p.tank_number LIKE ? OR 
+      c.company_name LIKE ? OR 
+      c.contact_person LIKE ? OR 
+      c.mobile LIKE ? OR 
+      c.village LIKE ? OR 
+      c.district LIKE ?
+    )`;
+    const s = `%${search.trim()}%`;
+    replacements.push(s, s, s, s, s, s, s);
+  }
+
+  if (feed_type) {
+    filterClause += ' AND p.feed_type LIKE ?';
+    replacements.push(`%${feed_type}%`);
+  }
+
+  if (status) {
+    filterClause += ' AND p.status = ?';
+    replacements.push(status);
+  }
+
+  const docCols = await getPondDocCols();
+  // Only fetch candidate ponds that have been marked harvested or have visits with harvest details
+  const [tanks] = await sequelize.query(`
+    SELECT
+      p.*,
+      ${pondAreaExpr(docCols, 'p')},
+      c.id as client_id,
+      c.company_name,
+      c.contact_person,
+      c.mobile as farmer_phone,
+      c.village,
+      c.mandal,
+      c.district,
+      c.city,
+      c.state,
+      c.pincode,
+      c.address as farmer_address,
+      u.full_name as salesperson_name,
+      u.mobile as salesperson_phone,
+      ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+    WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+      AND (
+        p.status = 'harvested'
+        OR p.status = 'inactive'
+        OR EXISTS (
+          SELECT 1 FROM visits v
+          WHERE (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+            AND v.deleted_at IS NULL
+            AND v.harvest_details IS NOT NULL
+            AND v.harvest_details != ''
+            AND v.harvest_details != '{}'
+            AND v.harvest_details != 'null'
+        )
+      )
+      ${scopingClause}
+      ${filterClause}
+    ORDER BY p.updated_at DESC
+  `, { replacements });
+
+  const harvestedTanks = [];
+
+  for (const tank of tanks) {
+    const [visits] = await sequelize.query(`
+      SELECT 
+        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+        v.water_quality, v.feeding_details, v.medication_details, v.harvest_details,
+        sp.full_name as salesperson_name
+      FROM visits v
+      LEFT JOIN users sp ON v.salesperson_id = sp.id
+      WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+        AND v.deleted_at IS NULL
+      ORDER BY v.visit_date DESC, v.created_at DESC
+    `, {
+      replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+    });
+
+    const parsedVisits = visits.map(v => {
+      let wq = v.water_quality;
+      let fd = v.feeding_details;
+      let md = v.medication_details;
+      let hd = v.harvest_details;
+      try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+      try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+      try { if (typeof md === 'string') md = JSON.parse(md); } catch(e){}
+      try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+      return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
+    });
+
+    let finalHarvest = null;
+    let latestFeeding = null;
+    const recordedDocs = [];
+
+    for (const v of parsedVisits) {
+      const hd = v.harvest_details;
+      if (hd) {
+        if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+          const hasFinalData = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+          if (hasFinalData) {
+            finalHarvest = {
+              ...hd.final_harvest,
+              fcr: hd.final_harvest.fcr || hd.derived?.fcr || '',
+              total_biomass: hd.final_harvest.harvested_biomass || hd.final_harvest.total_biomass || hd.derived?.total_biomass || '',
+              survival_rate: hd.final_harvest.survival_rate || hd.derived?.survival_percentage || '',
+              date: hd.final_harvest.date || v.visit_date,
+              visit_id: v.id,
+            };
+          }
+        }
+      }
+
+      if (v.feeding_details) {
+        if (!latestFeeding) latestFeeding = v.feeding_details;
+        if (v.feeding_details.doc !== undefined && v.feeding_details.doc !== null) {
+          recordedDocs.push(parseInt(v.feeding_details.doc, 10));
+        }
+      }
+      if (v.water_quality && v.water_quality.doc !== undefined && v.water_quality.doc !== null) {
+        recordedDocs.push(parseInt(v.water_quality.doc, 10));
+      }
+      if (hd?.final_harvest?.doc !== undefined && hd?.final_harvest?.doc !== null) {
+        recordedDocs.push(parseInt(hd.final_harvest.doc, 10));
+      }
+    }
+
+    // If tank status is marked harvested or inactive, but no visit recorded final_harvest, create fallback
+    if (!finalHarvest && (tank.status === 'harvested' || tank.status === 'inactive')) {
+      finalHarvest = {
+        doc: tank.doc || '',
+        abw: tank.abw || '',
+        total_biomass: tank.total_biomass || '',
+        count: tank.count || '',
+        fcr: tank.fcr || '',
+        survival_rate: tank.survival_rate || '',
+        remarks: tank.remarks || 'Pond status set to harvested',
+        date: tank.updated_at ? String(tank.updated_at).substring(0, 10) : ''
+      };
+    }
+
+    // Must have completed final harvest to appear in FCR tracker
+    const hasFinal = Boolean(
+      (finalHarvest && Object.values(finalHarvest).some(val => val !== null && val !== undefined && val !== '')) ||
+      tank.status === 'harvested'
+    );
+
+    if (!hasFinal) {
+      continue;
+    }
+
+    tank.final_harvest = finalHarvest;
+    tank.harvest_info = {
+      final_harvest: finalHarvest,
+    };
+    tank.has_final_harvest = true;
+    tank.latest_feeding = latestFeeding;
+    tank.recorded_docs = Array.from(new Set(recordedDocs.filter(d => !isNaN(d))));
+    tank.visits = parsedVisits;
+
+    // Normalized metrics at final harvest
+    tank.fcr = finalHarvest?.fcr || tank.fcr || latestFeeding?.fcr || null;
+    tank.harvest_doc = finalHarvest?.doc || tank.doc || tank.current_doc;
+    tank.abw = finalHarvest?.abw || tank.abw || latestFeeding?.abw || null;
+    tank.total_biomass = finalHarvest?.total_biomass || finalHarvest?.harvested_biomass || tank.total_biomass || null;
+    tank.harvest_date = finalHarvest?.date || null;
+    tank.survival_rate = finalHarvest?.survival_rate || tank.survival_rate || null;
+
+    harvestedTanks.push(tank);
+  }
+
+  let resultTanks = harvestedTanks;
+  if (doc !== undefined && doc !== '' && !isNaN(doc)) {
+    const targetDoc = parseInt(doc, 10);
+    resultTanks = harvestedTanks.filter(t => {
+      const hDoc = parseInt(t.harvest_doc, 10);
+      const cDoc = parseInt(t.current_doc, 10);
+      const pDoc = parseInt(t.doc, 10);
+      const hasVisitDoc = t.recorded_docs?.includes(targetDoc);
+      if (match_mode === 'range') {
+        return Math.abs(hDoc - targetDoc) <= 3 || Math.abs(cDoc - targetDoc) <= 3 || Math.abs(pDoc - targetDoc) <= 3 || hasVisitDoc;
+      }
+      return hDoc === targetDoc || cDoc === targetDoc || pDoc === targetDoc || hasVisitDoc;
+    });
+  }
+
+  return resultTanks;
+};
+
 const listFcrTanks = async (req, res) => {
   try {
-    const { doc, search, feed_type, status, match_mode } = req.query;
+    const resultTanks = await getHarvestedFcrTanksData(req.query, req.user);
+    return sendSuccess(res, 'FCR tanks fetched successfully', resultTanks);
+  } catch (err) {
+    console.error('Error fetching FCR tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+const exportFcrTanks = async (req, res) => {
+  try {
+    const tanks = await getHarvestedFcrTanksData(req.query, req.user);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('FCR Report');
+
+    ws.columns = [
+      { header: 'Tank Name / No.', key: 'tank_number', width: 20 },
+      { header: 'Farmer / Company', key: 'company_name', width: 25 },
+      { header: 'Contact Person', key: 'contact_person', width: 20 },
+      { header: 'Mobile', key: 'farmer_phone', width: 16 },
+      { header: 'Village', key: 'village', width: 18 },
+      { header: 'District', key: 'district', width: 18 },
+      { header: 'Harvest DOC', key: 'harvest_doc', width: 14 },
+      { header: 'Final FCR', key: 'fcr', width: 12 },
+      { header: 'Final ABW (g)', key: 'abw', width: 14 },
+      { header: 'Biomass (kg)', key: 'total_biomass', width: 16 },
+      { header: 'Survival Rate', key: 'survival_rate', width: 14 },
+      { header: 'Harvest Date', key: 'harvest_date', width: 15 },
+      { header: 'Area (Acres)', key: 'area', width: 14 },
+      { header: 'Seed Date', key: 'seed_date', width: 15 },
+      { header: 'Stocking (Lakhs)', key: 'stocking', width: 16 },
+      { header: 'Feed Type', key: 'feed_type', width: 18 },
+      { header: 'Technical Executive', key: 'salesperson_name', width: 22 },
+    ];
+
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F2FE' }
+    };
+
+    tanks.forEach(t => {
+      const fh = t.final_harvest || {};
+      const area = Number(t.area_acres || t.area || 0).toFixed(2);
+      const survival = t.survival_rate ? (String(t.survival_rate).includes('%') ? t.survival_rate : `${t.survival_rate}%`) : '';
+      ws.addRow({
+        tank_number: t.tank_number || t.pond_name || `Tank ${t.id}`,
+        company_name: t.company_name || '',
+        contact_person: t.contact_person || '',
+        farmer_phone: t.farmer_phone || '',
+        village: t.village || '',
+        district: t.district || '',
+        harvest_doc: t.harvest_doc || fh.doc || '',
+        fcr: t.fcr || '',
+        abw: t.abw || '',
+        total_biomass: t.total_biomass || '',
+        survival_rate: survival,
+        harvest_date: t.harvest_date ? String(t.harvest_date).slice(0, 10) : '',
+        area: area,
+        seed_date: t.seed_date ? String(t.seed_date).slice(0, 10) : '',
+        stocking: t.stocking_quantity_lakhs || '',
+        feed_type: t.feed_type || '',
+        salesperson_name: t.salesperson_name || '',
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=fcr-report.xlsx');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting FCR tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+const listDealers = async (req, res) => {
+  try {
+    const { search, region, area } = req.query;
 
     let scopingClause = '';
     const replacements = [];
@@ -1097,126 +1576,550 @@ const listFcrTanks = async (req, res) => {
       replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
     }
 
-    let filterClause = '';
-    if (search) {
-      filterClause += ` AND (
-        p.pond_name LIKE ? OR 
-        p.tank_number LIKE ? OR 
-        c.company_name LIKE ? OR 
-        c.contact_person LIKE ? OR 
-        c.mobile LIKE ? OR 
-        c.village LIKE ? OR 
-        c.district LIKE ?
-      )`;
+    let searchClause = '';
+    if (search && search.trim()) {
+      searchClause = 'AND (p.dealer_name LIKE ? OR c.company_name LIKE ? OR c.village LIKE ? OR c.district LIKE ? OR u.region LIKE ? OR u.area LIKE ?)';
       const s = `%${search.trim()}%`;
-      replacements.push(s, s, s, s, s, s, s);
-    }
-
-    if (feed_type) {
-      filterClause += ' AND p.feed_type LIKE ?';
-      replacements.push(`%${feed_type}%`);
-    }
-
-    if (status) {
-      filterClause += ' AND p.status = ?';
-      replacements.push(status);
+      replacements.push(s, s, s, s, s, s);
     }
 
     const docCols = await getPondDocCols();
-    const [tanks] = await sequelize.query(`
-      SELECT
-        p.*,
+
+    // Query all ponds that have a dealer_name
+    const [rows] = await sequelize.query(`
+      SELECT 
+        TRIM(p.dealer_name) as dealer_name,
+        p.id as pond_id,
+        p.pond_name,
+        p.tank_number,
         ${pondAreaExpr(docCols, 'p')},
         c.id as client_id,
         c.company_name,
         c.contact_person,
-        c.mobile as farmer_phone,
+        c.mobile,
         c.village,
         c.mandal,
         c.district,
         c.city,
         c.state,
-        c.pincode,
-        c.address as farmer_address,
+        u.id as salesperson_id,
         u.full_name as salesperson_name,
-        u.mobile as salesperson_phone,
-        ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
+        u.region as salesperson_region,
+        u.area as salesperson_area,
+        m.region as manager_region,
+        m.area as manager_area
       FROM ponds p
       JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
       LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
-      WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+      LEFT JOIN users m ON (c.assigned_manager_id = m.id OR u.manager_id = m.id)
+      LEFT JOIN users m ON u.manager_id = m.id
+      WHERE p.dealer_name IS NOT NULL 
+        AND TRIM(p.dealer_name) != ''
+        AND p.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
         ${scopingClause}
-        ${filterClause}
-      ORDER BY current_doc DESC, p.updated_at DESC
+        ${searchClause}
+      ORDER BY p.dealer_name ASC, c.company_name ASC
     `, { replacements });
 
-    for (const tank of tanks) {
-      const [visits] = await sequelize.query(`
-        SELECT 
-          v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
-          v.water_quality, v.feeding_details, v.harvest_details,
-          sp.full_name as salesperson_name
-        FROM visits v
-        LEFT JOIN users sp ON v.salesperson_id = sp.id
-        WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
-          AND v.deleted_at IS NULL
-        ORDER BY v.visit_date DESC, v.created_at DESC
-      `, {
-        replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
-      });
+    const dealersMap = new Map();
 
-      const parsedVisits = visits.map(v => {
-        let wq = v.water_quality;
-        let fd = v.feeding_details;
-        let hd = v.harvest_details;
-        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
-        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
-        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
-        return { ...v, water_quality: wq, feeding_details: fd, harvest_details: hd };
-      });
-
-      let latestFeeding = null;
-      let recordedDocs = [];
-      for (const v of parsedVisits) {
-        if (v.feeding_details) {
-          if (!latestFeeding) latestFeeding = v.feeding_details;
-          if (v.feeding_details.doc !== undefined && v.feeding_details.doc !== null) {
-            recordedDocs.push(parseInt(v.feeding_details.doc, 10));
-          }
-        }
-        if (v.water_quality && v.water_quality.doc !== undefined && v.water_quality.doc !== null) {
-          recordedDocs.push(parseInt(v.water_quality.doc, 10));
-        }
+    for (const r of rows) {
+      const name = r.dealer_name;
+      if (!dealersMap.has(name)) {
+        dealersMap.set(name, {
+          dealer_name: name,
+          tank_count: 0,
+          farmer_count: 0,
+          total_acres: 0,
+          regions: new Set(),
+          areas: new Set(),
+          districts: new Set(),
+          villages: new Set(),
+          farmersMap: new Map(),
+          salespersons: new Set(),
+        });
       }
 
-      tank.latest_feeding = latestFeeding;
-      tank.recorded_docs = Array.from(new Set(recordedDocs));
-      tank.visits = parsedVisits;
+      const d = dealersMap.get(name);
+      d.tank_count += 1;
+      const acres = parseFloat(r.area_acres || 0);
+      if (!isNaN(acres)) d.total_acres += acres;
+
+      const rowRegion = (r.salesperson_region || r.manager_region || r.district || '').trim();
+      const rowArea = (r.salesperson_area || r.manager_area || r.mandal || r.village || '').trim();
+
+      if (rowRegion) d.regions.add(rowRegion);
+      if (rowArea) d.areas.add(rowArea);
+      if (r.district) d.districts.add(r.district.trim());
+      if (r.village) d.villages.add(r.village.trim());
+      if (r.salesperson_name) d.salespersons.add(r.salesperson_name.trim());
+
+      if (!d.farmersMap.has(r.client_id)) {
+        d.farmersMap.set(r.client_id, {
+          client_id: r.client_id,
+          company_name: r.company_name,
+          contact_person: r.contact_person,
+          mobile: r.mobile,
+          village: r.village,
+          mandal: r.mandal,
+          district: r.district,
+          region: rowRegion,
+          area: rowArea,
+          salesperson_name: r.salesperson_name,
+          tanks: [],
+          total_acres: 0,
+        });
+      }
+
+      const f = d.farmersMap.get(r.client_id);
+      f.tanks.push({
+        id: r.pond_id,
+        name: r.tank_number || r.pond_name || `Tank #${r.pond_id}`,
+        area_acres: acres,
+      });
+      f.total_acres += acres;
     }
 
-    let resultTanks = tanks;
-    if (doc !== undefined && doc !== '' && !isNaN(doc)) {
-      const targetDoc = parseInt(doc, 10);
-      resultTanks = tanks.filter(t => {
-        const cDoc = parseInt(t.current_doc, 10);
-        const pDoc = parseInt(t.doc, 10);
-        const hasVisitDoc = t.recorded_docs?.includes(targetDoc);
-        if (match_mode === 'range') {
-          return Math.abs(cDoc - targetDoc) <= 3 || Math.abs(pDoc - targetDoc) <= 3 || hasVisitDoc;
+    let dealersList = Array.from(dealersMap.values()).map(d => ({
+      dealer_name: d.dealer_name,
+      tank_count: d.tank_count,
+      farmer_count: d.farmersMap.size,
+      total_acres: parseFloat(d.total_acres.toFixed(2)),
+      regions: Array.from(d.regions).filter(Boolean),
+      areas: Array.from(d.areas).filter(Boolean),
+      districts: Array.from(d.districts).filter(Boolean),
+      villages: Array.from(d.villages).filter(Boolean),
+      salespersons: Array.from(d.salespersons).filter(Boolean),
+      farmers: Array.from(d.farmersMap.values()).map(f => ({
+        ...f,
+        total_acres: parseFloat(f.total_acres.toFixed(2)),
+      })),
+    }));
+
+    if (region && region.trim()) {
+      const targetRegion = region.trim().toLowerCase();
+      dealersList = dealersList.filter(d =>
+        d.regions.some(r => r.toLowerCase() === targetRegion) ||
+        d.districts.some(dist => dist.toLowerCase() === targetRegion)
+      );
+    }
+
+    if (area && area.trim()) {
+      const targetArea = area.trim().toLowerCase();
+      dealersList = dealersList.filter(d =>
+        d.areas.some(a => a.toLowerCase() === targetArea) ||
+        d.villages.some(v => v.toLowerCase() === targetArea)
+      );
+    }
+
+    dealersList.sort((a, b) => b.tank_count - a.tank_count || a.dealer_name.localeCompare(b.dealer_name));
+
+    return sendSuccess(res, 'Dealers fetched successfully', dealersList);
+  } catch (err) {
+    console.error('Error fetching dealers:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+
+const getCountTanksData = async (query = {}, user = {}) => {
+  const { count, region, area, search } = query;
+
+  let scopingClause = '';
+  const replacements = [];
+
+  if (user.role === 'sales_executive') {
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+    replacements.push(user.id, user.id, user.id);
+  } else if (user.role === 'sales_manager') {
+    scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    replacements.push(user.id, user.id, user.id, user.id, user.id);
+  }
+
+  let filterClause = '';
+  if (search && search.trim()) {
+    filterClause += ` AND (
+      p.pond_name LIKE ? OR 
+      p.tank_number LIKE ? OR 
+      c.company_name LIKE ? OR 
+      c.contact_person LIKE ? OR 
+      c.mobile LIKE ? OR 
+      c.village LIKE ? OR 
+      c.district LIKE ? OR
+      u.region LIKE ? OR
+      u.area LIKE ?
+    )`;
+    const s = `%${search.trim()}%`;
+    replacements.push(s, s, s, s, s, s, s, s, s);
+  }
+
+  const docCols = await getPondDocCols();
+  const [tanks] = await sequelize.query(`
+    SELECT
+      p.*,
+      ${pondAreaExpr(docCols, 'p')},
+      c.id as client_id,
+      c.company_name,
+      c.contact_person,
+      c.mobile as farmer_phone,
+      c.village,
+      c.mandal,
+      c.district,
+      c.city,
+      c.state,
+      c.pincode,
+      c.address as farmer_address,
+      u.id as salesperson_id,
+      u.full_name as salesperson_name,
+      u.mobile as salesperson_phone,
+      u.region as salesperson_region,
+      u.area as salesperson_area,
+      m.region as manager_region,
+      m.area as manager_area,
+      ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+    LEFT JOIN users m ON u.manager_id = m.id
+    WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+    ${scopingClause}
+    ${filterClause}
+    ORDER BY p.updated_at DESC
+  `, { replacements });
+
+  const processedTanks = [];
+  const allCountsSet = new Set();
+  const allRegionsSet = new Set();
+  const allAreasSet = new Set();
+
+  for (const tank of tanks) {
+    const rowRegion = (tank.salesperson_region || tank.manager_region || tank.district || '').trim();
+    const rowArea = (tank.salesperson_area || tank.manager_area || tank.mandal || tank.village || '').trim();
+    if (rowRegion) allRegionsSet.add(rowRegion);
+    if (rowArea) allAreasSet.add(rowArea);
+    if (tank.district) allRegionsSet.add(tank.district.trim());
+    if (tank.village) allAreasSet.add(tank.village.trim());
+    if (tank.mandal) allAreasSet.add(tank.mandal.trim());
+
+    const [visits] = await sequelize.query(`
+      SELECT 
+        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+        v.water_quality, v.feeding_details, v.medication_details, v.harvest_details,
+        sp.full_name as salesperson_name
+      FROM visits v
+      LEFT JOIN users sp ON v.salesperson_id = sp.id
+      WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+        AND v.deleted_at IS NULL
+      ORDER BY v.visit_date DESC, v.created_at DESC
+    `, {
+      replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+    });
+
+    const parsedVisits = visits.map(v => {
+      let wq = v.water_quality;
+      let fd = v.feeding_details;
+      let md = v.medication_details;
+      let hd = v.harvest_details;
+      try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+      try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+      try { if (typeof md === 'string') md = JSON.parse(md); } catch(e){}
+      try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+      return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
+    });
+
+    let finalHarvest = null;
+    const partialHarvests = [];
+    const tankCounts = [];
+
+    for (const v of parsedVisits) {
+      const hd = v.harvest_details;
+      if (hd) {
+        if (Array.isArray(hd.partial_harvests)) {
+          for (const ph of hd.partial_harvests) {
+            if (ph && (ph.count !== undefined && ph.count !== null && ph.count !== '')) {
+              const numCount = parseFloat(ph.count);
+              tankCounts.push({
+                source: `Partial Harvest ${ph.harvest_no || (partialHarvests.length + 1)}`,
+                count: !isNaN(numCount) ? numCount : ph.count,
+                raw_count: ph.count,
+                date: ph.date || v.visit_date,
+                doc: ph.doc,
+                abw: ph.abw,
+                biomass: ph.harvested_biomass,
+                quantity: ph.harvested_quantity,
+                visit_id: v.id,
+              });
+              allCountsSet.add(!isNaN(numCount) ? numCount : ph.count);
+            }
+            partialHarvests.push({
+              ...ph,
+              date: ph.date || v.visit_date,
+              visit_id: v.id,
+            });
+          }
         }
-        return cDoc === targetDoc || pDoc === targetDoc || hasVisitDoc;
+        if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+          const hasFinalData = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+          if (hasFinalData) {
+            finalHarvest = {
+              ...hd.final_harvest,
+              fcr: hd.final_harvest.fcr || hd.derived?.fcr || '',
+              total_biomass: hd.final_harvest.harvested_biomass || hd.final_harvest.total_biomass || hd.derived?.total_biomass || '',
+              survival_rate: hd.final_harvest.survival_rate || hd.derived?.survival_percentage || '',
+              date: hd.final_harvest.date || v.visit_date,
+              visit_id: v.id,
+            };
+            if (hd.final_harvest.count !== undefined && hd.final_harvest.count !== null && hd.final_harvest.count !== '') {
+              const numCount = parseFloat(hd.final_harvest.count);
+              tankCounts.push({
+                source: 'Final Harvest',
+                count: !isNaN(numCount) ? numCount : hd.final_harvest.count,
+                raw_count: hd.final_harvest.count,
+                date: hd.final_harvest.date || v.visit_date,
+                doc: hd.final_harvest.doc,
+                abw: hd.final_harvest.abw,
+                biomass: hd.final_harvest.harvested_biomass || hd.final_harvest.total_biomass,
+                quantity: hd.final_harvest.harvested_quantity,
+                visit_id: v.id,
+              });
+              allCountsSet.add(!isNaN(numCount) ? numCount : hd.final_harvest.count);
+            }
+          }
+        }
+      }
+    }
+
+    if (tank.count !== undefined && tank.count !== null && tank.count !== '') {
+      const numCount = parseFloat(tank.count);
+      tankCounts.push({
+        source: 'Pond Record',
+        count: !isNaN(numCount) ? numCount : tank.count,
+        raw_count: tank.count,
+        date: tank.updated_at ? String(tank.updated_at).slice(0, 10) : '',
+        doc: tank.doc,
+        abw: tank.abw,
+        biomass: tank.total_biomass,
+        quantity: tank.harvested_quantity,
+      });
+      allCountsSet.add(!isNaN(numCount) ? numCount : tank.count);
+    }
+
+    if (tankCounts.length === 0) {
+      const abwVal = parseFloat(finalHarvest?.abw || tank.abw || 0);
+      if (!isNaN(abwVal) && abwVal > 0) {
+        const derivedCount = Math.round(1000 / abwVal);
+        tankCounts.push({
+          source: 'Derived from ABW',
+          count: derivedCount,
+          raw_count: String(derivedCount),
+          date: finalHarvest?.date || '',
+          doc: finalHarvest?.doc || tank.doc,
+          abw: abwVal,
+          biomass: finalHarvest?.total_biomass || tank.total_biomass,
+        });
+        allCountsSet.add(derivedCount);
+      }
+    }
+
+    if (tankCounts.length > 0) {
+      const primary = tankCounts[tankCounts.length - 1];
+      processedTanks.push({
+        ...tank,
+        region: rowRegion,
+        area: rowArea,
+        final_harvest: finalHarvest,
+        partial_harvests: partialHarvests,
+        counts_records: tankCounts,
+        recorded_counts: Array.from(new Set(tankCounts.map(c => c.count))),
+        primary_count: primary?.count,
+        primary_source: primary?.source,
+        primary_biomass: primary?.biomass || finalHarvest?.total_biomass || tank.total_biomass,
+        primary_doc: primary?.doc || finalHarvest?.doc || tank.current_doc,
+        primary_date: primary?.date || finalHarvest?.date || '',
+        visits_count: parsedVisits.length,
       });
     }
+  }
 
-    return sendSuccess(res, 'FCR tanks fetched successfully', resultTanks);
+  let filtered = processedTanks;
+
+  if (count !== undefined && count !== null && String(count).trim() !== '') {
+    const targetStr = String(count).trim();
+    const targetNum = parseFloat(targetStr);
+    filtered = filtered.filter(t => {
+      return t.counts_records.some(cr => {
+        if (!isNaN(targetNum) && typeof cr.count === 'number') {
+          return Math.abs(cr.count - targetNum) < 0.01;
+        }
+        return String(cr.count).trim().toLowerCase() === targetStr.toLowerCase();
+      });
+    });
+  }
+
+  if (region && String(region).trim()) {
+    const rLower = String(region).trim().toLowerCase();
+    filtered = filtered.filter(t =>
+      (t.region || '').toLowerCase() === rLower ||
+      (t.district || '').toLowerCase() === rLower ||
+      (t.salesperson_region || '').toLowerCase() === rLower ||
+      (t.manager_region || '').toLowerCase() === rLower
+    );
+  }
+
+  if (area && String(area).trim()) {
+    const aLower = String(area).trim().toLowerCase();
+    filtered = filtered.filter(t =>
+      (t.area || '').toLowerCase() === aLower ||
+      (t.village || '').toLowerCase() === aLower ||
+      (t.mandal || '').toLowerCase() === aLower ||
+      (t.salesperson_area || '').toLowerCase() === aLower ||
+      (t.manager_area || '').toLowerCase() === aLower
+    );
+  }
+
+  const farmersMap = new Map();
+  for (const t of filtered) {
+    if (!farmersMap.has(t.client_id)) {
+      farmersMap.set(t.client_id, {
+        client_id: t.client_id,
+        farmer_name: t.company_name || t.contact_person || `Farmer ${t.client_id}`,
+        company_name: t.company_name,
+        contact_person: t.contact_person,
+        farmer_phone: t.farmer_phone,
+        village: t.village,
+        mandal: t.mandal,
+        district: t.district,
+        city: t.city,
+        state: t.state,
+        address: t.farmer_address,
+        region: t.region,
+        area: t.area,
+        salesperson_name: t.salesperson_name,
+        salesperson_phone: t.salesperson_phone,
+        tanks: [],
+        total_biomass: 0,
+        tank_count: 0,
+      });
+    }
+    const f = farmersMap.get(t.client_id);
+    f.tanks.push(t);
+    f.tank_count += 1;
+    const b = parseFloat(t.primary_biomass || 0);
+    if (!isNaN(b) && b > 0) f.total_biomass += b;
+  }
+
+  const farmersList = Array.from(farmersMap.values()).map(f => ({
+    ...f,
+    total_biomass: parseFloat(f.total_biomass.toFixed(2)),
+  }));
+
+  const sortedCounts = Array.from(allCountsSet).sort((a, b) => {
+    const numA = typeof a === 'number' ? a : parseFloat(a);
+    const numB = typeof b === 'number' ? b : parseFloat(b);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return String(a).localeCompare(String(b));
+  });
+
+  return {
+    tanks: filtered,
+    farmers: farmersList,
+    available_counts: sortedCounts,
+    available_regions: Array.from(allRegionsSet).filter(Boolean).sort(),
+    available_areas: Array.from(allAreasSet).filter(Boolean).sort(),
+    summary: {
+      total_farmers: farmersList.length,
+      total_tanks: filtered.length,
+      target_count: count || null,
+      total_biomass: filtered.reduce((sum, t) => sum + (parseFloat(t.primary_biomass || 0) || 0), 0).toFixed(2),
+    }
+  };
+};
+
+const listCountTanks = async (req, res) => {
+  try {
+    const data = await getCountTanksData(req.query, req.user);
+    return sendSuccess(res, 'Count tanks fetched successfully', data);
   } catch (err) {
-    console.error('Error fetching FCR tanks:', err);
+    console.error('Error fetching Count tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+const exportCountTanks = async (req, res) => {
+  try {
+    const data = await getCountTanksData(req.query, req.user);
+    const tanks = data.tanks || [];
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Count Report');
+
+    ws.columns = [
+      { header: 'Farmer / Company', key: 'company_name', width: 25 },
+      { header: 'Contact Person', key: 'contact_person', width: 20 },
+      { header: 'Mobile', key: 'farmer_phone', width: 16 },
+      { header: 'Region', key: 'region', width: 18 },
+      { header: 'Area', key: 'area', width: 18 },
+      { header: 'Village', key: 'village', width: 18 },
+      { header: 'Mandal', key: 'mandal', width: 18 },
+      { header: 'District', key: 'district', width: 18 },
+      { header: 'Technical Executive', key: 'salesperson_name', width: 22 },
+      { header: 'Tank Name / No.', key: 'tank_number', width: 20 },
+      { header: 'Area (Acres)', key: 'area_acres', width: 14 },
+      { header: 'Count', key: 'primary_count', width: 12 },
+      { header: 'Count Source', key: 'primary_source', width: 18 },
+      { header: 'DOC', key: 'primary_doc', width: 12 },
+      { header: 'Biomass (kg)', key: 'primary_biomass', width: 16 },
+      { header: 'Harvest Date', key: 'primary_date', width: 15 },
+      { header: 'Status', key: 'status', width: 14 },
+    ];
+
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F2FE' }
+    };
+
+    tanks.forEach(t => {
+      ws.addRow({
+        company_name: t.company_name || '',
+        contact_person: t.contact_person || '',
+        farmer_phone: t.farmer_phone || '',
+        region: t.region || '',
+        area: t.area || '',
+        village: t.village || '',
+        mandal: t.mandal || '',
+        district: t.district || '',
+        salesperson_name: t.salesperson_name || '',
+        tank_number: t.tank_number || t.pond_name || `Tank #${t.id}`,
+        area_acres: Number(t.area_acres || 0).toFixed(2),
+        primary_count: t.primary_count ?? '',
+        primary_source: t.primary_source || '',
+        primary_doc: t.primary_doc || '',
+        primary_biomass: t.primary_biomass || '',
+        primary_date: t.primary_date ? String(t.primary_date).slice(0, 10) : '',
+        status: t.status || '',
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=count-report.xlsx');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting Count report:', err);
     return sendError(res, err.message, 500);
   }
 };
 
 module.exports = {
+  listDealers,
+  listCountTanks,
+  exportCountTanks,
+
   listFcrTanks,
+  exportFcrTanks,
   listHarvestedTanks,
   listClients,
   createClient,

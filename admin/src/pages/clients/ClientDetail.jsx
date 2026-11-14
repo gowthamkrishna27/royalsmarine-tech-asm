@@ -273,6 +273,12 @@ export default function ClientDetail() {
                           <span className="font-medium text-gray-800">{p.brooder}</span>
                         </div>
                       )}
+                      {p.dealer_name && (
+                        <div>
+                          <span className="text-gray-400">Dealer:</span>{' '}
+                          <span className="font-medium text-gray-800">{p.dealer_name}</span>
+                        </div>
+                      )}
                       {(() => {
                         const baseDoc = p.seed_date ? null : (p.doc ?? null);
                         const docDate = p.doc_date ? String(p.doc_date).slice(0, 10) : null;
@@ -288,13 +294,13 @@ export default function ClientDetail() {
                       })()}
                       {p.seed_date && (
                         <div>
-                          <span className="text-gray-400">Seed Date:</span>{' '}
+                          <span className="text-gray-400">Stocking Date:</span>{' '}
                           <span className="font-medium text-gray-800">{p.seed_date.substring(0, 10)}</span>
                         </div>
                       )}
                       {p.stocking_quantity_lakhs !== null && p.stocking_quantity_lakhs !== undefined && (
                         <div>
-                          <span className="text-gray-400">Stocking:</span>{' '}
+                          <span className="text-gray-400">Stocking number:</span>{' '}
                           <span className="font-medium text-gray-800">{p.stocking_quantity_lakhs} Lakhs</span>
                         </div>
                       )}

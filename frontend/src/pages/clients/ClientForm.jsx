@@ -41,6 +41,7 @@ export default function ClientForm() {
             soil_type: 'loam',
             hatchery_name: '',
             brooder: '',
+            dealer_name: '',
             seed_date: '',
             stocking_quantity_lakhs: '',
             feed_type: '',
@@ -84,6 +85,7 @@ export default function ClientForm() {
           soil_type: p.soil_type || 'loam',
           hatchery_name: p.hatchery_name || '',
           brooder: p.brooder || '',
+          dealer_name: p.dealer_name || '',
           seed_date: p.seed_date ? p.seed_date.substring(0, 10) : '',
           stocking_quantity_lakhs: p.stocking_quantity_lakhs ?? '',
           feed_type: p.feed_type || '',
@@ -109,6 +111,7 @@ export default function ClientForm() {
           soil_type: 'loam',
           hatchery_name: '',
           brooder: '',
+          dealer_name: '',
           seed_date: '',
           stocking_quantity_lakhs: '',
           feed_type: '',
@@ -166,6 +169,7 @@ export default function ClientForm() {
               soil_type: 'loam',
               hatchery_name: '',
               brooder: '',
+              dealer_name: '',
               seed_date: '',
               stocking_quantity_lakhs: '',
               feed_type: '',
@@ -510,6 +514,18 @@ export default function ClientForm() {
                         value={tank.brooder || ''}
                         onChange={(e) => updateTankField(idx, 'brooder', e.target.value)}
                         placeholder="e.g. Kona Bay / SIS"
+                        className="input py-1.5 text-sm"
+                      />
+                    </div>
+
+                    {/* Dealer Name */}
+                    <div>
+                      <label className="label text-xs">Dealer Name</label>
+                      <input
+                        type="text"
+                        value={tank.dealer_name || ''}
+                        onChange={(e) => updateTankField(idx, 'dealer_name', e.target.value)}
+                        placeholder="e.g. Krishna Aqua Dealers"
                         className="input py-1.5 text-sm"
                       />
                     </div>

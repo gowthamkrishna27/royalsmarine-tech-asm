@@ -2,6 +2,7 @@ import api from './api';
 
 export const visitService = {
   list: (params) => api.get('/visits', { params }),
+  getFilters: () => api.get('/visits/filters'),
   get: (id) => api.get(`/visits/${id}`),
   create: (data) => api.post('/visits', data),
   update: (id, data) => api.put(`/visits/${id}`, data),

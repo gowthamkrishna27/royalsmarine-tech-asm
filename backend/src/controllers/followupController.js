@@ -4,40 +4,107 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
 
+function applyPersonnelAndRegionFilters(query, where, replacements) {
+  const { region, asm_id, manager_id, tech_id, salesperson_id } = query;
+
+  if (region && String(region).trim()) {
+    const reg = String(region).trim();
+    where += ` AND (
+      f.assigned_salesperson_id IN (
+        SELECT u.id FROM users u
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE (LOWER(u.region) = LOWER(?) OR LOWER(m.region) = LOWER(?)) AND u.deleted_at IS NULL AND u.status = 'active'
+      )
+      OR f.client_id IN (
+        SELECT c.id FROM clients c
+        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
+        LEFT JOIN users m ON c.assigned_manager_id = m.id
+        LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
+        WHERE (
+          LOWER(c.district) = LOWER(?)
+          OR LOWER(c.city) = LOWER(?)
+          OR LOWER(m.region) = LOWER(?)
+          OR LOWER(sp_m.region) = LOWER(?)
+          OR LOWER(sp.region) = LOWER(?)
+        ) AND c.deleted_at IS NULL
+      )
+    )`;
+    replacements.push(reg, reg, reg, reg, reg, reg, reg);
+  }
+
+  const asmFilterId = asm_id || manager_id;
+  if (asmFilterId) {
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active')
+      OR f.client_id IN (
+        SELECT id FROM clients
+        WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active'))
+          AND deleted_at IS NULL
+      )
+    )`;
+    replacements.push(asmFilterId, asmFilterId, asmFilterId, asmFilterId);
+  }
+
+  const techFilterId = tech_id || salesperson_id;
+  if (techFilterId) {
+    where += ' AND f.assigned_salesperson_id = ?';
+    replacements.push(techFilterId);
+  }
+
+  return where;
+}
+
 const listFollowups = async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { status, priority, from_date, to_date, client_id, dues_only } = req.query;
+  const { status, priority, from_date, to_date, date, followup_date, client_id, dues_only } = req.query;
   const { id: userId, role } = req.user;
 
-  // Auto-mark past pending as overdue in database
+  // Auto-mark overdue in database for > 7 days, and reset to pending if <= 7 days
   try {
     await sequelize.query(
-      "UPDATE followups SET status='overdue' WHERE status='pending' AND followup_date < CURDATE() AND deleted_at IS NULL"
+      "UPDATE followups SET status='overdue' WHERE status='pending' AND DATEDIFF(CURDATE(), followup_date) > 7 AND deleted_at IS NULL"
+    );
+    await sequelize.query(
+      "UPDATE followups SET status='pending' WHERE status='overdue' AND DATEDIFF(CURDATE(), followup_date) <= 7 AND deleted_at IS NULL"
     );
   } catch (e) {
     console.error('Auto overdue update failed:', e.message);
   }
 
-  let where = 'f.deleted_at IS NULL';
+  let where = "f.deleted_at IS NULL AND (f.assigned_salesperson_id IS NULL OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))";
   const replacements = [];
 
   if (role === 'sales_executive') {
     where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
   } else if (role === 'sales_manager') {
-    where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);
   }
 
-  if (status === 'dues' || status === 'pending_overdue' || dues_only === 'true') {
-    where += " AND f.status IN ('pending', 'overdue')";
+  if (status === 'dues' || dues_only === 'true') {
+    where += " AND f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE() AND DATEDIFF(CURDATE(), f.followup_date) <= 7";
+  } else if (status === 'overdue') {
+    where += " AND f.status IN ('pending', 'overdue') AND DATEDIFF(CURDATE(), f.followup_date) > 7";
+  } else if (status === 'pending') {
+    where += " AND f.status = 'pending'";
   } else if (status) {
     where += ' AND f.status = ?'; replacements.push(status);
   }
 
   if (priority) { where += ' AND f.priority = ?'; replacements.push(priority); }
   if (client_id) { where += ' AND f.client_id = ?'; replacements.push(client_id); }
-  if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
-  if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
+
+  const singleDate = date || followup_date;
+  if (singleDate) {
+    where += ' AND f.followup_date = ?';
+    replacements.push(singleDate);
+  } else {
+    if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
+    if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
+  }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
 
   try {
     const [[{ total }]] = await sequelize.query(`SELECT COUNT(*) as total FROM followups f WHERE ${where}`, { replacements });
@@ -239,6 +306,8 @@ const getTodayFollowups = async (req, res) => {
     replacements.push(userId, userId);
   }
 
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
+
   try {
     const [followups] = await sequelize.query(
       `SELECT f.id, f.title, f.followup_time, f.priority, f.status, c.company_name, 
@@ -257,17 +326,52 @@ const getTodayFollowups = async (req, res) => {
   }
 };
 
-const getOverdueFollowups = async (req, res) => {
+const getDuesFollowups = async (req, res) => {
   const { id: userId, role } = req.user;
-  let where = "f.status IN ('pending', 'overdue') AND f.followup_date < CURDATE() AND f.deleted_at IS NULL";
+  let where = "f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE() AND DATEDIFF(CURDATE(), f.followup_date) <= 7 AND f.deleted_at IS NULL";
   const replacements = [];
 
   if (role === 'sales_executive') {
     where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
   } else if (role === 'sales_manager') {
-    where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);
   }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
+
+  try {
+    const [followups] = await sequelize.query(
+      `SELECT f.id, f.title, f.followup_date, f.followup_time, f.priority, f.status, c.company_name, 
+              sp.full_name as salesperson_name, sp.mobile as salesperson_mobile,
+              r.display_name as salesperson_role_name,
+              DATEDIFF(CURDATE(), f.followup_date) as days_due
+       FROM followups f
+       JOIN clients c ON f.client_id = c.id
+       JOIN users sp ON f.assigned_salesperson_id = sp.id
+       LEFT JOIN roles r ON sp.role_id = r.id
+       WHERE ${where} ORDER BY f.followup_date DESC`,
+      { replacements }
+    );
+    return sendSuccess(res, 'Dues follow-ups', followups);
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+const getOverdueFollowups = async (req, res) => {
+  const { id: userId, role } = req.user;
+  let where = "f.status IN ('pending', 'overdue') AND DATEDIFF(CURDATE(), f.followup_date) > 7 AND f.deleted_at IS NULL";
+  const replacements = [];
+
+  if (role === 'sales_executive') {
+    where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
+  } else if (role === 'sales_manager') {
+    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
+    replacements.push(userId, userId);
+  }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
 
   try {
     const [followups] = await sequelize.query(
@@ -283,9 +387,9 @@ const getOverdueFollowups = async (req, res) => {
       { replacements }
     );
 
-    // Auto-update status to overdue in database
+    // Auto-update status to overdue in database for > 7 days
     await sequelize.query(
-      "UPDATE followups SET status='overdue' WHERE status='pending' AND followup_date < CURDATE() AND deleted_at IS NULL"
+      "UPDATE followups SET status='overdue' WHERE status='pending' AND DATEDIFF(CURDATE(), followup_date) > 7 AND deleted_at IS NULL"
     );
 
     return sendSuccess(res, 'Overdue follow-ups', followups);
@@ -294,4 +398,12 @@ const getOverdueFollowups = async (req, res) => {
   }
 };
 
-module.exports = { listFollowups, createFollowup, updateFollowup, completeFollowup, getTodayFollowups, getOverdueFollowups };
+module.exports = {
+  listFollowups,
+  createFollowup,
+  updateFollowup,
+  completeFollowup,
+  getTodayFollowups,
+  getDuesFollowups,
+  getOverdueFollowups,
+};
