@@ -1062,7 +1062,7 @@ const getMapLocations = async (req, res) => {
 
 const listHarvestedTanks = async (req, res) => {
   try {
-    const { search, district, culture_type, harvest_type } = req.query;
+    const { search, district, culture_type, harvest_type, region, asm_id, tech_id, farmer_id, client_id } = req.query;
 
     let scopingClause = '';
     const replacements = [];
@@ -1100,6 +1100,26 @@ const listHarvestedTanks = async (req, res) => {
       replacements.push(culture_type);
     }
 
+    if (region && String(region).trim()) {
+      filterClause += " AND (LOWER(TRIM(COALESCE(u.region, m.region, c.district, c.city, ''))) = LOWER(TRIM(?)))";
+      replacements.push(String(region).trim());
+    }
+
+    if (asm_id) {
+      filterClause += " AND (c.assigned_manager_id = ? OR u.manager_id = ?)";
+      replacements.push(asm_id, asm_id);
+    }
+
+    if (tech_id) {
+      filterClause += " AND (c.assigned_salesperson_id = ? OR p.created_by = ? OR u.id = ?)";
+      replacements.push(tech_id, tech_id, tech_id);
+    }
+
+    if (farmer_id || client_id) {
+      filterClause += " AND (c.id = ?)";
+      replacements.push(farmer_id || client_id);
+    }
+
     const docCols = await getPondDocCols();
     const [tanks] = await sequelize.query(`
       SELECT 
@@ -1117,10 +1137,17 @@ const listHarvestedTanks = async (req, res) => {
         c.pincode,
         c.address as farmer_address,
         u.full_name as salesperson_name,
-        u.mobile as salesperson_phone
+        u.id as salesperson_id,
+        u.mobile as salesperson_phone,
+        u.region as salesperson_region,
+        c.area,
+        m.id as manager_id,
+        m.full_name as manager_name,
+        m.region as manager_region
       FROM ponds p
       JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
       LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      LEFT JOIN users m ON (c.assigned_manager_id = m.id OR u.manager_id = m.id)
       WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
         AND (
           p.status = 'harvested'
@@ -1141,6 +1168,7 @@ const listHarvestedTanks = async (req, res) => {
     `, { replacements });
 
     for (const tank of tanks) {
+      tank.region = (tank.salesperson_region || tank.manager_region || tank.district || tank.city || '').trim();
       const [visits] = await sequelize.query(`
         SELECT 
           v.id, v.visit_date, v.visit_time, v.meeting_type, v.meeting_highlights, v.remarks,
@@ -1583,6 +1611,7 @@ const listDealers = async (req, res) => {
       FROM ponds p
       JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
       LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      LEFT JOIN users m ON (c.assigned_manager_id = m.id OR u.manager_id = m.id)
       LEFT JOIN users m ON u.manager_id = m.id
       WHERE p.dealer_name IS NOT NULL 
         AND TRIM(p.dealer_name) != ''

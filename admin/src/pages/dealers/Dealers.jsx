@@ -206,7 +206,6 @@ export default function Dealers() {
           <div className="flex flex-wrap items-center gap-2">
             {/* 1. Region Filter */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs font-semibold text-gray-600">Region:</label>
               <select
                 value={regionFilter}
                 onChange={(e) => handleRegionChange(e.target.value)}
@@ -224,7 +223,6 @@ export default function Dealers() {
 
             {/* 2. Area Filter */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs font-semibold text-gray-600">Area:</label>
               <select
                 value={areaFilter}
                 onChange={(e) => setAreaFilter(e.target.value)}
@@ -242,7 +240,6 @@ export default function Dealers() {
 
             {/* Sort Dropdown */}
             <div className="flex items-center gap-1.5">
-              <label className="text-xs font-semibold text-gray-600">Sort:</label>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}

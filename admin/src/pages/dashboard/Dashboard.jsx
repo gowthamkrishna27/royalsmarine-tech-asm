@@ -1133,7 +1133,7 @@ function ManagementDashboard({ data }) {
           value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
           icon={ArchiveBoxArrowDownIcon}
           color="amber"
-          onClick={() => setShowHarvestedModal(true)}
+          to="/harvested-tanks"
         />
 
         {/* Row 3: Submissions & Operations */}

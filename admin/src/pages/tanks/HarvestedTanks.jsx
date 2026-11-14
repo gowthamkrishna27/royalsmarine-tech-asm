@@ -9,14 +9,12 @@ import {
   MapPinIcon,
   PhoneIcon,
   UserIcon,
-  CalendarDaysIcon,
-  BeakerIcon,
-  ScaleIcon,
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
-  ClockIcon,
   BuildingOfficeIcon,
   ArrowLeftIcon,
+  ArrowDownTrayIcon,
+  TableCellsIcon,
 } from '@heroicons/react/24/outline';
 
 export default function HarvestedTanks() {
@@ -26,23 +24,175 @@ export default function HarvestedTanks() {
     initialType === 'partial' || initialType === 'final' ? initialType : 'all'
   );
   const [search, setSearch] = useState('');
-  const [districtFilter, setDistrictFilter] = useState('');
-  const [cultureFilter, setCultureFilter] = useState('');
+  const [regionFilter, setRegionFilter] = useState('');
+  const [asmFilter, setAsmFilter] = useState('');
+  const [techFilter, setTechFilter] = useState('');
+  const [farmerFilter, setFarmerFilter] = useState('');
   const [selectedTank, setSelectedTank] = useState(null);
 
+  // 1. Fetch harvested tanks
   const { data: tanks = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['harvested-tanks', search, districtFilter, cultureFilter],
+    queryKey: ['harvested-tanks'],
     queryFn: () =>
       clientService
-        .getHarvestedTanks({
-          search: search || undefined,
-          district: districtFilter || undefined,
-          culture_type: cultureFilter || undefined,
-        })
+        .getHarvestedTanks()
         .then((r) => r.data.data || []),
   });
 
-  // Calculate high-level summary metrics
+  // 2. Fetch filter metadata (regions, ASMs, techs, farmers)
+  const { data: filterMeta } = useQuery({
+    queryKey: ['visit-filters'],
+    queryFn: () => clientService.getFilters().then((r) => r.data.data),
+    staleTime: 60000,
+  });
+
+  // Region dropdown options
+  const regionOptions = useMemo(() => {
+    const metaRegions = filterMeta?.regions || [];
+    const tankRegions = tanks.map((t) => t.region || t.district).filter(Boolean);
+    const set = new Set([...metaRegions, ...tankRegions].map((r) => r.trim()).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [filterMeta?.regions, tanks]);
+
+  // ASM dropdown options (filtered by selected Region)
+  const asmOptions = useMemo(() => {
+    let list = filterMeta?.asms || [];
+    if (regionFilter) {
+      list = list.filter((a) => (a.region || '').toLowerCase() === regionFilter.toLowerCase());
+    }
+    return list.map((a) => ({
+      value: String(a.id),
+      label: a.name + (!regionFilter && a.region ? ` (${a.region})` : ''),
+    }));
+  }, [filterMeta?.asms, regionFilter]);
+
+  // Technician dropdown options (filtered by selected ASM, or selected Region)
+  const techOptions = useMemo(() => {
+    let list = filterMeta?.techs || [];
+    if (asmFilter) {
+      list = list.filter((t) => String(t.manager_id) === String(asmFilter));
+    } else if (regionFilter) {
+      list = list.filter((t) => (t.region || '').toLowerCase() === regionFilter.toLowerCase());
+    }
+    return list.map((t) => ({
+      value: String(t.id),
+      label: t.name,
+    }));
+  }, [filterMeta?.techs, asmFilter, regionFilter]);
+
+  // Farmer dropdown options (filtered by Tech, ASM, or Region)
+  const farmerOptions = useMemo(() => {
+    let list = filterMeta?.farmers || [];
+    if (techFilter) {
+      list = list.filter((f) => String(f.assigned_salesperson_id) === String(techFilter));
+    } else if (asmFilter) {
+      const techIdsUnderAsm = new Set(
+        (filterMeta?.techs || [])
+          .filter((t) => String(t.manager_id) === String(asmFilter))
+          .map((t) => String(t.id))
+      );
+      list = list.filter(
+        (f) =>
+          String(f.assigned_manager_id) === String(asmFilter) ||
+          techIdsUnderAsm.has(String(f.assigned_salesperson_id))
+      );
+    } else if (regionFilter) {
+      list = list.filter((f) => (f.region || '').toLowerCase() === regionFilter.toLowerCase());
+    }
+    return list.map((f) => ({
+      value: String(f.id),
+      label: f.name,
+    }));
+  }, [filterMeta?.farmers, filterMeta?.techs, techFilter, asmFilter, regionFilter]);
+
+  // Cascading Filter Handlers
+  const handleRegionChange = (newRegion) => {
+    setRegionFilter(newRegion);
+    if (asmFilter && newRegion) {
+      const curAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(asmFilter));
+      if (curAsm && (curAsm.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setAsmFilter('');
+        setTechFilter('');
+        setFarmerFilter('');
+        return;
+      }
+    }
+    if (techFilter && newRegion) {
+      const curTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techFilter));
+      if (curTech && (curTech.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setTechFilter('');
+        setFarmerFilter('');
+        return;
+      }
+    }
+    if (farmerFilter && newRegion) {
+      const curFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerFilter));
+      if (curFarmer && (curFarmer.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setFarmerFilter('');
+      }
+    }
+  };
+
+  const handleAsmChange = (newAsmId) => {
+    setAsmFilter(newAsmId);
+    if (techFilter && newAsmId) {
+      const curTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techFilter));
+      if (curTech && String(curTech.manager_id) !== String(newAsmId)) {
+        setTechFilter('');
+        setFarmerFilter('');
+        return;
+      }
+    }
+    if (farmerFilter && newAsmId) {
+      const techIdsUnderAsm = new Set(
+        (filterMeta?.techs || [])
+          .filter((t) => String(t.manager_id) === String(newAsmId))
+          .map((t) => String(t.id))
+      );
+      const curFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerFilter));
+      if (
+        curFarmer &&
+        String(curFarmer.assigned_manager_id) !== String(newAsmId) &&
+        !techIdsUnderAsm.has(String(curFarmer.assigned_salesperson_id))
+      ) {
+        setFarmerFilter('');
+      }
+    }
+  };
+
+  const handleTechChange = (newTechId) => {
+    setTechFilter(newTechId);
+    if (farmerFilter && newTechId) {
+      const curFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerFilter));
+      if (curFarmer && String(curFarmer.assigned_salesperson_id) !== String(newTechId)) {
+        setFarmerFilter('');
+      }
+    }
+  };
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setRegionFilter('');
+    setAsmFilter('');
+    setTechFilter('');
+    setFarmerFilter('');
+    handleTypeChange('all');
+  };
+
+  const handleTypeChange = (type) => {
+    setHarvestTypeFilter(type);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (type === 'all') {
+        next.delete('type');
+      } else {
+        next.set('type', type);
+      }
+      return next;
+    });
+  };
+
+  // High-level summary metrics
   const summary = useMemo(() => {
     const totalTanks = tanks.length;
     let totalAcres = 0;
@@ -69,18 +219,9 @@ export default function HarvestedTanks() {
     return {
       totalTanks,
       totalAcres: totalAcres.toFixed(1),
-      totalBiomass: totalBiomass > 0 ? `${totalBiomass.toLocaleString()} kg` : '-',
-      avgDoc: docCount > 0 ? `${Math.round(docSum / docCount)}d` : '-',
+      totalBiomass: totalBiomass > 0 ? `${totalBiomass.toLocaleString()} kg` : '—',
+      avgDoc: docCount > 0 ? `${Math.round(docSum / docCount)}d` : '—',
     };
-  }, [tanks]);
-
-  // Distinct districts and culture types for filtering
-  const districts = useMemo(() => {
-    return Array.from(new Set(tanks.map((t) => t.district).filter(Boolean))).sort();
-  }, [tanks]);
-
-  const cultureTypes = useMemo(() => {
-    return Array.from(new Set(tanks.map((t) => t.culture_type).filter(Boolean))).sort();
   }, [tanks]);
 
   const partialCount = useMemo(() => {
@@ -101,16 +242,19 @@ export default function HarvestedTanks() {
     ).length;
   }, [tanks]);
 
+  // Main Filtered Dataset
   const displayedTanks = useMemo(() => {
+    let list = tanks;
+
+    // Harvest Type Filter
     if (harvestTypeFilter === 'partial') {
-      return tanks.filter(
+      list = list.filter(
         (t) =>
           t.has_partial_harvest ||
           (Array.isArray(t.harvest_info?.partial_harvests) && t.harvest_info.partial_harvests.length > 0)
       );
-    }
-    if (harvestTypeFilter === 'final') {
-      return tanks.filter(
+    } else if (harvestTypeFilter === 'final') {
+      list = list.filter(
         (t) =>
           t.has_final_harvest ||
           (t.harvest_info?.final_harvest &&
@@ -118,30 +262,158 @@ export default function HarvestedTanks() {
           t.status === 'harvested'
       );
     }
-    return tanks;
-  }, [tanks, harvestTypeFilter]);
 
-  const handleTypeChange = (type) => {
-    setHarvestTypeFilter(type);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      if (type === 'all') {
-        next.delete('type');
-      } else {
-        next.set('type', type);
-      }
-      return next;
+    // Region Filter
+    if (regionFilter) {
+      const rLower = regionFilter.trim().toLowerCase();
+      list = list.filter(
+        (t) =>
+          (t.region || '').toLowerCase() === rLower ||
+          (t.salesperson_region || '').toLowerCase() === rLower ||
+          (t.manager_region || '').toLowerCase() === rLower ||
+          (t.district || '').toLowerCase() === rLower
+      );
+    }
+
+    // ASM Filter
+    if (asmFilter) {
+      const techIdsUnderAsm = new Set(
+        (filterMeta?.techs || [])
+          .filter((t) => String(t.manager_id) === String(asmFilter))
+          .map((t) => String(t.id))
+      );
+      list = list.filter(
+        (t) =>
+          String(t.manager_id) === String(asmFilter) ||
+          String(t.assigned_manager_id) === String(asmFilter) ||
+          techIdsUnderAsm.has(String(t.salesperson_id)) ||
+          techIdsUnderAsm.has(String(t.assigned_salesperson_id))
+      );
+    }
+
+    // Tech Filter
+    if (techFilter) {
+      list = list.filter(
+        (t) =>
+          String(t.salesperson_id) === String(techFilter) ||
+          String(t.assigned_salesperson_id) === String(techFilter) ||
+          String(t.created_by) === String(techFilter)
+      );
+    }
+
+    // Farmer Filter
+    if (farmerFilter) {
+      list = list.filter(
+        (t) =>
+          String(t.client_id) === String(farmerFilter) ||
+          String(t.farmer_id) === String(farmerFilter)
+      );
+    }
+
+    // Free Search Filter
+    if (search && search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter(
+        (t) =>
+          (t.pond_name || '').toLowerCase().includes(q) ||
+          (t.tank_number || '').toLowerCase().includes(q) ||
+          (t.company_name || '').toLowerCase().includes(q) ||
+          (t.contact_person || '').toLowerCase().includes(q) ||
+          (t.farmer_phone || '').toLowerCase().includes(q) ||
+          (t.village || '').toLowerCase().includes(q) ||
+          (t.district || '').toLowerCase().includes(q) ||
+          (t.salesperson_name || '').toLowerCase().includes(q) ||
+          (t.manager_name || '').toLowerCase().includes(q)
+      );
+    }
+
+    return list;
+  }, [
+    tanks,
+    harvestTypeFilter,
+    regionFilter,
+    asmFilter,
+    techFilter,
+    farmerFilter,
+    search,
+    filterMeta?.techs,
+  ]);
+
+  // Export Table Data to CSV
+  const handleExportCsv = () => {
+    if (!displayedTanks.length) return;
+    const headers = [
+      'No.',
+      'Farmer / Company',
+      'Contact Person',
+      'Phone',
+      'Tank / Pond',
+      'Area (Acres)',
+      'Region',
+      'District / Village',
+      'ASM (Manager)',
+      'Technician',
+      'Harvest Type',
+      'Harvest Date',
+      'Biomass (kg)',
+      'Count',
+      'ABW (g)',
+      'DOC',
+    ];
+
+    const rows = displayedTanks.map((t, idx) => {
+      const finalH = t.harvest_info?.final_harvest;
+      const partials = t.harvest_info?.partial_harvests || [];
+      const isPartial = t.has_partial_harvest || (!finalH && partials.length > 0);
+      const harvestType = isPartial ? 'Partial Harvest' : 'Final Harvest';
+      const harvestDate = finalH?.date || (partials[0]?.date) || (t.updated_at ? String(t.updated_at).slice(0, 10) : '');
+      const biomass = finalH?.total_biomass || finalH?.harvested_biomass || partials.reduce((sum, p) => sum + (parseFloat(p.harvested_biomass || p.biomass || 0) || 0), 0) || '';
+      const count = finalH?.count || (partials[0]?.count) || t.count || '';
+      const abw = finalH?.abw || (partials[0]?.abw) || t.abw || '';
+      const doc = finalH?.doc || (partials[0]?.doc) || t.doc || '';
+
+      return [
+        idx + 1,
+        `"${(t.company_name || '').replace(/"/g, '""')}"`,
+        `"${(t.contact_person || '').replace(/"/g, '""')}"`,
+        `"${(t.farmer_phone || '').replace(/"/g, '""')}"`,
+        `"${(t.tank_number || t.pond_name || `Tank #${t.id}`).replace(/"/g, '""')}"`,
+        Number(t.area_acres || t.area || 0).toFixed(2),
+        `"${(t.region || '').replace(/"/g, '""')}"`,
+        `"${([t.village, t.district].filter(Boolean).join(', ')).replace(/"/g, '""')}"`,
+        `"${(t.manager_name || '').replace(/"/g, '""')}"`,
+        `"${(t.salesperson_name || '').replace(/"/g, '""')}"`,
+        harvestType,
+        harvestDate,
+        biomass,
+        count,
+        abw,
+        doc,
+      ].join(',');
     });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `harvested_tanks_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
+  const hasActiveFilters = Boolean(
+    search || regionFilter || asmFilter || techFilter || farmerFilter || harvestTypeFilter !== 'all'
+  );
+
   return (
-    <div className="space-y-4 w-full fade-in">
+    <div className="space-y-4 w-full fade-in pb-10">
       {/* 1. Header: Minimal & Responsive */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200/80">
         <div className="flex items-center gap-3">
           <Link
             to="/dashboard"
-            className="w-9 h-9 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-gray-800 transition shrink-0"
+            className="w-9 h-9 rounded-xl border border-gray-200 bg-white hover:bg-blue-50/50 flex items-center justify-center text-gray-500 hover:text-blue-700 transition shrink-0"
             title="Back to Dashboard"
           >
             <ArrowLeftIcon className="w-4 h-4" />
@@ -152,22 +424,33 @@ export default function HarvestedTanks() {
                 Harvested Tanks
               </h1>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5"></p>
           </div>
         </div>
 
-        <Link
-          to="/clients"
-          className="btn-secondary btn-sm text-xs self-start sm:self-auto inline-flex items-center gap-1.5"
-        >
-          <BuildingOfficeIcon className="w-4 h-4 text-gray-500" />
-          <span>Farmers & Tanks</span>
-        </Link>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!displayedTanks.length}
+            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 hover:border-blue-300 hover:text-blue-700 transition disabled:opacity-50"
+            title="Export Table to CSV"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4 text-gray-500" />
+            <span>Export CSV</span>
+          </button>
+          <Link
+            to="/clients"
+            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 hover:border-blue-300 hover:text-blue-700 transition"
+          >
+            <BuildingOfficeIcon className="w-4 h-4 text-gray-500" />
+            <span>Farmers & Tanks</span>
+          </Link>
+        </div>
       </div>
 
-      {/* 2. Sleek Summary Strip (Minimal 4 metrics in one clean card) */}
+      {/* 2. Sleek Summary Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200/80 rounded-2xl divide-y sm:divide-y-0 sm:divide-x divide-gray-100 shadow-2xs overflow-hidden">
-        <div className="p-3.5 sm:p-4">
+        <div className="p-3.5 sm:p-4 bg-blue-50/20">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
             Total Harvested
           </p>
@@ -181,10 +464,10 @@ export default function HarvestedTanks() {
             Harvest Types
           </p>
           <div className="flex items-center gap-2 mt-1">
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200/80">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/80">
               {partialCount} Partial
             </span>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200/80">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/80">
               {finalCount} Final
             </span>
           </div>
@@ -194,7 +477,7 @@ export default function HarvestedTanks() {
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
             Total Biomass
           </p>
-          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
+          <p className="text-lg sm:text-2xl font-bold text-blue-900 mt-1">
             {summary.totalBiomass}
           </p>
         </div>
@@ -205,8 +488,8 @@ export default function HarvestedTanks() {
           </p>
           <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
             {summary.totalAcres} <span className="text-xs font-normal text-gray-500">Ac</span>
-            {summary.avgDoc !== '-' && (
-              <span className="text-xs font-medium text-gray-400 ml-1.5">
+            {summary.avgDoc !== '—' && (
+              <span className="text-xs font-medium text-blue-600 ml-1.5">
                 • {summary.avgDoc} avg
               </span>
             )}
@@ -214,72 +497,64 @@ export default function HarvestedTanks() {
         </div>
       </div>
 
-      {/* 3. Minimal Filter Bar: Segmented Tabs + Search + Dropdowns */}
+      {/* 3. Filter Bar: Region, ASM, Technician, Farmer, Search & Type Pills */}
       <div className="bg-white border border-gray-200/80 rounded-2xl p-3 sm:p-4 space-y-3 shadow-2xs">
+        {/* Row A: Type Pills & Search */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Segmented Filter Pills */}
-          <div className="inline-flex items-center p-1 bg-gray-100 rounded-xl gap-1 shrink-0">
+          <div className="inline-flex items-center p-1 bg-blue-50/40 border border-blue-100 rounded-xl gap-1 shrink-0">
             <button
               type="button"
               onClick={() => handleTypeChange('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'all'
-                ? 'bg-white text-gray-900 shadow-2xs'
+                ? 'bg-white text-blue-700 shadow-2xs border border-blue-100'
                 : 'text-gray-600 hover:text-gray-900'
                 }`}
             >
               <span>All</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'all' ? 'bg-gray-100 text-gray-700' : 'text-gray-400'
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-gray-400'
                 }`}>
-                {tanks.length}
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTypeChange('partial')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                harvestTypeFilter === 'partial'
-                  ? 'bg-white text-gray-900 shadow-2xs'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'partial'
+                ? 'bg-white text-sky-700 shadow-2xs border border-sky-100'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
             >
               <span>Partial</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                harvestTypeFilter === 'partial' ? 'bg-gray-100 text-gray-700' : 'text-gray-400'
-              }`}>
-                {partialCount}
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'partial' ? 'bg-sky-50 text-sky-700' : 'text-gray-400'
+                }`}>
               </span>
             </button>
 
             <button
               type="button"
               onClick={() => handleTypeChange('final')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
-                harvestTypeFilter === 'final'
-                  ? 'bg-white text-gray-900 shadow-2xs'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'final'
+                ? 'bg-white text-blue-800 shadow-2xs border border-blue-100'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
             >
               <span>Final</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                harvestTypeFilter === 'final' ? 'bg-gray-100 text-gray-700' : 'text-gray-400'
-              }`}>
-                {finalCount}
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'final' ? 'bg-blue-50 text-blue-700' : 'text-gray-400'
+                }`}>
               </span>
             </button>
           </div>
-        </div>
 
-        {/* Search & Compact Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          <div className="relative flex-1">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
             <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search tank, farmer, phone, village..."
+              placeholder="Search tank, farmer, phone, village, tech..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition"
+              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-gray-50/60 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
             />
             {search && (
               <button
@@ -291,44 +566,92 @@ export default function HarvestedTanks() {
               </button>
             )}
           </div>
+        </div>
 
-          {districts.length > 0 && (
+        {/* Row B: 4 Mandatory Dropdown Filters: Region, ASM, Technician, Farmer */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-gray-100">
+          {/* 1. Region Filter */}
+          <div className="flex flex-col gap-1">
             <select
-              value={districtFilter}
-              onChange={(e) => setDistrictFilter(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 text-gray-700 sm:w-40"
+              value={regionFilter}
+              onChange={(e) => handleRegionChange(e.target.value)}
+              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
             >
-              <option value="">All Districts</option>
-              {districts.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              <option value="">All Regions</option>
+              {regionOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
                 </option>
               ))}
             </select>
-          )}
+          </div>
 
-          {cultureTypes.length > 0 && (
+          {/* 2. ASM Filter */}
+          <div className="flex flex-col gap-1">
             <select
-              value={cultureFilter}
-              onChange={(e) => setCultureFilter(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/20 text-gray-700 sm:w-44"
+              value={asmFilter}
+              onChange={(e) => handleAsmChange(e.target.value)}
+              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
             >
-              <option value="">All Species</option>
-              {cultureTypes.map((c) => (
-                <option key={c} value={c}>
-                  {c}
+              <option value="">All ASMs</option>
+              {asmOptions.map((a) => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
                 </option>
               ))}
             </select>
-          )}
+          </div>
+
+          {/* 3. Technician Filter */}
+          <div className="flex flex-col gap-1">
+            <select
+              value={techFilter}
+              onChange={(e) => handleTechChange(e.target.value)}
+              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
+            >
+              <option value="">All Technicians</option>
+              {techOptions.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 4. Farmer Filter */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <select
+              value={farmerFilter}
+              onChange={(e) => setFarmerFilter(e.target.value)}
+              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
+            >
+              <option value="">All Farmers</option>
+              {farmerOptions.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {/* 4. Content Area: Minimal & Responsive Grid */}
+      {/* 4. Table Format Content Area (Zero Bottom Sliding Bar) */}
       {isLoading ? (
-        <div className="py-20 text-center">
+        <div className="py-20 text-center bg-white border border-sky-100 rounded-2xl">
           <PageSpinner />
-          <p className="text-xs text-gray-400 mt-2">Loading harvested tanks...</p>
+          <p className="text-xs text-sky-800 mt-2">Loading harvested tanks...</p>
         </div>
       ) : error ? (
         <div className="p-8 text-center text-red-600 bg-red-50/80 border border-red-200 rounded-2xl">
@@ -353,34 +676,235 @@ export default function HarvestedTanks() {
                 : 'No Harvested Tanks Found'}
           </h3>
           <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 mb-4">
-            {search || districtFilter || cultureFilter
-              ? 'No results matched your active filters. Try clearing search or filter options.'
+            {hasActiveFilters
+              ? 'No results matched your active filters. Try resetting the filters.'
               : 'Harvest records are automatically captured when harvest tests are logged during technical field visits.'}
           </p>
-          {(search || districtFilter || cultureFilter) && (
+          {hasActiveFilters && (
             <button
               type="button"
-              onClick={() => {
-                setSearch('');
-                setDistrictFilter('');
-                setCultureFilter('');
-              }}
-              className="btn-secondary btn-sm text-xs"
+              onClick={handleResetFilters}
+              className="btn-secondary btn-sm text-xs hover:border-blue-300 hover:text-blue-700"
             >
-              Clear Filters
+              Reset All Filters
             </button>
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayedTanks.map((tank) => (
-            <TankCard
-              key={tank.id}
-              tank={tank}
-              harvestType={harvestTypeFilter}
-              onViewDetails={() => setSelectedTank(tank)}
-            />
-          ))}
+        <div className="bg-white border border-sky-200/80 rounded-2xl shadow-2xs overflow-hidden">
+          {/* Desktop & Tablet Table (w-full, zero horizontal scrollbar) */}
+          <div className="hidden sm:block w-full overflow-x-hidden">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-sky-100 bg-sky-50/70 text-[11px] font-semibold text-sky-900 uppercase tracking-wider">
+                  <th className="py-3 px-3 w-10 text-center text-sky-800/60">No.</th>
+                  <th className="py-3 px-3">Farmer / Company</th>
+                  <th className="py-3 px-3 w-28">Tank Details</th>
+                  <th className="py-3 px-3 w-32">Region / Area</th>
+                  <th className="py-3 px-3 w-28">ASM</th>
+                  <th className="py-3 px-3 w-28">Technician</th>
+                  <th className="py-3 px-3 w-32">Harvest Type</th>
+                  <th className="py-3 px-3 w-24 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-sky-50 bg-white">
+                {displayedTanks.map((tank, idx) => {
+                  const finalH = tank.harvest_info?.final_harvest || null;
+                  const partials = Array.isArray(tank.harvest_info?.partial_harvests)
+                    ? tank.harvest_info.partial_harvests
+                    : [];
+                  const isPartial = tank.has_partial_harvest || (!finalH && partials.length > 0);
+                  const harvestDate =
+                    finalH?.date ||
+                    partials[0]?.date ||
+                    (tank.updated_at ? String(tank.updated_at).slice(0, 10) : '—');
+
+                  return (
+                    <tr
+                      key={tank.id}
+                      className="hover:bg-sky-50/40 transition-colors duration-150"
+                    >
+                      {/* No. */}
+                      <td className="py-3 px-3 text-center text-gray-400 font-mono text-xs">
+                        {idx + 1}
+                      </td>
+
+                      {/* Farmer / Company */}
+                      <td className="py-3 px-3">
+                        <Link
+                          to={`/clients/${tank.client_id}`}
+                          className="font-semibold text-sky-950 hover:text-sky-600 transition block truncate max-w-[220px]"
+                          title={tank.company_name}
+                        >
+                          {tank.company_name || 'Unknown Farmer'}
+                        </Link>
+                        <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          {tank.contact_person && <span>{tank.contact_person}</span>}
+                          {tank.farmer_phone && (
+                            <a
+                              href={`tel:${tank.farmer_phone}`}
+                              className="text-gray-500 hover:text-sky-700 font-mono"
+                            >
+                              • {tank.farmer_phone}
+                            </a>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Tank Details */}
+                      <td className="py-3 px-3">
+                        <span className="font-semibold text-gray-900 block truncate">
+                          {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
+                        </span>
+                        <div className="text-[11px] font-mono text-gray-500 mt-0.5">
+                          {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
+                        </div>
+                      </td>
+
+                      {/* Region / Area */}
+                      <td className="py-3 px-3">
+                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-sky-100 text-sky-800 border border-sky-200">
+                          {tank.region || tank.district || '—'}
+                        </span>
+                        <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[130px]">
+                          {[tank.village, tank.district].filter(Boolean).join(', ') || '—'}
+                        </div>
+                      </td>
+
+                      {/* ASM */}
+                      <td className="py-3 px-3 text-gray-800 font-medium truncate max-w-[120px]">
+                        {tank.manager_name || '—'}
+                      </td>
+
+                      {/* Technician */}
+                      <td className="py-3 px-3 text-gray-800 font-medium truncate max-w-[120px]">
+                        {tank.salesperson_name || '—'}
+                      </td>
+
+                      {/* Harvest Type & Date */}
+                      <td className="py-3 px-3">
+                        {isPartial ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                            Partial Harvest
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            Final Harvest
+                          </span>
+                        )}
+                        <div className="text-[11px] text-gray-500 font-mono mt-0.5">
+                          {harvestDate}
+                        </div>
+                      </td>
+
+                      {/* Action */}
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTank(tank)}
+                          className="btn-secondary btn-sm py-1 px-2.5 text-xs inline-flex items-center gap-1 hover:border-sky-300 hover:text-sky-700 transition"
+                        >
+                          <span>View</span>
+                          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card List (Zero Horizontal Scrollbar on Mobile) */}
+          <div className="sm:hidden divide-y divide-sky-100 p-2.5 space-y-2.5">
+            {displayedTanks.map((tank, idx) => {
+              const finalH = tank.harvest_info?.final_harvest || null;
+              const partials = Array.isArray(tank.harvest_info?.partial_harvests)
+                ? tank.harvest_info.partial_harvests
+                : [];
+              const isPartial = tank.has_partial_harvest || (!finalH && partials.length > 0);
+              const harvestDate =
+                finalH?.date ||
+                partials[0]?.date ||
+                (tank.updated_at ? String(tank.updated_at).slice(0, 10) : '—');
+
+              return (
+                <div key={tank.id} className="pt-2 first:pt-0 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-[11px] font-mono text-gray-400 mr-1.5">{idx + 1}.</span>
+                      <Link
+                        to={`/clients/${tank.client_id}`}
+                        className="font-semibold text-sky-950 text-xs hover:text-sky-600"
+                      >
+                        {tank.company_name || 'Unknown Farmer'}
+                      </Link>
+                      <div className="text-[11px] text-gray-500 mt-0.5">
+                        {tank.contact_person} {tank.farmer_phone ? `• ${tank.farmer_phone}` : ''}
+                      </div>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-medium shrink-0">
+                      {tank.region || '—'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs bg-sky-50/50 p-2 rounded-lg border border-sky-100">
+                    <div>
+                      <span className="font-semibold text-gray-900 block">
+                        {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
+                      </span>
+                      <span className="text-[11px] text-gray-500 font-mono">
+                        {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      {isPartial ? (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-700">
+                          Partial
+                        </span>
+                      ) : (
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
+                          Final
+                        </span>
+                      )}
+                      <div className="text-[10px] text-gray-500 font-mono mt-0.5">
+                        {harvestDate}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5">
+                    <span>Tech: <strong className="text-gray-700 font-medium">{tank.salesperson_name || '—'}</strong></span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTank(tank)}
+                      className="btn-secondary btn-sm py-0.5 px-2 text-[11px] inline-flex items-center gap-1 hover:border-sky-300 hover:text-sky-700"
+                    >
+                      <span>Details</span>
+                      <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Table Footer: Result Count */}
+          <div className="px-4 py-3 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>
+              Showing <strong>{displayedTanks.length}</strong> of <strong>{tanks.length}</strong> harvested tanks
+            </span>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Clear all filters
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -395,195 +919,7 @@ export default function HarvestedTanks() {
   );
 }
 
-// ----------------------------------------------------
-// TANK CARD: MINIMAL & RESPONSIVE
-// ----------------------------------------------------
-function TankCard({ tank, onViewDetails, harvestType = 'all' }) {
-  const finalH = tank.harvest_info?.final_harvest || null;
-  const partials = Array.isArray(tank.harvest_info?.partial_harvests)
-    ? tank.harvest_info.partial_harvests
-    : [];
 
-  const hasPartial = partials.length > 0 || tank.has_partial_harvest;
-  const hasFinal = Boolean(finalH && Object.values(finalH).some(Boolean)) || tank.status === 'harvested';
-
-  const isPartialView = harvestType === 'partial' || (!hasFinal && hasPartial);
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200/90 hover:border-gray-300 hover:shadow-md transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between gap-3 shadow-2xs">
-      {/* Top Header: Tank, Status & Acreage */}
-      <div>
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-gray-900 text-sm sm:text-base truncate">
-                {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
-              </span>
-              {isPartialView ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-                  Partial Harvest
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 border border-gray-200">
-                  Final Harvest
-                </span>
-              )}
-            </div>
-
-            <Link
-              to={`/clients/${tank.client_id}`}
-              className="text-xs font-semibold text-primary-700 hover:text-primary-800 hover:underline mt-0.5 truncate block"
-              title={tank.company_name}
-            >
-              {tank.company_name || 'Unknown Farmer'}
-            </Link>
-          </div>
-
-          <div className="shrink-0 text-right">
-            <span className="text-xs font-bold font-mono text-gray-700 bg-gray-100 px-2.5 py-1 rounded-lg block">
-              {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
-            </span>
-          </div>
-        </div>
-
-        {/* Minimal Location & Contact Strip */}
-        <div className="mt-2.5 flex items-center gap-3 text-[11px] text-gray-500 flex-wrap">
-          {(tank.village || tank.district) && (
-            <span className="inline-flex items-center gap-1 truncate max-w-[160px]">
-              <MapPinIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              {[tank.village, tank.district].filter(Boolean).join(', ')}
-            </span>
-          )}
-          {tank.farmer_phone && (
-            <a
-              href={`tel:${tank.farmer_phone}`}
-              className="inline-flex items-center gap-1 font-mono text-gray-600 hover:text-gray-900 hover:underline shrink-0"
-            >
-              <PhoneIcon className="w-3 h-3 text-gray-400 shrink-0" />
-              {tank.farmer_phone}
-            </a>
-          )}
-        </div>
-      </div>
-
-      {/* Metric Highlight Area */}
-      {isPartialView ? (
-        /* PARTIAL HARVEST CARD VIEW */
-        <div className="bg-gray-50/80 border border-gray-100 rounded-xl p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-gray-800">
-            <span>Partial Sessions ({partials.length})</span>
-            {partials.length > 0 && (
-              <span className="text-gray-600 font-mono text-[11px]">
-                {partials
-                  .reduce(
-                    (sum, p) => sum + (parseFloat(p.harvested_biomass || p.biomass || 0) || 0),
-                    0
-                  )
-                  .toLocaleString()}{' '}
-                kg total
-              </span>
-            )}
-          </div>
-
-          {partials.length === 0 ? (
-            <p className="text-[11px] text-gray-500 italic py-1 text-center">
-              Partial harvest marked without itemized session details
-            </p>
-          ) : (
-            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
-              {partials.slice(0, 3).map((p, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white rounded-lg p-2 border border-gray-100 text-[11px] space-y-1 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between font-medium text-gray-800">
-                    <span>
-                      #{idx + 1} {p.date ? `• ${p.date}` : ''}
-                    </span>
-                    <span className="font-bold text-gray-900 font-mono">
-                      {p.harvested_biomass || p.biomass
-                        ? `${p.harvested_biomass || p.biomass} kg`
-                        : '-'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1 text-[10px] text-gray-500">
-                    <div>
-                      DOC: <strong className="text-gray-800 font-mono">{p.doc || '-'}</strong>
-                    </div>
-                    <div>
-                      ABW: <strong className="text-gray-800 font-mono">{p.abw ? `${p.abw}g` : '-'}</strong>
-                    </div>
-                    <div>
-                      Count: <strong className="text-gray-800 font-mono">{p.count || '-'}</strong>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {partials.length > 3 && (
-                <p className="text-[10px] text-center text-gray-500 font-medium pt-0.5">
-                  +{partials.length - 3} more session{partials.length - 3 > 1 ? 's' : ''} recorded
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* FINAL HARVEST CARD VIEW */
-        <div className="bg-gray-50/70 border border-gray-100 rounded-xl p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs text-gray-600">
-            <span className="font-semibold text-gray-800">Final Harvest Specs</span>
-            {finalH?.date && (
-              <span className="text-[10px] font-mono text-gray-500">{finalH.date}</span>
-            )}
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="bg-white p-2 rounded-lg border border-gray-100 shadow-2xs">
-              <span className="text-[10px] text-gray-400 block font-medium">DOC</span>
-              <span className="text-xs sm:text-sm font-bold text-gray-900 font-mono">
-                {finalH?.doc || tank.doc || '-'}
-              </span>
-            </div>
-            <div className="bg-white p-2 rounded-lg border border-gray-100 shadow-2xs">
-              <span className="text-[10px] text-gray-400 block font-medium">ABW</span>
-              <span className="text-xs sm:text-sm font-bold text-gray-900 font-mono">
-                {finalH?.abw ? `${finalH.abw}g` : tank.abw ? `${tank.abw}g` : '-'}
-              </span>
-            </div>
-            <div className="bg-white p-2 rounded-lg border border-gray-100 shadow-2xs">
-              <span className="text-[10px] text-gray-400 block font-medium">Biomass</span>
-              <span className="text-xs sm:text-sm font-bold text-emerald-700 font-mono truncate block">
-                {finalH?.total_biomass || finalH?.harvested_biomass
-                  ? `${finalH.total_biomass || finalH.harvested_biomass} kg`
-                  : '-'}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Card Action Footer */}
-      <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-2 text-xs">
-        <Link
-          to={`/clients/${tank.client_id}`}
-          className="text-gray-500 hover:text-gray-800 font-medium hover:underline inline-flex items-center gap-1"
-        >
-          <UserIcon className="w-3.5 h-3.5" />
-          <span>Profile</span>
-        </Link>
-
-        <button
-          type="button"
-          onClick={onViewDetails}
-          className="btn-secondary btn-sm py-1 px-3 text-xs inline-flex items-center gap-1 active:scale-95 transition"
-        >
-          <span>View Details</span>
-          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ----------------------------------------------------
 // FULL TANK DETAIL MODAL: CLEAN & MINIMAL
