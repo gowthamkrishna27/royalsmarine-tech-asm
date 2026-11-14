@@ -294,13 +294,13 @@ export default function ClientDetail() {
                       })()}
                       {p.seed_date && (
                         <div>
-                          <span className="text-gray-400">Seed Date:</span>{' '}
+                          <span className="text-gray-400">Stocking Date:</span>{' '}
                           <span className="font-medium text-gray-800">{p.seed_date.substring(0, 10)}</span>
                         </div>
                       )}
                       {p.stocking_quantity_lakhs !== null && p.stocking_quantity_lakhs !== undefined && (
                         <div>
-                          <span className="text-gray-400">Stocking:</span>{' '}
+                          <span className="text-gray-400">Stocking number:</span>{' '}
                           <span className="font-medium text-gray-800">{p.stocking_quantity_lakhs} Lakhs</span>
                         </div>
                       )}

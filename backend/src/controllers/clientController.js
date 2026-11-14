@@ -533,7 +533,7 @@ const updateClient = async (req, res) => {
           docRepls.push(docVal);
           if (pondCols.hasDocDate) {
             docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
-            docRepls.push(docVal, docVal, docVal, docDateVal);
+            docRepls.push(docVal, docVal, docDateVal);
           }
         }
 
@@ -909,7 +909,7 @@ const updatePond = async (req, res) => {
       docRepls.push(docVal);
       if (pondCols.hasDocDate) {
         docSet += ', doc_date=CASE WHEN ? IS NULL THEN NULL WHEN doc = ? AND doc_date IS NOT NULL THEN doc_date ELSE ? END';
-        docRepls.push(docVal, docVal, docVal, docDateVal);
+        docRepls.push(docVal, docVal, docDateVal);
       }
     }
 
