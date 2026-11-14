@@ -4,9 +4,60 @@ const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
 const { log } = require('../utils/audit');
 
+function applyPersonnelAndRegionFilters(query, where, replacements) {
+  const { region, asm_id, manager_id, tech_id, salesperson_id } = query;
+
+  if (region && String(region).trim()) {
+    const reg = String(region).trim();
+    where += ` AND (
+      f.assigned_salesperson_id IN (
+        SELECT u.id FROM users u
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE (LOWER(u.region) = LOWER(?) OR LOWER(m.region) = LOWER(?)) AND u.deleted_at IS NULL AND u.status = 'active'
+      )
+      OR f.client_id IN (
+        SELECT c.id FROM clients c
+        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
+        LEFT JOIN users m ON c.assigned_manager_id = m.id
+        LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
+        WHERE (
+          LOWER(c.district) = LOWER(?)
+          OR LOWER(c.city) = LOWER(?)
+          OR LOWER(m.region) = LOWER(?)
+          OR LOWER(sp_m.region) = LOWER(?)
+          OR LOWER(sp.region) = LOWER(?)
+        ) AND c.deleted_at IS NULL
+      )
+    )`;
+    replacements.push(reg, reg, reg, reg, reg, reg, reg);
+  }
+
+  const asmFilterId = asm_id || manager_id;
+  if (asmFilterId) {
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active')
+      OR f.client_id IN (
+        SELECT id FROM clients
+        WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active'))
+          AND deleted_at IS NULL
+      )
+    )`;
+    replacements.push(asmFilterId, asmFilterId, asmFilterId, asmFilterId);
+  }
+
+  const techFilterId = tech_id || salesperson_id;
+  if (techFilterId) {
+    where += ' AND f.assigned_salesperson_id = ?';
+    replacements.push(techFilterId);
+  }
+
+  return where;
+}
+
 const listFollowups = async (req, res) => {
   const { page, limit, offset } = getPagination(req.query);
-  const { status, priority, from_date, to_date, client_id, dues_only } = req.query;
+  const { status, priority, from_date, to_date, date, followup_date, client_id, dues_only } = req.query;
   const { id: userId, role } = req.user;
 
   // Auto-mark past pending as overdue in database
@@ -36,8 +87,17 @@ const listFollowups = async (req, res) => {
 
   if (priority) { where += ' AND f.priority = ?'; replacements.push(priority); }
   if (client_id) { where += ' AND f.client_id = ?'; replacements.push(client_id); }
-  if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
-  if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
+
+  const singleDate = date || followup_date;
+  if (singleDate) {
+    where += ' AND f.followup_date = ?';
+    replacements.push(singleDate);
+  } else {
+    if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
+    if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
+  }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
 
   try {
     const [[{ total }]] = await sequelize.query(`SELECT COUNT(*) as total FROM followups f WHERE ${where}`, { replacements });
@@ -239,6 +299,8 @@ const getTodayFollowups = async (req, res) => {
     replacements.push(userId, userId);
   }
 
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
+
   try {
     const [followups] = await sequelize.query(
       `SELECT f.id, f.title, f.followup_time, f.priority, f.status, c.company_name, 
@@ -268,6 +330,8 @@ const getOverdueFollowups = async (req, res) => {
     where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
     replacements.push(userId, userId);
   }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
 
   try {
     const [followups] = await sequelize.query(
