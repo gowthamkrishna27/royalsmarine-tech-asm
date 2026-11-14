@@ -2,6 +2,7 @@ import api from './api';
 
 export const clientService = {
   list: (params) => api.get('/clients', { params }),
+  getFilters: () => api.get('/visits/filters'),
   get: (id) => api.get(`/clients/${id}`),
   profile: (id) => api.get(`/clients/${id}/profile`),
   create: (data) => api.post('/clients', data),

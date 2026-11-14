@@ -91,15 +91,45 @@ const buildClientWhere = (query, userId, role) => {
     }
   }
 
-  if (query.region) {
-    where += " AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND status = 'active' AND deleted_at IS NULL)";
-    replacements.push(query.region);
+  // Filter by Region
+  if (query.region && String(query.region).trim()) {
+    const reg = String(query.region).trim();
+    where += ` AND (
+      c.assigned_salesperson_id IN (
+        SELECT u.id FROM users u
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE (LOWER(TRIM(u.region)) = LOWER(TRIM(?)) OR LOWER(TRIM(m.region)) = LOWER(TRIM(?))) AND u.deleted_at IS NULL AND u.status = 'active'
+      )
+      OR c.assigned_manager_id IN (
+        SELECT id FROM users WHERE LOWER(TRIM(region)) = LOWER(TRIM(?)) AND deleted_at IS NULL AND status = 'active'
+      )
+      OR LOWER(TRIM(c.district)) = LOWER(TRIM(?))
+      OR LOWER(TRIM(c.city)) = LOWER(TRIM(?))
+    )`;
+    replacements.push(reg, reg, reg, reg, reg);
   }
+
+  // Filter by ASM (Sales Manager)
+  const asmId = query.asm_id || query.manager_id;
+  if (asmId) {
+    where += ` AND (
+      c.assigned_manager_id = ?
+      OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL)
+    )`;
+    replacements.push(asmId, asmId);
+  }
+
+  // Filter by Tech (Sales Executive)
+  const techId = query.tech_id || query.salesperson_id;
+  if (techId) {
+    where += ' AND c.assigned_salesperson_id = ?';
+    replacements.push(techId);
+  }
+
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
   if (query.state) { where += ' AND c.state = ?'; replacements.push(query.state); }
   if (query.client_type) { where += ' AND c.client_type = ?'; replacements.push(query.client_type); }
   if (query.status) { where += ' AND c.status = ?'; replacements.push(query.status); }
-  if (query.salesperson_id) { where += ' AND c.assigned_salesperson_id = ?'; replacements.push(query.salesperson_id); }
   if (query.search) {
     where += ' AND (c.company_name LIKE ? OR c.mobile LIKE ? OR c.email LIKE ? OR c.contact_person LIKE ?)';
     const s = `%${query.search}%`;
