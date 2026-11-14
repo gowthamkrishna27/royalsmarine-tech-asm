@@ -1055,14 +1055,8 @@ function DealersModal({ dealers, totalCount, searchTerm, onSearchChange, onClose
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">Registered Dealers</h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                  {totalCount} {totalCount === 1 ? 'Dealer' : 'Dealers'}
-                </span>
+                <h2 className="text-base sm:text-lg font-bold text-gray-900 truncate">Dealers</h2>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Dealers recorded during farmer and tank registration
-              </p>
             </div>
           </div>
           <button

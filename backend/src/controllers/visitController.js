@@ -26,8 +26,61 @@ const buildVisitWhere = (query, userId, role) => {
     replacements.push(userId, userId);
   }
 
-  if (query.salesperson_id) { where += ' AND v.salesperson_id = ?'; replacements.push(query.salesperson_id); }
-  if (query.client_id) { where += ' AND v.client_id = ?'; replacements.push(query.client_id); }
+  // Filter by Region
+  if (query.region && String(query.region).trim()) {
+    const reg = String(query.region).trim();
+    where += ` AND (
+      v.salesperson_id IN (
+        SELECT u.id FROM users u
+        LEFT JOIN users m ON u.manager_id = m.id
+        WHERE (LOWER(u.region) = LOWER(?) OR LOWER(m.region) = LOWER(?)) AND u.deleted_at IS NULL
+      )
+      OR v.client_id IN (
+        SELECT c.id FROM clients c
+        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
+        LEFT JOIN users m ON c.assigned_manager_id = m.id
+        LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
+        WHERE (
+          LOWER(c.district) = LOWER(?)
+          OR LOWER(c.city) = LOWER(?)
+          OR LOWER(m.region) = LOWER(?)
+          OR LOWER(sp_m.region) = LOWER(?)
+          OR LOWER(sp.region) = LOWER(?)
+        ) AND c.deleted_at IS NULL
+      )
+    )`;
+    replacements.push(reg, reg, reg, reg, reg, reg, reg);
+  }
+
+  // Filter by ASM (Sales Manager)
+  const asmId = query.asm_id || query.manager_id;
+  if (asmId) {
+    where += ` AND (
+      v.salesperson_id = ?
+      OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR v.client_id IN (
+        SELECT id FROM clients
+        WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL))
+          AND deleted_at IS NULL
+      )
+    )`;
+    replacements.push(asmId, asmId, asmId, asmId);
+  }
+
+  // Filter by Tech (Sales Executive)
+  const techId = query.tech_id || query.salesperson_id;
+  if (techId) {
+    where += ' AND v.salesperson_id = ?';
+    replacements.push(techId);
+  }
+
+  // Filter by Farmer (Client)
+  const farmerId = query.client_id || query.farmer_id;
+  if (farmerId) {
+    where += ' AND v.client_id = ?';
+    replacements.push(farmerId);
+  }
+
   if (query.approval_status) { where += ' AND v.approval_status = ?'; replacements.push(query.approval_status); }
   if (query.meeting_type) { where += ' AND v.meeting_type = ?'; replacements.push(query.meeting_type); }
   if (query.from_date) { where += ' AND v.visit_date >= ?'; replacements.push(query.from_date); }
@@ -430,4 +483,102 @@ const exportVisits = async (req, res) => {
   }
 };
 
-module.exports = { listVisits, createVisit, getVisit, updateVisit, approveVisit, uploadAttachment, exportVisits };
+
+const getVisitFilters = async (req, res) => {
+  try {
+    // 1. Fetch ASMs (users with role 'sales_manager')
+    const [asms] = await sequelize.query(`
+      SELECT u.id, u.full_name as name, u.region, u.area
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      WHERE r.name = 'sales_manager' AND u.deleted_at IS NULL
+      ORDER BY u.full_name ASC
+    `);
+
+    // 2. Fetch Techs (users with role 'sales_executive')
+    const [techs] = await sequelize.query(`
+      SELECT u.id, u.full_name as name, u.manager_id, u.region, u.area,
+             m.region as manager_region, m.full_name as manager_name
+      FROM users u
+      JOIN roles r ON u.role_id = r.id
+      LEFT JOIN users m ON u.manager_id = m.id
+      WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL
+      ORDER BY u.full_name ASC
+    `);
+
+    // 3. Fetch Farmers
+    const [farmers] = await sequelize.query(`
+      SELECT c.id, c.company_name as name, c.contact_person,
+             c.assigned_salesperson_id, c.assigned_manager_id,
+             c.village, c.city, c.district, c.state,
+             sp.manager_id as sp_manager_id,
+             COALESCE(m.region, sp_m.region, sp.region, c.district, c.city) as region
+      FROM clients c
+      LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
+      LEFT JOIN users m ON c.assigned_manager_id = m.id
+      LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
+      WHERE c.deleted_at IS NULL
+      ORDER BY c.company_name ASC
+    `);
+
+    // 4. Derive distinct regions from ASMs, Techs, and Farmers
+    const regionMap = new Map();
+    const addRegion = (reg) => {
+      if (!reg || !String(reg).trim()) return;
+      const clean = String(reg).trim();
+      const lower = clean.toLowerCase();
+      if (!regionMap.has(lower)) {
+        const formatted = clean.charAt(0).toUpperCase() + clean.slice(1);
+        regionMap.set(lower, formatted);
+      }
+    };
+
+    asms.forEach(a => addRegion(a.region));
+    techs.forEach(t => { addRegion(t.region); addRegion(t.manager_region); });
+    farmers.forEach(f => { addRegion(f.region); });
+
+    const regions = Array.from(regionMap.values()).sort((a, b) => a.localeCompare(b));
+
+    const normalizedTechs = techs.map(t => {
+      const reg = t.region || t.manager_region || '';
+      return {
+        id: t.id,
+        name: t.name,
+        manager_id: t.manager_id,
+        region: reg ? (reg.charAt(0).toUpperCase() + reg.slice(1)) : '',
+      };
+    });
+
+    const normalizedAsms = asms.map(a => {
+      const reg = a.region || '';
+      return {
+        id: a.id,
+        name: a.name,
+        region: reg ? (reg.charAt(0).toUpperCase() + reg.slice(1)) : '',
+      };
+    });
+
+    const normalizedFarmers = farmers.map(f => {
+      const reg = f.region || '';
+      return {
+        id: f.id,
+        name: f.name || f.contact_person || `Farmer #${f.id}`,
+        assigned_salesperson_id: f.assigned_salesperson_id,
+        assigned_manager_id: f.assigned_manager_id || f.sp_manager_id,
+        region: reg ? (reg.charAt(0).toUpperCase() + reg.slice(1)) : '',
+      };
+    });
+
+    return sendSuccess(res, 'Visit filter options fetched', {
+      regions,
+      asms: normalizedAsms,
+      techs: normalizedTechs,
+      farmers: normalizedFarmers,
+    });
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+module.exports = {
+  getVisitFilters, listVisits, createVisit, getVisit, updateVisit, approveVisit, uploadAttachment, exportVisits };

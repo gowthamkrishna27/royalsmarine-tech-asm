@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { MagnifyingGlassIcon, FunnelIcon, ChevronDownIcon, CheckIcon } from '@heroicons/react/24/outline';
 
-export default function FilterBar({ filters, onFilterChange, onSearch, searchValue, children, onReset }) {
+export default function FilterBar({ filters, onFilterChange, onSearch, searchValue, children, onReset, className = '' }) {
   return (
-    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 mb-4">
+    <div className={`flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 mb-4 ${className}`}>
       {onSearch !== undefined && (
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -16,7 +16,7 @@ export default function FilterBar({ filters, onFilterChange, onSearch, searchVal
           />
         </div>
       )}
-      <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3 flex-1 sm:flex-initial">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1">
         {children}
         {onReset && (
           <button
@@ -65,7 +65,7 @@ export function SelectFilter({ label, value, onChange, options = [], className =
   const displayLabel = selectedOption ? selectedOption.label : label;
 
   return (
-    <div ref={dropdownRef} className={`relative flex-1 sm:flex-initial min-w-[130px] sm:min-w-[140px] ${className}`}>
+    <div ref={dropdownRef} className={`relative ${className || 'flex-1 sm:flex-initial min-w-[130px] sm:min-w-[140px]'}`}>
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
