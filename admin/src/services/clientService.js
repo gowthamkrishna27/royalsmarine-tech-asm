@@ -15,9 +15,11 @@ export const clientService = {
   deletePond: (clientId, pondId) => api.delete(`/clients/${clientId}/ponds/${pondId}`),
   getMapLocations: (params) => api.get('/clients/map-locations', { params }),
   getFcrTanks: (params) => api.get('/clients/fcr-tanks', { params }),
+  getCountTanks: (params) => api.get('/clients/count-tanks', { params }),
   getHarvestedTanks: (params) => api.get('/clients/harvested-tanks', { params }),
   getDealers: (params) => api.get('/clients/dealers', { params }),
   exportFcr: (params) => api.get('/clients/fcr-export', { params, responseType: 'blob' }),
+  exportCount: (params) => api.get('/clients/count-export', { params, responseType: 'blob' }),
 };
 
 export default clientService;

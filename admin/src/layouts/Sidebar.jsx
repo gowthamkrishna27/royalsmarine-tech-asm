@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
   HomeIcon, UsersIcon, BuildingOfficeIcon, BuildingStorefrontIcon, MapPinIcon, BellIcon,
-  ChartBarIcon, Cog6ToothIcon, MapIcon, ScaleIcon,
+  ChartBarIcon, Cog6ToothIcon, MapIcon, ScaleIcon, TableCellsIcon,
 } from '@heroicons/react/24/outline';
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { to: '/map', label: 'Map', icon: MapIcon, roles: ['super_admin','admin','backend_ops','sales_manager','sales_executive','management'] },
   { to: '/reports', label: 'Reports', icon: ChartBarIcon, roles: ['super_admin','admin','sales_manager','sales_executive','management'] },
   { to: '/fcr', label: 'FCR', icon: ScaleIcon, roles: ['super_admin','admin','management'] },
+  { to: '/count', label: 'Count', icon: TableCellsIcon, roles: ['super_admin','admin','management'] },
   { divider: true, label: 'Administration', roles: ['super_admin','admin'] },
   { to: '/users', label: 'Users & Team', icon: UsersIcon, roles: ['super_admin','admin'] },
   { to: '/settings', label: 'Portal Settings', icon: Cog6ToothIcon, roles: ['super_admin','admin'] },

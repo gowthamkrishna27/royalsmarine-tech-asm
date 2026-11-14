@@ -1503,7 +1503,7 @@ const exportFcrTanks = async (req, res) => {
       const area = Number(t.area_acres || t.area || 0).toFixed(2);
       const survival = t.survival_rate ? (String(t.survival_rate).includes('%') ? t.survival_rate : `${t.survival_rate}%`) : '';
       ws.addRow({
-        tank_number: t.tank_number || t.pond_name || `Tank #${t.id}`,
+        tank_number: t.tank_number || t.pond_name || `Tank ${t.id}`,
         company_name: t.company_name || '',
         contact_person: t.contact_person || '',
         farmer_phone: t.farmer_phone || '',
@@ -1693,8 +1693,401 @@ const listDealers = async (req, res) => {
   }
 };
 
+
+const getCountTanksData = async (query = {}, user = {}) => {
+  const { count, region, area, search } = query;
+
+  let scopingClause = '';
+  const replacements = [];
+
+  if (user.role === 'sales_executive') {
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+    replacements.push(user.id, user.id, user.id);
+  } else if (user.role === 'sales_manager') {
+    scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    replacements.push(user.id, user.id, user.id, user.id, user.id);
+  }
+
+  let filterClause = '';
+  if (search && search.trim()) {
+    filterClause += ` AND (
+      p.pond_name LIKE ? OR 
+      p.tank_number LIKE ? OR 
+      c.company_name LIKE ? OR 
+      c.contact_person LIKE ? OR 
+      c.mobile LIKE ? OR 
+      c.village LIKE ? OR 
+      c.district LIKE ? OR
+      u.region LIKE ? OR
+      u.area LIKE ?
+    )`;
+    const s = `%${search.trim()}%`;
+    replacements.push(s, s, s, s, s, s, s, s, s);
+  }
+
+  const docCols = await getPondDocCols();
+  const [tanks] = await sequelize.query(`
+    SELECT
+      p.*,
+      ${pondAreaExpr(docCols, 'p')},
+      c.id as client_id,
+      c.company_name,
+      c.contact_person,
+      c.mobile as farmer_phone,
+      c.village,
+      c.mandal,
+      c.district,
+      c.city,
+      c.state,
+      c.pincode,
+      c.address as farmer_address,
+      u.id as salesperson_id,
+      u.full_name as salesperson_name,
+      u.mobile as salesperson_phone,
+      u.region as salesperson_region,
+      u.area as salesperson_area,
+      m.region as manager_region,
+      m.area as manager_area,
+      ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+    LEFT JOIN users m ON u.manager_id = m.id
+    WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+    ${scopingClause}
+    ${filterClause}
+    ORDER BY p.updated_at DESC
+  `, { replacements });
+
+  const processedTanks = [];
+  const allCountsSet = new Set();
+  const allRegionsSet = new Set();
+  const allAreasSet = new Set();
+
+  for (const tank of tanks) {
+    const rowRegion = (tank.salesperson_region || tank.manager_region || tank.district || '').trim();
+    const rowArea = (tank.salesperson_area || tank.manager_area || tank.mandal || tank.village || '').trim();
+    if (rowRegion) allRegionsSet.add(rowRegion);
+    if (rowArea) allAreasSet.add(rowArea);
+    if (tank.district) allRegionsSet.add(tank.district.trim());
+    if (tank.village) allAreasSet.add(tank.village.trim());
+    if (tank.mandal) allAreasSet.add(tank.mandal.trim());
+
+    const [visits] = await sequelize.query(`
+      SELECT 
+        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+        v.water_quality, v.feeding_details, v.medication_details, v.harvest_details,
+        sp.full_name as salesperson_name
+      FROM visits v
+      LEFT JOIN users sp ON v.salesperson_id = sp.id
+      WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+        AND v.deleted_at IS NULL
+      ORDER BY v.visit_date DESC, v.created_at DESC
+    `, {
+      replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+    });
+
+    const parsedVisits = visits.map(v => {
+      let wq = v.water_quality;
+      let fd = v.feeding_details;
+      let md = v.medication_details;
+      let hd = v.harvest_details;
+      try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+      try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+      try { if (typeof md === 'string') md = JSON.parse(md); } catch(e){}
+      try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+      return { ...v, water_quality: wq, feeding_details: fd, medication_details: md, harvest_details: hd };
+    });
+
+    let finalHarvest = null;
+    const partialHarvests = [];
+    const tankCounts = [];
+
+    for (const v of parsedVisits) {
+      const hd = v.harvest_details;
+      if (hd) {
+        if (Array.isArray(hd.partial_harvests)) {
+          for (const ph of hd.partial_harvests) {
+            if (ph && (ph.count !== undefined && ph.count !== null && ph.count !== '')) {
+              const numCount = parseFloat(ph.count);
+              tankCounts.push({
+                source: `Partial Harvest ${ph.harvest_no || (partialHarvests.length + 1)}`,
+                count: !isNaN(numCount) ? numCount : ph.count,
+                raw_count: ph.count,
+                date: ph.date || v.visit_date,
+                doc: ph.doc,
+                abw: ph.abw,
+                biomass: ph.harvested_biomass,
+                quantity: ph.harvested_quantity,
+                visit_id: v.id,
+              });
+              allCountsSet.add(!isNaN(numCount) ? numCount : ph.count);
+            }
+            partialHarvests.push({
+              ...ph,
+              date: ph.date || v.visit_date,
+              visit_id: v.id,
+            });
+          }
+        }
+        if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+          const hasFinalData = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+          if (hasFinalData) {
+            finalHarvest = {
+              ...hd.final_harvest,
+              fcr: hd.final_harvest.fcr || hd.derived?.fcr || '',
+              total_biomass: hd.final_harvest.harvested_biomass || hd.final_harvest.total_biomass || hd.derived?.total_biomass || '',
+              survival_rate: hd.final_harvest.survival_rate || hd.derived?.survival_percentage || '',
+              date: hd.final_harvest.date || v.visit_date,
+              visit_id: v.id,
+            };
+            if (hd.final_harvest.count !== undefined && hd.final_harvest.count !== null && hd.final_harvest.count !== '') {
+              const numCount = parseFloat(hd.final_harvest.count);
+              tankCounts.push({
+                source: 'Final Harvest',
+                count: !isNaN(numCount) ? numCount : hd.final_harvest.count,
+                raw_count: hd.final_harvest.count,
+                date: hd.final_harvest.date || v.visit_date,
+                doc: hd.final_harvest.doc,
+                abw: hd.final_harvest.abw,
+                biomass: hd.final_harvest.harvested_biomass || hd.final_harvest.total_biomass,
+                quantity: hd.final_harvest.harvested_quantity,
+                visit_id: v.id,
+              });
+              allCountsSet.add(!isNaN(numCount) ? numCount : hd.final_harvest.count);
+            }
+          }
+        }
+      }
+    }
+
+    if (tank.count !== undefined && tank.count !== null && tank.count !== '') {
+      const numCount = parseFloat(tank.count);
+      tankCounts.push({
+        source: 'Pond Record',
+        count: !isNaN(numCount) ? numCount : tank.count,
+        raw_count: tank.count,
+        date: tank.updated_at ? String(tank.updated_at).slice(0, 10) : '',
+        doc: tank.doc,
+        abw: tank.abw,
+        biomass: tank.total_biomass,
+        quantity: tank.harvested_quantity,
+      });
+      allCountsSet.add(!isNaN(numCount) ? numCount : tank.count);
+    }
+
+    if (tankCounts.length === 0) {
+      const abwVal = parseFloat(finalHarvest?.abw || tank.abw || 0);
+      if (!isNaN(abwVal) && abwVal > 0) {
+        const derivedCount = Math.round(1000 / abwVal);
+        tankCounts.push({
+          source: 'Derived from ABW',
+          count: derivedCount,
+          raw_count: String(derivedCount),
+          date: finalHarvest?.date || '',
+          doc: finalHarvest?.doc || tank.doc,
+          abw: abwVal,
+          biomass: finalHarvest?.total_biomass || tank.total_biomass,
+        });
+        allCountsSet.add(derivedCount);
+      }
+    }
+
+    if (tankCounts.length > 0) {
+      const primary = tankCounts[tankCounts.length - 1];
+      processedTanks.push({
+        ...tank,
+        region: rowRegion,
+        area: rowArea,
+        final_harvest: finalHarvest,
+        partial_harvests: partialHarvests,
+        counts_records: tankCounts,
+        recorded_counts: Array.from(new Set(tankCounts.map(c => c.count))),
+        primary_count: primary?.count,
+        primary_source: primary?.source,
+        primary_biomass: primary?.biomass || finalHarvest?.total_biomass || tank.total_biomass,
+        primary_doc: primary?.doc || finalHarvest?.doc || tank.current_doc,
+        primary_date: primary?.date || finalHarvest?.date || '',
+        visits_count: parsedVisits.length,
+      });
+    }
+  }
+
+  let filtered = processedTanks;
+
+  if (count !== undefined && count !== null && String(count).trim() !== '') {
+    const targetStr = String(count).trim();
+    const targetNum = parseFloat(targetStr);
+    filtered = filtered.filter(t => {
+      return t.counts_records.some(cr => {
+        if (!isNaN(targetNum) && typeof cr.count === 'number') {
+          return Math.abs(cr.count - targetNum) < 0.01;
+        }
+        return String(cr.count).trim().toLowerCase() === targetStr.toLowerCase();
+      });
+    });
+  }
+
+  if (region && String(region).trim()) {
+    const rLower = String(region).trim().toLowerCase();
+    filtered = filtered.filter(t =>
+      (t.region || '').toLowerCase() === rLower ||
+      (t.district || '').toLowerCase() === rLower ||
+      (t.salesperson_region || '').toLowerCase() === rLower ||
+      (t.manager_region || '').toLowerCase() === rLower
+    );
+  }
+
+  if (area && String(area).trim()) {
+    const aLower = String(area).trim().toLowerCase();
+    filtered = filtered.filter(t =>
+      (t.area || '').toLowerCase() === aLower ||
+      (t.village || '').toLowerCase() === aLower ||
+      (t.mandal || '').toLowerCase() === aLower ||
+      (t.salesperson_area || '').toLowerCase() === aLower ||
+      (t.manager_area || '').toLowerCase() === aLower
+    );
+  }
+
+  const farmersMap = new Map();
+  for (const t of filtered) {
+    if (!farmersMap.has(t.client_id)) {
+      farmersMap.set(t.client_id, {
+        client_id: t.client_id,
+        farmer_name: t.company_name || t.contact_person || `Farmer ${t.client_id}`,
+        company_name: t.company_name,
+        contact_person: t.contact_person,
+        farmer_phone: t.farmer_phone,
+        village: t.village,
+        mandal: t.mandal,
+        district: t.district,
+        city: t.city,
+        state: t.state,
+        address: t.farmer_address,
+        region: t.region,
+        area: t.area,
+        salesperson_name: t.salesperson_name,
+        salesperson_phone: t.salesperson_phone,
+        tanks: [],
+        total_biomass: 0,
+        tank_count: 0,
+      });
+    }
+    const f = farmersMap.get(t.client_id);
+    f.tanks.push(t);
+    f.tank_count += 1;
+    const b = parseFloat(t.primary_biomass || 0);
+    if (!isNaN(b) && b > 0) f.total_biomass += b;
+  }
+
+  const farmersList = Array.from(farmersMap.values()).map(f => ({
+    ...f,
+    total_biomass: parseFloat(f.total_biomass.toFixed(2)),
+  }));
+
+  const sortedCounts = Array.from(allCountsSet).sort((a, b) => {
+    const numA = typeof a === 'number' ? a : parseFloat(a);
+    const numB = typeof b === 'number' ? b : parseFloat(b);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    return String(a).localeCompare(String(b));
+  });
+
+  return {
+    tanks: filtered,
+    farmers: farmersList,
+    available_counts: sortedCounts,
+    available_regions: Array.from(allRegionsSet).filter(Boolean).sort(),
+    available_areas: Array.from(allAreasSet).filter(Boolean).sort(),
+    summary: {
+      total_farmers: farmersList.length,
+      total_tanks: filtered.length,
+      target_count: count || null,
+      total_biomass: filtered.reduce((sum, t) => sum + (parseFloat(t.primary_biomass || 0) || 0), 0).toFixed(2),
+    }
+  };
+};
+
+const listCountTanks = async (req, res) => {
+  try {
+    const data = await getCountTanksData(req.query, req.user);
+    return sendSuccess(res, 'Count tanks fetched successfully', data);
+  } catch (err) {
+    console.error('Error fetching Count tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+const exportCountTanks = async (req, res) => {
+  try {
+    const data = await getCountTanksData(req.query, req.user);
+    const tanks = data.tanks || [];
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Count Report');
+
+    ws.columns = [
+      { header: 'Farmer / Company', key: 'company_name', width: 25 },
+      { header: 'Contact Person', key: 'contact_person', width: 20 },
+      { header: 'Mobile', key: 'farmer_phone', width: 16 },
+      { header: 'Region', key: 'region', width: 18 },
+      { header: 'Area', key: 'area', width: 18 },
+      { header: 'Village', key: 'village', width: 18 },
+      { header: 'Mandal', key: 'mandal', width: 18 },
+      { header: 'District', key: 'district', width: 18 },
+      { header: 'Technical Executive', key: 'salesperson_name', width: 22 },
+      { header: 'Tank Name / No.', key: 'tank_number', width: 20 },
+      { header: 'Area (Acres)', key: 'area_acres', width: 14 },
+      { header: 'Count', key: 'primary_count', width: 12 },
+      { header: 'Count Source', key: 'primary_source', width: 18 },
+      { header: 'DOC', key: 'primary_doc', width: 12 },
+      { header: 'Biomass (kg)', key: 'primary_biomass', width: 16 },
+      { header: 'Harvest Date', key: 'primary_date', width: 15 },
+      { header: 'Status', key: 'status', width: 14 },
+    ];
+
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE0F2FE' }
+    };
+
+    tanks.forEach(t => {
+      ws.addRow({
+        company_name: t.company_name || '',
+        contact_person: t.contact_person || '',
+        farmer_phone: t.farmer_phone || '',
+        region: t.region || '',
+        area: t.area || '',
+        village: t.village || '',
+        mandal: t.mandal || '',
+        district: t.district || '',
+        salesperson_name: t.salesperson_name || '',
+        tank_number: t.tank_number || t.pond_name || `Tank #${t.id}`,
+        area_acres: Number(t.area_acres || 0).toFixed(2),
+        primary_count: t.primary_count ?? '',
+        primary_source: t.primary_source || '',
+        primary_doc: t.primary_doc || '',
+        primary_biomass: t.primary_biomass || '',
+        primary_date: t.primary_date ? String(t.primary_date).slice(0, 10) : '',
+        status: t.status || '',
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=count-report.xlsx');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting Count report:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
   listDealers,
+  listCountTanks,
+  exportCountTanks,
 
   listFcrTanks,
   exportFcrTanks,
