@@ -1526,7 +1526,169 @@ const exportFcrTanks = async (req, res) => {
   }
 };
 
+const listDealers = async (req, res) => {
+  try {
+    const { search, region, area } = req.query;
+
+    let scopingClause = '';
+    const replacements = [];
+
+    if (req.user.role === 'sales_executive') {
+      scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
+      replacements.push(req.user.id, req.user.id, req.user.id);
+    } else if (req.user.role === 'sales_manager') {
+      scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
+    }
+
+    let searchClause = '';
+    if (search && search.trim()) {
+      searchClause = 'AND (p.dealer_name LIKE ? OR c.company_name LIKE ? OR c.village LIKE ? OR c.district LIKE ? OR u.region LIKE ? OR u.area LIKE ?)';
+      const s = `%${search.trim()}%`;
+      replacements.push(s, s, s, s, s, s);
+    }
+
+    const docCols = await getPondDocCols();
+
+    // Query all ponds that have a dealer_name
+    const [rows] = await sequelize.query(`
+      SELECT 
+        TRIM(p.dealer_name) as dealer_name,
+        p.id as pond_id,
+        p.pond_name,
+        p.tank_number,
+        ${pondAreaExpr(docCols, 'p')},
+        c.id as client_id,
+        c.company_name,
+        c.contact_person,
+        c.mobile,
+        c.village,
+        c.mandal,
+        c.district,
+        c.city,
+        c.state,
+        u.id as salesperson_id,
+        u.full_name as salesperson_name,
+        u.region as salesperson_region,
+        u.area as salesperson_area,
+        m.region as manager_region,
+        m.area as manager_area
+      FROM ponds p
+      JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+      LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+      LEFT JOIN users m ON u.manager_id = m.id
+      WHERE p.dealer_name IS NOT NULL 
+        AND TRIM(p.dealer_name) != ''
+        AND p.deleted_at IS NULL 
+        AND c.deleted_at IS NULL
+        ${scopingClause}
+        ${searchClause}
+      ORDER BY p.dealer_name ASC, c.company_name ASC
+    `, { replacements });
+
+    const dealersMap = new Map();
+
+    for (const r of rows) {
+      const name = r.dealer_name;
+      if (!dealersMap.has(name)) {
+        dealersMap.set(name, {
+          dealer_name: name,
+          tank_count: 0,
+          farmer_count: 0,
+          total_acres: 0,
+          regions: new Set(),
+          areas: new Set(),
+          districts: new Set(),
+          villages: new Set(),
+          farmersMap: new Map(),
+          salespersons: new Set(),
+        });
+      }
+
+      const d = dealersMap.get(name);
+      d.tank_count += 1;
+      const acres = parseFloat(r.area_acres || 0);
+      if (!isNaN(acres)) d.total_acres += acres;
+
+      const rowRegion = (r.salesperson_region || r.manager_region || r.district || '').trim();
+      const rowArea = (r.salesperson_area || r.manager_area || r.mandal || r.village || '').trim();
+
+      if (rowRegion) d.regions.add(rowRegion);
+      if (rowArea) d.areas.add(rowArea);
+      if (r.district) d.districts.add(r.district.trim());
+      if (r.village) d.villages.add(r.village.trim());
+      if (r.salesperson_name) d.salespersons.add(r.salesperson_name.trim());
+
+      if (!d.farmersMap.has(r.client_id)) {
+        d.farmersMap.set(r.client_id, {
+          client_id: r.client_id,
+          company_name: r.company_name,
+          contact_person: r.contact_person,
+          mobile: r.mobile,
+          village: r.village,
+          mandal: r.mandal,
+          district: r.district,
+          region: rowRegion,
+          area: rowArea,
+          salesperson_name: r.salesperson_name,
+          tanks: [],
+          total_acres: 0,
+        });
+      }
+
+      const f = d.farmersMap.get(r.client_id);
+      f.tanks.push({
+        id: r.pond_id,
+        name: r.tank_number || r.pond_name || `Tank #${r.pond_id}`,
+        area_acres: acres,
+      });
+      f.total_acres += acres;
+    }
+
+    let dealersList = Array.from(dealersMap.values()).map(d => ({
+      dealer_name: d.dealer_name,
+      tank_count: d.tank_count,
+      farmer_count: d.farmersMap.size,
+      total_acres: parseFloat(d.total_acres.toFixed(2)),
+      regions: Array.from(d.regions).filter(Boolean),
+      areas: Array.from(d.areas).filter(Boolean),
+      districts: Array.from(d.districts).filter(Boolean),
+      villages: Array.from(d.villages).filter(Boolean),
+      salespersons: Array.from(d.salespersons).filter(Boolean),
+      farmers: Array.from(d.farmersMap.values()).map(f => ({
+        ...f,
+        total_acres: parseFloat(f.total_acres.toFixed(2)),
+      })),
+    }));
+
+    if (region && region.trim()) {
+      const targetRegion = region.trim().toLowerCase();
+      dealersList = dealersList.filter(d =>
+        d.regions.some(r => r.toLowerCase() === targetRegion) ||
+        d.districts.some(dist => dist.toLowerCase() === targetRegion)
+      );
+    }
+
+    if (area && area.trim()) {
+      const targetArea = area.trim().toLowerCase();
+      dealersList = dealersList.filter(d =>
+        d.areas.some(a => a.toLowerCase() === targetArea) ||
+        d.villages.some(v => v.toLowerCase() === targetArea)
+      );
+    }
+
+    dealersList.sort((a, b) => b.tank_count - a.tank_count || a.dealer_name.localeCompare(b.dealer_name));
+
+    return sendSuccess(res, 'Dealers fetched successfully', dealersList);
+  } catch (err) {
+    console.error('Error fetching dealers:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
+  listDealers,
+
   listFcrTanks,
   exportFcrTanks,
   listHarvestedTanks,

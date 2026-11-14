@@ -16,6 +16,7 @@ export const clientService = {
   getMapLocations: (params) => api.get('/clients/map-locations', { params }),
   getFcrTanks: (params) => api.get('/clients/fcr-tanks', { params }),
   getHarvestedTanks: (params) => api.get('/clients/harvested-tanks', { params }),
+  getDealers: (params) => api.get('/clients/dealers', { params }),
   exportFcr: (params) => api.get('/clients/fcr-export', { params, responseType: 'blob' }),
 };
 

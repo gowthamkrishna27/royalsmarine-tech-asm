@@ -106,7 +106,7 @@ export default function Followups() {
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div
           onClick={() => setStatus('dues')}
           className={`card p-4 flex items-center gap-3 border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
@@ -119,19 +119,6 @@ export default function Followups() {
               {(todayData?.length || 0) + (overdueData?.length || 0)}
             </p>
             <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">All Dues & Overdues</p>
-          </div>
-        </div>
-
-        <div
-          onClick={() => setStatus('pending')}
-          className={`card p-4 flex items-center gap-3 border-l-4 border-blue-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'pending' ? 'ring-2 ring-blue-500/20 bg-blue-50/40' : ''
-          }`}
-        >
-          <BellIcon className="w-8 h-8 text-blue-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-2xl font-bold text-gray-900">{todayData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Today's Dues</p>
           </div>
         </div>
 

@@ -2,13 +2,14 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
-  HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
+  HomeIcon, UsersIcon, BuildingOfficeIcon, BuildingStorefrontIcon, MapPinIcon, BellIcon,
   ChartBarIcon, Cog6ToothIcon, MapIcon, ScaleIcon,
 } from '@heroicons/react/24/outline';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: HomeIcon, roles: ['*'] },
   { to: '/clients', label: 'Farmers', icon: BuildingOfficeIcon, roles: ['*'] },
+  { to: '/dealers', label: 'Dealers', icon: BuildingStorefrontIcon, roles: ['super_admin','admin','management','backend_ops'] },
   { to: '/visits', label: 'Visits', icon: MapPinIcon, roles: ['super_admin','admin','sales_manager','sales_executive'] },
   { to: '/followups', label: 'Follow-ups', icon: BellIcon, roles: ['super_admin','admin','sales_manager','sales_executive'] },
   { to: '/map', label: 'Map', icon: MapIcon, roles: ['super_admin','admin','backend_ops','sales_manager','sales_executive','management'] },

@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { formatRole } from '../constants';
 import {
-  HomeIcon, UsersIcon, BuildingOfficeIcon, MapPinIcon, BellIcon,
+  HomeIcon, UsersIcon, BuildingOfficeIcon, BuildingStorefrontIcon, MapPinIcon, BellIcon,
   ChartBarIcon, Cog6ToothIcon, MapIcon, ScaleIcon,
 } from '@heroicons/react/24/outline';
 
@@ -17,6 +17,7 @@ const navSections = [
     label: 'Field Data',
     items: [
       { to: '/clients', label: 'Farmers', icon: BuildingOfficeIcon },
+      { to: '/dealers', label: 'Dealers', icon: BuildingStorefrontIcon },
       { to: '/visits', label: 'Visit Logs', icon: MapPinIcon },
       { to: '/followups', label: 'Follow-ups', icon: BellIcon },
       { to: '/map', label: 'Live Map', icon: MapIcon },
