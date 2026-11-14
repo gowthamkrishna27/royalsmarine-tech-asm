@@ -126,6 +126,13 @@ const buildClientWhere = (query, userId, role) => {
     replacements.push(techId);
   }
 
+  // Filter by Farmer (Client)
+  const farmerId = query.farmer_id || query.client_id;
+  if (farmerId) {
+    where += ' AND c.id = ?';
+    replacements.push(farmerId);
+  }
+
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
   if (query.state) { where += ' AND c.state = ?'; replacements.push(query.state); }
   if (query.client_type) { where += ' AND c.client_type = ?'; replacements.push(query.client_type); }

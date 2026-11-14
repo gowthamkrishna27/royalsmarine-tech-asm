@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import clientService from '../../services/clientService';
+import { visitApi } from '../../services/api';
 import Spinner, { PageSpinner } from '../../components/common/Spinner';
 import {
   MagnifyingGlassIcon,
   XMarkIcon,
-  FunnelIcon,
-  Square3Stack3DIcon,
+    Square3Stack3DIcon,
   MapPinIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
@@ -31,7 +31,6 @@ export default function MapPage() {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
-  const filterDropdownRef = useRef(null);
   const searchContainerRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const markerMapRef = useRef({});
@@ -43,33 +42,202 @@ export default function MapPage() {
 
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
   const [mapMode, setMapMode] = useState('satellite'); // Satellite view by default
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(Boolean(typeof window !== 'undefined' && window.L));
+
+  // Regional & Personnel Filters (regions, asm's, techs, farmers)
+  const [region, setRegion] = useState('');
+  const [asmId, setAsmId] = useState('');
+  const [techId, setTechId] = useState('');
+  const [farmerId, setFarmerId] = useState('');
+
+  // Fetch filter metadata (regions, ASMs, techs, farmers)
+  const { data: filterMeta } = useQuery({
+    queryKey: ['visit-filters'],
+    queryFn: () => visitApi.getFilters().then((r) => r.data.data),
+    staleTime: 60000,
+  });
+
+  // 1. Region dropdown options
+  const regionOptions = useMemo(() => {
+    return (filterMeta?.regions || []).map((r) => ({
+      value: r,
+      label: r,
+    }));
+  }, [filterMeta?.regions]);
+
+  // 2. ASM dropdown options (filtered by selected Region)
+  const asmOptions = useMemo(() => {
+    const list = filterMeta?.asms || [];
+    const filtered = region
+      ? list.filter((a) => (a.region || '').toLowerCase() === region.toLowerCase())
+      : list;
+    return filtered.map((a) => ({
+      value: String(a.id),
+      label: a.name + (!region && a.region ? ` (${a.region})` : ''),
+    }));
+  }, [filterMeta?.asms, region]);
+
+  // 3. Tech dropdown options (filtered by selected ASM, or by selected Region)
+  const techOptions = useMemo(() => {
+    let list = filterMeta?.techs || [];
+    if (asmId) {
+      list = list.filter((t) => String(t.manager_id) === String(asmId));
+    } else if (region) {
+      list = list.filter((t) => (t.region || '').toLowerCase() === region.toLowerCase());
+    }
+    return list.map((t) => ({
+      value: String(t.id),
+      label: t.name,
+    }));
+  }, [filterMeta?.techs, asmId, region]);
+
+  // 4. Farmer dropdown options (filtered by selected Tech, or by selected ASM, or by selected Region)
+  const farmerOptions = useMemo(() => {
+    let list = filterMeta?.farmers || [];
+    if (techId) {
+      list = list.filter((f) => String(f.assigned_salesperson_id) === String(techId));
+    } else if (asmId) {
+      const techIdsUnderAsm = new Set(
+        (filterMeta?.techs || [])
+          .filter((t) => String(t.manager_id) === String(asmId))
+          .map((t) => String(t.id))
+      );
+      list = list.filter(
+        (f) =>
+          String(f.assigned_manager_id) === String(asmId) ||
+          techIdsUnderAsm.has(String(f.assigned_salesperson_id))
+      );
+    } else if (region) {
+      list = list.filter((f) => (f.region || '').toLowerCase() === region.toLowerCase());
+    }
+    return list.map((f) => ({
+      value: String(f.id),
+      label: f.name,
+    }));
+  }, [filterMeta?.farmers, filterMeta?.techs, techId, asmId, region]);
+
+  // Cascading change handlers
+  const handleRegionChange = (newRegion) => {
+    setRegion(newRegion);
+
+    if (asmId && newRegion) {
+      const currentAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(asmId));
+      if (currentAsm && (currentAsm.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setAsmId('');
+        setTechId('');
+        setFarmerId('');
+        return;
+      }
+    }
+    if (techId && newRegion) {
+      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
+      if (currentTech && (currentTech.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setTechId('');
+        setFarmerId('');
+        return;
+      }
+    }
+    if (farmerId && newRegion) {
+      const currentFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerId));
+      if (currentFarmer && (currentFarmer.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setFarmerId('');
+      }
+    }
+  };
+
+  const handleAsmChange = (newAsmId) => {
+    setAsmId(newAsmId);
+
+    if (newAsmId) {
+      const chosenAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(newAsmId));
+      if (chosenAsm?.region && !region) {
+        setRegion(chosenAsm.region);
+      }
+    }
+
+    if (techId && newAsmId) {
+      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
+      if (currentTech && String(currentTech.manager_id) !== String(newAsmId)) {
+        setTechId('');
+        setFarmerId('');
+        return;
+      }
+    }
+
+    if (farmerId && newAsmId) {
+      const techIdsUnderAsm = new Set(
+        (filterMeta?.techs || [])
+          .filter((t) => String(t.manager_id) === String(newAsmId))
+          .map((t) => String(t.id))
+      );
+      const currentFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerId));
+      if (
+        currentFarmer &&
+        String(currentFarmer.assigned_manager_id) !== String(newAsmId) &&
+        !techIdsUnderAsm.has(String(currentFarmer.assigned_salesperson_id))
+      ) {
+        setFarmerId('');
+      }
+    }
+  };
+
+  const handleTechChange = (newTechId) => {
+    setTechId(newTechId);
+
+    if (newTechId) {
+      const chosenTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(newTechId));
+      if (chosenTech) {
+        if (chosenTech.manager_id && !asmId) {
+          setAsmId(String(chosenTech.manager_id));
+        }
+        if (chosenTech.region && !region) {
+          setRegion(chosenTech.region);
+        }
+      }
+    }
+
+    if (farmerId && newTechId) {
+      const currentFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(farmerId));
+      if (currentFarmer && String(currentFarmer.assigned_salesperson_id) !== String(newTechId)) {
+        setFarmerId('');
+      }
+    }
+  };
+
+  const handleFarmerChange = (newFarmerId) => {
+    setFarmerId(newFarmerId);
+
+    if (newFarmerId) {
+      const chosenFarmer = (filterMeta?.farmers || []).find((f) => String(f.id) === String(newFarmerId));
+      if (chosenFarmer) {
+        if (chosenFarmer.assigned_salesperson_id && !techId) {
+          setTechId(String(chosenFarmer.assigned_salesperson_id));
+        }
+        if (chosenFarmer.assigned_manager_id && !asmId) {
+          setAsmId(String(chosenFarmer.assigned_manager_id));
+        }
+        if (chosenFarmer.region && !region) {
+          setRegion(chosenFarmer.region);
+        }
+      }
+    }
+  };
+  const handleResetFilters = () => {
+    setRegion('');
+    setAsmId('');
+    setTechId('');
+    setFarmerId('');
+    setSelectedDate('');
+  };
+
+  const hasActiveFilters = Boolean(region || asmId || techId || farmerId || selectedDate);
 
   // Real-time geocoding & place search state
   const [geoResults, setGeoResults] = useState([]);
   const [isGeoSearching, setIsGeoSearching] = useState(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
-
-  // Close filter dropdown on click outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
-        setShowFilterMenu(false);
-      }
-    }
-    if (showFilterMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [showFilterMenu]);
 
   // Close search dropdown on click outside
   useEffect(() => {
@@ -102,8 +270,17 @@ export default function MapPage() {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['map-locations', selectedDate],
-    queryFn: () => clientService.getMapLocations(selectedDate ? { date: selectedDate } : {}).then(res => res.data.data),
+    queryKey: ['map-locations', selectedDate, region, asmId, techId, farmerId],
+    queryFn: () =>
+      clientService
+        .getMapLocations({
+          date: selectedDate || undefined,
+          region: region || undefined,
+          asm_id: asmId || undefined,
+          tech_id: techId || undefined,
+          farmer_id: farmerId || undefined,
+        })
+        .then((res) => res.data.data),
   });
 
   const clients = data?.clients || [];
@@ -167,6 +344,23 @@ export default function MapPage() {
 
     return list;
   }, [clients, ponds]);
+
+  // Auto-center and zoom to farmer when farmer is selected
+  useEffect(() => {
+    if (farmerId && items.length > 0 && mapInstanceRef.current) {
+      const farmerItem = items.find(
+        (i) => i.type === 'farmer' && String(i.rawId) === String(farmerId)
+      );
+      if (farmerItem) {
+        suppressFitBoundsRef.current = true;
+        mapInstanceRef.current.flyTo([farmerItem.latitude, farmerItem.longitude], 16, { duration: 1.2 });
+        const marker = markerMapRef.current[farmerItem.id];
+        if (marker) {
+          setTimeout(() => marker.openPopup(), 1200);
+        }
+      }
+    }
+  }, [farmerId, items]);
 
   // Matching local farmers and ponds for real-time autocomplete
   const matchingLocalItems = useMemo(() => {
@@ -403,7 +597,6 @@ export default function MapPage() {
   // Filtered items on map canvas
   const filtered = useMemo(() => {
     return items.filter(item => {
-      if (typeFilter && item.type !== typeFilter) return false;
       if (search.trim() && !directCoords) {
         const q = search.toLowerCase();
         const matchesName = item.name?.toLowerCase().includes(q);
@@ -414,7 +607,7 @@ export default function MapPage() {
       }
       return true;
     });
-  }, [items, typeFilter, search, directCoords]);
+  }, [items, search, directCoords]);
 
   // Init map
   useEffect(() => {
@@ -807,19 +1000,19 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* Floating Top Controls (Search + Filter + Layer + My Location) */}
-      <div className="absolute top-3 sm:top-4 left-3 right-3 sm:right-auto sm:w-[32rem] z-10 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
+      {/* Floating Single-Row Controls Toolbar */}
+      <div className="absolute top-3 sm:top-4 left-3 right-3 z-10 pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto w-full overflow-x-auto pb-1 scrollbar-none">
           {/* Search Box with Real-Time Suggestions */}
-          <div ref={searchContainerRef} className="relative flex-1">
+          <div ref={searchContainerRef} className="relative min-w-[200px] flex-1 max-w-xs shrink-0">
             <form
               onSubmit={handleSearchSubmit}
-              className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center px-3 py-2"
+              className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center px-3 py-2 h-10"
             >
-              <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
+              <MagnifyingGlassIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Search farmer, pond, village, town, or paste GPS..."
+                placeholder="Search farmer, pond, GPS..."
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => {
@@ -827,7 +1020,7 @@ export default function MapPage() {
                     setShowSearchDropdown(true);
                   }
                 }}
-                className="w-full bg-transparent border-0 p-0 pl-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
+                className="w-full bg-transparent border-0 p-0 pl-2 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
               />
               {isGeoSearching ? (
                 <div className="ml-1">
@@ -944,10 +1137,90 @@ export default function MapPage() {
               )}
           </div>
 
-          {/* Date Filter Control */}
-          <div className={`h-10 px-2.5 flex-shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
-            selectedDate ? 'border-emerald-500 bg-emerald-50/90 text-emerald-800' : 'border-gray-200/90 text-gray-700 hover:bg-white'
-          }`}>
+          {/* 1. Regions */}
+          <select
+            value={region}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className={`h-10 px-2.5 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[115px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              region
+                ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
+            }`}
+            title="Filter by Region"
+          >
+            <option value="">All Regions</option>
+            {regionOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* 2. ASM's */}
+          <select
+            value={asmId}
+            onChange={(e) => handleAsmChange(e.target.value)}
+            className={`h-10 px-2.5 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[115px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              asmId
+                ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
+            }`}
+            title="Filter by ASM"
+          >
+            <option value="">All ASM's</option>
+            {asmOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* 3. Techs */}
+          <select
+            value={techId}
+            onChange={(e) => handleTechChange(e.target.value)}
+            className={`h-10 px-2.5 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[115px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              techId
+                ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
+            }`}
+            title="Filter by Technical Executive"
+          >
+            <option value="">All Techs</option>
+            {techOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* 4. Farmers */}
+          <select
+            value={farmerId}
+            onChange={(e) => handleFarmerChange(e.target.value)}
+            className={`h-10 px-2.5 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[125px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              farmerId
+                ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
+            }`}
+            title="Filter by Farmer"
+          >
+            <option value="">All Farmers</option>
+            {farmerOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
+          {/* 5. Date Filter */}
+          <div
+            className={`h-10 px-2.5 shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition ${
+              selectedDate
+                ? 'border-emerald-500 bg-emerald-50/90 text-emerald-800'
+                : 'border-gray-200/90 text-gray-700 hover:bg-white'
+            }`}
+          >
             <CalendarDaysIcon className="w-4 h-4 text-emerald-600 shrink-0" />
             <input
               type="date"
@@ -968,73 +1241,29 @@ export default function MapPage() {
             )}
           </div>
 
-          {/* Collapsed Filter Dropdown */}
-          <div className="relative" ref={filterDropdownRef}>
+          {/* Reset Button */}
+          {hasActiveFilters && (
             <button
               type="button"
-              onClick={() => setShowFilterMenu((prev) => !prev)}
-              className={`h-10 px-3 flex-shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
-                typeFilter
-                  ? 'border-blue-500 text-blue-600 bg-blue-50/90'
-                  : 'border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
-              }`}
-              title="Filter locations"
+              onClick={handleResetFilters}
+              className="h-10 px-3 bg-white/95 backdrop-blur-md border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 shadow-lg rounded-xl flex items-center gap-1 text-xs font-bold transition active:scale-95 shrink-0"
+              title="Reset all filters"
             >
-              <FunnelIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {typeFilter ? (typeFilter === 'farmer' ? 'Farmers' : 'Ponds') : 'Filter'}
-              </span>
-              {typeFilter && (
-                <span className="w-2 h-2 rounded-full bg-blue-600" />
-              )}
+              <XMarkIcon className="w-3.5 h-3.5" />
+              <span>Reset</span>
             </button>
-
-            {/* Filter Menu Popover */}
-            {showFilterMenu && (
-              <div className="absolute top-full mt-2 right-0 w-48 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-xl rounded-xl p-1.5 z-20 space-y-1 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2.5 py-1 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                  Filter By Type
-                </div>
-                {[
-                  { id: '', label: 'All Locations', count: items.length },
-                  { id: 'farmer', label: 'Farmers', count: items.filter((i) => i.type === 'farmer').length },
-                  { id: 'pond', label: 'Ponds', count: items.filter((i) => i.type === 'pond').length },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setTypeFilter(opt.id);
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-lg font-medium transition ${
-                      typeFilter === opt.id
-                        ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    <span
-                      className={`text-[11px] px-1.5 py-0.5 rounded-full ${
-                        typeFilter === opt.id
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {opt.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Map Layer Switcher (Satellite & Roads) */}
           <button
             type="button"
-            title={mapMode === 'satellite' ? 'Map Layer: Satellite (Click to switch to Roads)' : 'Map Layer: Roads (Click to switch to Satellite)'}
+            title={
+              mapMode === 'satellite'
+                ? 'Map Layer: Satellite (Click to switch to Roads)'
+                : 'Map Layer: Roads (Click to switch to Satellite)'
+            }
             onClick={() => setMapMode((prev) => (prev === 'street' ? 'satellite' : 'street'))}
-            className={`w-10 h-10 flex-shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
+            className={`w-10 h-10 shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
               mapMode === 'satellite'
                 ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/20'
                 : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
@@ -1049,7 +1278,7 @@ export default function MapPage() {
             title="Locate my position on map"
             onClick={handleLocateMe}
             disabled={locating}
-            className="w-10 h-10 flex-shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50"
+            className="w-10 h-10 shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50"
           >
             {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-5 h-5 text-gray-700" />}
           </button>
@@ -1058,20 +1287,40 @@ export default function MapPage() {
         {/* Date Filter Active Status Banner */}
         {selectedDate && (
           <div className="mt-2.5 flex items-center gap-2 pointer-events-auto">
-            <div className={`px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border animate-in fade-in slide-in-from-top-2 ${
-              filtered.filter((i) => i.type === 'pond').length > 0
-                ? 'bg-emerald-600/95 border-emerald-500 text-white'
-                : 'bg-amber-600/95 border-amber-500 text-white'
-            }`}>
+            <div
+              className={`px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border animate-in fade-in slide-in-from-top-2 ${
+                filtered.filter((i) => i.type === 'pond').length > 0
+                  ? 'bg-emerald-600/95 border-emerald-500 text-white'
+                  : 'bg-amber-600/95 border-amber-500 text-white'
+              }`}
+            >
               <CalendarDaysIcon className="w-4 h-4 shrink-0" />
               <span>
                 {filtered.filter((i) => i.type === 'pond').length > 0 ? (
                   <>
-                    Tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>: <b>{filtered.filter((i) => i.type === 'pond').length}</b> {filtered.filter((i) => i.type === 'pond').length === 1 ? 'tank test' : 'tank tests'}
+                    Tests submitted on{' '}
+                    <b>
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </b>
+                    : <b>{filtered.filter((i) => i.type === 'pond').length}</b>{' '}
+                    {filtered.filter((i) => i.type === 'pond').length === 1
+                      ? 'tank test'
+                      : 'tank tests'}
                   </>
                 ) : (
                   <>
-                    No tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
+                    No tests submitted on{' '}
+                    <b>
+                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </b>
                   </>
                 )}
               </span>
