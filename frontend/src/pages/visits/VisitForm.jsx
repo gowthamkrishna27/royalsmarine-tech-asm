@@ -99,6 +99,7 @@ export default function VisitForm() {
   const [finalHarvest, setFinalHarvest] = useState({
     date: '',
     doc: '',
+    count: '',
     abw: '',
     harvested_quantity: '',
     harvested_biomass: '',
@@ -351,6 +352,7 @@ export default function VisitForm() {
         harvest_no: prev.length + 1,
         date: visitDate || new Date().toISOString().split('T')[0],
         doc: waterQuality.doc || '',
+        count: '',
         abw: '',
         harvested_quantity: '',
         harvested_biomass: '',
@@ -363,7 +365,20 @@ export default function VisitForm() {
       const copy = [...prev];
       const updated = { ...copy[index], [field]: value };
 
-      if (field === 'harvested_quantity' || field === 'abw') {
+      if (field === 'count' && value) {
+        const countVal = parseFloat(value);
+        if (!isNaN(countVal) && countVal > 0 && (!updated.abw || updated.abw === '')) {
+          updated.abw = (1000 / countVal).toFixed(2);
+        }
+      }
+      if (field === 'abw' && value) {
+        const abwVal = parseFloat(value);
+        if (!isNaN(abwVal) && abwVal > 0 && (!updated.count || updated.count === '')) {
+          updated.count = (1000 / abwVal).toFixed(1).replace(/\.0$/, '');
+        }
+      }
+
+      if (field === 'harvested_quantity' || field === 'abw' || field === 'count') {
         const qty = parseFloat(field === 'harvested_quantity' ? value : updated.harvested_quantity);
         const abwVal = parseFloat(field === 'abw' ? value : updated.abw);
         if (!isNaN(qty) && !isNaN(abwVal) && qty > 0 && abwVal > 0) {
@@ -385,10 +400,22 @@ export default function VisitForm() {
   };
 
   const updateFinalHarvest = (field, value) => {
-    if (isLocked) return;
+    if (typeof isLocked !== 'undefined' && isLocked) return;
     setFinalHarvest(prev => {
       const updated = { ...prev, [field]: value };
-      if (field === 'harvested_quantity' || field === 'abw') {
+      if (field === 'count' && value) {
+        const countVal = parseFloat(value);
+        if (!isNaN(countVal) && countVal > 0 && (!updated.abw || updated.abw === '')) {
+          updated.abw = (1000 / countVal).toFixed(2);
+        }
+      }
+      if (field === 'abw' && value) {
+        const abwVal = parseFloat(value);
+        if (!isNaN(abwVal) && abwVal > 0 && (!updated.count || updated.count === '')) {
+          updated.count = (1000 / abwVal).toFixed(1).replace(/\.0$/, '');
+        }
+      }
+      if (field === 'harvested_quantity' || field === 'abw' || field === 'count') {
         const qty = parseFloat(field === 'harvested_quantity' ? value : updated.harvested_quantity);
         const abwVal = parseFloat(field === 'abw' ? value : updated.abw);
         if (!isNaN(qty) && !isNaN(abwVal) && qty > 0 && abwVal > 0) {
@@ -473,6 +500,54 @@ export default function VisitForm() {
       return;
     }
     setLoading(true);
+
+    // Harvest details mandatory count validation
+    if (showHarvest) {
+      if (meetingType === 'harvest_details') {
+        const hasFinalInput = Boolean(
+          finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
+          finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
+        );
+        if (partialHarvests.length === 0 && !hasFinalInput) {
+          toast.error('Please enter harvest details with a mandatory Count');
+          setLoading(false);
+          return;
+        }
+        for (let i = 0; i < partialHarvests.length; i++) {
+          const ph = partialHarvests[i];
+          if (!ph.count || String(ph.count).trim() === '') {
+            toast.error(`Count is mandatory for Partial Harvest #${i + 1}`);
+            setLoading(false);
+            return;
+          }
+        }
+        if (hasFinalInput || partialHarvests.length === 0) {
+          if (!finalHarvest.count || String(finalHarvest.count).trim() === '') {
+            toast.error('Count is mandatory for Final Harvest');
+            setLoading(false);
+            return;
+          }
+        }
+      } else {
+        for (let i = 0; i < partialHarvests.length; i++) {
+          const ph = partialHarvests[i];
+          if (!ph.count || String(ph.count).trim() === '') {
+            toast.error(`Count is mandatory for Partial Harvest #${i + 1}`);
+            setLoading(false);
+            return;
+          }
+        }
+        const hasFinalInput = Boolean(
+          finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
+          finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
+        );
+        if (hasFinalInput && (!finalHarvest.count || String(finalHarvest.count).trim() === '')) {
+          toast.error('Count is mandatory for Final Harvest');
+          setLoading(false);
+          return;
+        }
+      }
+    }
 
     // Auto-capture GPS if not already present
     let activeCoords = gpsCoords;
@@ -1027,89 +1102,151 @@ export default function VisitForm() {
                         <TrashIcon className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                      <input
-                        type="date"
-                        value={ph.date || ''}
-                        onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
-                        className="input text-xs py-1"
-                      />
-                      <input
-                        type="number"
-                        value={ph.doc ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
-                        placeholder="DOC"
-                        readOnly={isDocAutoOnly && !isEdit}
-                        className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={ph.abw ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
-                        placeholder="ABW (g)"
-                        className="input text-xs py-1"
-                      />
-                      <input
-                        type="number"
-                        value={ph.harvested_quantity ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
-                        placeholder="Qty (pcs)"
-                        className="input text-xs py-1"
-                      />
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={ph.harvested_biomass ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
-                        placeholder="Biomass (kg)"
-                        className="input text-xs py-1 font-mono"
-                      />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Date</label>
+                        <input
+                          type="date"
+                          value={ph.date || ''}
+                          onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">DOC</label>
+                        <input
+                          type="number"
+                          value={ph.doc ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                          placeholder="DOC"
+                          readOnly={isDocAutoOnly && !isEdit}
+                          className={`input text-xs py-1 w-full ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-700 font-semibold block mb-0.5">
+                          Count <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          value={ph.count ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'count', e.target.value)}
+                          placeholder="Count *"
+                          className="input text-xs py-1 w-full border-amber-300 focus:border-red-500 font-semibold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">ABW (g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ph.abw ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                          placeholder="ABW (g)"
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Qty (pcs)</label>
+                        <input
+                          type="number"
+                          value={ph.harvested_quantity ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                          placeholder="Qty (pcs)"
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Biomass (kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={ph.harvested_biomass ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                          placeholder="Biomass (kg)"
+                          className="input text-xs py-1 font-mono w-full"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
 
                 {/* Final Harvest */}
                 <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-                  <span className="text-xs text-gray-600 font-medium block">Final Harvest</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    <input
-                      type="date"
-                      value={finalHarvest.date || ''}
-                      onChange={e => updateFinalHarvest('date', e.target.value)}
-                      className="input text-xs py-1"
-                    />
-                    <input
-                      type="number"
-                      value={finalHarvest.doc ?? ''}
-                      onChange={e => updateFinalHarvest('doc', e.target.value)}
-                      placeholder="DOC"
-                      readOnly={isDocAutoOnly && !isEdit}
-                      className={`input text-xs py-1 ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={finalHarvest.abw ?? ''}
-                      onChange={e => updateFinalHarvest('abw', e.target.value)}
-                      placeholder="ABW (g)"
-                      className="input text-xs py-1"
-                    />
-                    <input
-                      type="number"
-                      value={finalHarvest.harvested_quantity ?? ''}
-                      onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
-                      placeholder="Qty (pcs)"
-                      className="input text-xs py-1"
-                    />
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={finalHarvest.harvested_biomass ?? ''}
-                      onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
-                      placeholder="Biomass (kg)"
-                      className="input text-xs py-1 font-mono"
-                    />
+                  <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
+                    <span>Final Harvest</span>
+                    {meetingType === 'harvest_details' && (
+                      <span className="text-[11px] text-amber-600 font-medium">Count is mandatory</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Date</label>
+                      <input
+                        type="date"
+                        value={finalHarvest.date || ''}
+                        onChange={e => updateFinalHarvest('date', e.target.value)}
+                        className="input text-xs py-1 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">DOC</label>
+                      <input
+                        type="number"
+                        value={finalHarvest.doc ?? ''}
+                        onChange={e => updateFinalHarvest('doc', e.target.value)}
+                        placeholder="DOC"
+                        readOnly={isDocAutoOnly && !isEdit}
+                        className={`input text-xs py-1 w-full ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-700 font-semibold block mb-0.5">
+                        Count <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={finalHarvest.count ?? ''}
+                        onChange={e => updateFinalHarvest('count', e.target.value)}
+                        placeholder="Count *"
+                        className="input text-xs py-1 w-full border-amber-300 focus:border-red-500 font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">ABW (g)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={finalHarvest.abw ?? ''}
+                        onChange={e => updateFinalHarvest('abw', e.target.value)}
+                        placeholder="ABW (g)"
+                        className="input text-xs py-1 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Qty (pcs)</label>
+                      <input
+                        type="number"
+                        value={finalHarvest.harvested_quantity ?? ''}
+                        onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
+                        placeholder="Qty (pcs)"
+                        className="input text-xs py-1 w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Biomass (kg)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={finalHarvest.harvested_biomass ?? ''}
+                        onChange={e => updateFinalHarvest('harvested_biomass', e.target.value)}
+                        placeholder="Biomass (kg)"
+                        className="input text-xs py-1 font-mono w-full"
+                      />
+                    </div>
                   </div>
                 </div>
 
