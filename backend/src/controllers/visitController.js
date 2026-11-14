@@ -15,14 +15,14 @@ const getVisitCols = async () => {
 };
 
 const buildVisitWhere = (query, userId, role) => {
-  let where = 'v.deleted_at IS NULL';
+  let where = "v.deleted_at IS NULL AND v.salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL)";
   const replacements = [];
 
   if (role === 'sales_executive') {
     where += ' AND v.salesperson_id = ?';
     replacements.push(userId);
   } else if (role === 'sales_manager') {
-    where += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = \'active\' AND deleted_at IS NULL))';
     replacements.push(userId, userId);
   }
 
@@ -33,7 +33,7 @@ const buildVisitWhere = (query, userId, role) => {
       v.salesperson_id IN (
         SELECT u.id FROM users u
         LEFT JOIN users m ON u.manager_id = m.id
-        WHERE (LOWER(u.region) = LOWER(?) OR LOWER(m.region) = LOWER(?)) AND u.deleted_at IS NULL
+        WHERE (LOWER(u.region) = LOWER(?) OR LOWER(m.region) = LOWER(?)) AND u.deleted_at IS NULL AND u.status = 'active'
       )
       OR v.client_id IN (
         SELECT c.id FROM clients c
@@ -57,10 +57,10 @@ const buildVisitWhere = (query, userId, role) => {
   if (asmId) {
     where += ` AND (
       v.salesperson_id = ?
-      OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active')
       OR v.client_id IN (
         SELECT id FROM clients
-        WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL))
+        WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active'))
           AND deleted_at IS NULL
       )
     )`;
@@ -486,27 +486,27 @@ const exportVisits = async (req, res) => {
 
 const getVisitFilters = async (req, res) => {
   try {
-    // 1. Fetch ASMs (users with role 'sales_manager')
+    // 1. Fetch ASMs (users with role 'sales_manager' and status 'active')
     const [asms] = await sequelize.query(`
       SELECT u.id, u.full_name as name, u.region, u.area
       FROM users u
       JOIN roles r ON u.role_id = r.id
-      WHERE r.name = 'sales_manager' AND u.deleted_at IS NULL
+      WHERE r.name = 'sales_manager' AND u.deleted_at IS NULL AND u.status = 'active'
       ORDER BY u.full_name ASC
     `);
 
-    // 2. Fetch Techs (users with role 'sales_executive')
+    // 2. Fetch Techs (users with role 'sales_executive' and status 'active')
     const [techs] = await sequelize.query(`
       SELECT u.id, u.full_name as name, u.manager_id, u.region, u.area,
              m.region as manager_region, m.full_name as manager_name
       FROM users u
       JOIN roles r ON u.role_id = r.id
       LEFT JOIN users m ON u.manager_id = m.id
-      WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL
+      WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL AND u.status = 'active'
       ORDER BY u.full_name ASC
     `);
 
-    // 3. Fetch Farmers
+    // 3. Fetch Farmers (assigned to active personnel)
     const [farmers] = await sequelize.query(`
       SELECT c.id, c.company_name as name, c.contact_person,
              c.assigned_salesperson_id, c.assigned_manager_id,
@@ -518,6 +518,7 @@ const getVisitFilters = async (req, res) => {
       LEFT JOIN users m ON c.assigned_manager_id = m.id
       LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
       WHERE c.deleted_at IS NULL
+        AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))
       ORDER BY c.company_name ASC
     `);
 

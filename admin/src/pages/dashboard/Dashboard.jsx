@@ -1155,15 +1155,15 @@ function ManagementDashboard({ data }) {
   const [dealerSearchTerm, setDealerSearchTerm] = useState('');
   const [showHarvestedModal, setShowHarvestedModal] = useState(false);
 
-  // Query users to integrate admin features directly into minimal stat cards
+  // Query active users to integrate admin features directly into minimal stat cards
   const { data: users } = useQuery({
-    queryKey: ['admin-users-list'],
-    queryFn: () => userApi.list({}).then((r) => r.data.data),
+    queryKey: ['admin-users-list', 'active'],
+    queryFn: () => userApi.list({ status: 'active', limit: 1000 }).then((r) => r.data.data),
     staleTime: 60000,
   });
 
-  const techExecs = (users || []).filter((u) => u.role === 'sales_executive');
-  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager');
+  const techExecs = (users || []).filter((u) => u.role === 'sales_executive' && u.status === 'active');
+  const areaManagers = (users || []).filter((u) => u.role === 'sales_manager' && u.status === 'active');
 
   const dealersList = data.dealers_list || [];
   const filteredDealers = dealersList.filter((d) =>

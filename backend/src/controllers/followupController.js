@@ -18,13 +18,13 @@ const listFollowups = async (req, res) => {
     console.error('Auto overdue update failed:', e.message);
   }
 
-  let where = 'f.deleted_at IS NULL';
+  let where = "f.deleted_at IS NULL AND (f.assigned_salesperson_id IS NULL OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))";
   const replacements = [];
 
   if (role === 'sales_executive') {
     where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
   } else if (role === 'sales_manager') {
-    where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);
   }
 

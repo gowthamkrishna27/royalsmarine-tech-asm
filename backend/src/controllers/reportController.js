@@ -4,7 +4,7 @@ const { sendSuccess, sendError } = require('../utils/response');
 
 const salespersonVisitReport = async (req, res) => {
   const { from_date, to_date, salesperson_id, region, asm_id, technician_id, farmer_id } = req.query;
-  let where = 'v.deleted_at IS NULL';
+  let where = "v.deleted_at IS NULL AND u.status = 'active' AND u.deleted_at IS NULL";
   const replacements = [];
   if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
   if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
@@ -101,7 +101,7 @@ const exportReport = async (req, res) => {
 
     if (type === 'visits') {
       headers = ['Date', 'Technical Executive', 'Farmer', 'City', 'Type', 'Outcome', 'Status'];
-      let where = 'v.deleted_at IS NULL';
+      let where = "v.deleted_at IS NULL AND u.status = 'active' AND u.deleted_at IS NULL";
       const replacements = [];
       if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
       if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }

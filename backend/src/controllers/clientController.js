@@ -83,16 +83,16 @@ const buildClientWhere = (query, userId, role) => {
       where += ' AND (c.assigned_salesperson_id = ? OR (c.created_by = ? AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = ?)))';
       replacements.push(userId, userId, userId);
     } else if (query.scope === 'tech_exec_farmers' || query.scope === 'farmers') {
-      where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?)';
+      where += " AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL)";
       replacements.push(userId);
     } else {
-      where += ' AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ?))';
+      where += " AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL) OR c.created_by IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
       replacements.push(userId, userId, userId, userId, userId);
     }
   }
 
   if (query.region) {
-    where += ' AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND deleted_at IS NULL)';
+    where += " AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE region = ? AND status = 'active' AND deleted_at IS NULL)";
     replacements.push(query.region);
   }
   if (query.city) { where += ' AND c.city = ?'; replacements.push(query.city); }
@@ -127,8 +127,8 @@ const listClients = async (req, res) => {
               c.assigned_salesperson_id, c.assigned_manager_id, c.created_by,
               sp.full_name as salesperson_name, m.full_name as manager_name
        FROM clients c
-       LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
-       LEFT JOIN users m ON c.assigned_manager_id = m.id
+       LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id AND sp.status = 'active'
+       LEFT JOIN users m ON c.assigned_manager_id = m.id AND m.status = 'active'
        WHERE ${where}
        ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
