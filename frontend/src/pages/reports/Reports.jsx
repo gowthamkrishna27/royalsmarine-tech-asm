@@ -77,6 +77,7 @@ const MinimalPieTooltip = ({ active, payload }) => {
 export default function Reports() {
   const { user } = useAuth();
   const isSalesExec = user?.role === 'sales_executive';
+  const availableTabs = useMemo(() => (isSalesExec ? ['visits'] : TABS), [isSalesExec]);
 
   const [tab, setTab] = useState('visits');
   const [fromDate, setFromDate] = useState('');
@@ -98,7 +99,7 @@ export default function Reports() {
   const { data: followupReport, isLoading: fuLoading } = useQuery({
     queryKey: ['report-followups', fromDate, toDate, salespersonId],
     queryFn: () => reportApi.followups({ from_date: fromDate, to_date: toDate, salesperson_id: salespersonId }).then(r => r.data.data),
-    enabled: tab === 'followups',
+    enabled: tab === 'followups' && !isSalesExec,
   });
 
   const handleExport = async () => {
@@ -164,22 +165,24 @@ export default function Reports() {
         </button>
       </div>
 
-      {/* Tabs - No horizontal scrolling */}
-      <div className="w-full">
-        <div className="grid grid-cols-2 bg-gray-100 p-1 rounded-xl w-full sm:w-fit sm:flex gap-1">
-          {TABS.map(t => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-center truncate capitalize transition ${
-                tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
+      {/* Tabs - only visible if more than 1 tab */}
+      {availableTabs.length > 1 ? (
+        <div className="w-full">
+          <div className="grid grid-cols-2 bg-gray-100 p-1 rounded-xl w-full sm:w-fit sm:flex gap-1">
+            {availableTabs.map(t => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-center truncate capitalize transition ${
+                  tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {TAB_LABELS[t]}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {/* Filters - Responsive Grid, No Overflow */}
       <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2.5">
@@ -224,20 +227,7 @@ export default function Reports() {
                   <p className="text-xs text-gray-500 font-medium">{isSalesExec ? 'My Field Visits' : 'Total Field Visits'}</p>
                   <p className="text-2xl font-bold text-gray-900 mt-1">{visitSummary.total}</p>
                 </div>
-                {isSalesExec ? (
-                  <>
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                      <p className="text-xs text-gray-500 font-medium">Completed Follow-ups</p>
-                      <p className="text-2xl font-bold text-emerald-600 mt-1">{followupSummary?.completed || 0}</p>
-                      <p className="text-[11px] text-gray-400">Closed tasks</p>
-                    </div>
-                    <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
-                      <p className="text-xs text-gray-500 font-medium">Pending Follow-ups</p>
-                      <p className="text-2xl font-bold text-amber-600 mt-1">{followupSummary?.pending || 0}</p>
-                      <p className="text-[11px] text-gray-400">Open action items</p>
-                    </div>
-                  </>
-                ) : (
+                {!isSalesExec && (
                   <>
                     <div className="bg-white p-3.5 rounded-xl border border-gray-200/80 shadow-xs">
                       <p className="text-xs text-gray-500 font-medium">Top Performer</p>
@@ -408,7 +398,7 @@ export default function Reports() {
       )}
 
       {/* 2. FOLLOW-UPS TAB */}
-      {tab === 'followups' && (
+      {tab === 'followups' && !isSalesExec && (
         fuLoading ? <PageSpinner /> : (
           <div className="space-y-4">
             {/* Minimal KPI Highlights */}
