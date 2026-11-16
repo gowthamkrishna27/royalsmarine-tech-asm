@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { visitApi, clientApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -93,8 +93,11 @@ export default function VisitForm() {
   // 5. Medication Details state
   const [medications, setMedications] = useState([]);
 
+  const queryClient = useQueryClient();
+
   // 6. Harvest Details state
   const [partialHarvests, setPartialHarvests] = useState([]);
+  const [previousPartialHarvests, setPreviousPartialHarvests] = useState([]);
   const [finalHarvest, setFinalHarvest] = useState({
     date: '',
     doc: '',
@@ -123,7 +126,9 @@ export default function VisitForm() {
   const showWaterQuality = meetingType === 'water_quality' || meetingType === 'all';
   const showFeeding = meetingType === 'feeding_details' || meetingType === 'all';
   const showMedication = meetingType === 'medication_details' || meetingType === 'all';
-  const showHarvest = meetingType === 'harvest_details' || meetingType === 'all';
+  const showPartialHarvest = meetingType === 'partial_harvest' || meetingType === 'harvest_details' || meetingType === 'all';
+  const showFinalHarvest = meetingType === 'final_harvest' || meetingType === 'harvest_details' || meetingType === 'all';
+  const showHarvest = showPartialHarvest || showFinalHarvest;
   const showDisease = meetingType === 'disease' || meetingType === 'all';
 
   // Load clients
@@ -219,6 +224,18 @@ export default function VisitForm() {
         if (found.stocking_quantity_lakhs) {
           setFeedingDetails(prev => ({ ...prev, seed_quantity: found.stocking_quantity_lakhs }));
         }
+
+        const prevPartials = (found.partial_harvests || []).filter(
+          ph => !isEdit || String(ph.visit_id) !== String(id)
+        );
+        setPreviousPartialHarvests(prevPartials);
+
+        if (found.total_feed !== undefined && found.total_feed !== null) {
+          setFeedingDetails(prev => ({
+            ...prev,
+            cumulative_feed: prev.cumulative_feed || (found.total_feed > 0 ? String(found.total_feed) : '')
+          }));
+        }
       }
     }
   }, [paramTank, selectedClient, isEdit, setValue, visitDate]);
@@ -245,8 +262,23 @@ export default function VisitForm() {
       if (foundTank.stocking_quantity_lakhs) {
         setFeedingDetails(prev => ({ ...prev, seed_quantity: foundTank.stocking_quantity_lakhs }));
       }
+
+      // Load previous partial harvests from this tank (read-only history)
+      const prevPartials = (foundTank.partial_harvests || []).filter(
+        ph => !isEdit || String(ph.visit_id) !== String(id)
+      );
+      setPreviousPartialHarvests(prevPartials);
+
+      // Auto-populate cumulative feed from tank history if available
+      if (foundTank.total_feed !== undefined && foundTank.total_feed !== null) {
+        setFeedingDetails(prev => ({
+          ...prev,
+          cumulative_feed: prev.cumulative_feed || (foundTank.total_feed > 0 ? String(foundTank.total_feed) : '')
+        }));
+      }
     } else {
       setValue('tank_id', null, { shouldDirty: true });
+      setPreviousPartialHarvests([]);
     }
   };
 
@@ -261,7 +293,36 @@ export default function VisitForm() {
     if (isEdit && existingVisit && String(existingVisit.client_id) === String(clientId)) return;
     setValue('tank_number', '');
     setValue('tank_id', null);
+    setPreviousPartialHarvests([]);
   }, [clientId, isEdit, existingVisit, setValue]);
+
+  // Auto-seed first new partial harvest when partial harvest is active and empty
+  useEffect(() => {
+    if (showPartialHarvest && !isEdit && partialHarvests.length === 0) {
+      setPartialHarvests([
+        {
+          harvest_no: previousPartialHarvests.length + 1,
+          date: visitDate || new Date().toISOString().split('T')[0],
+          doc: waterQuality.doc || '',
+          count: '',
+          abw: '',
+          harvested_quantity: '',
+          harvested_biomass: '',
+          remarks: '',
+        }
+      ]);
+    }
+  }, [showPartialHarvest, isEdit, previousPartialHarvests.length, visitDate, waterQuality.doc]);
+
+  // Keep harvest_no aligned when previous harvests change
+  useEffect(() => {
+    if (!isEdit && partialHarvests.length > 0) {
+      setPartialHarvests(prev => prev.map((item, idx) => ({
+        ...item,
+        harvest_no: previousPartialHarvests.length + idx + 1,
+      })));
+    }
+  }, [previousPartialHarvests.length, isEdit]);
 
   // Auto calculate FCR
   useEffect(() => {
@@ -473,51 +534,69 @@ export default function VisitForm() {
       }
     }
 
-    // Harvest details mandatory count validation
-    if (showHarvest) {
-      if (meetingType === 'harvest_details') {
-        const hasFinalInput = Boolean(
-          finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
-          finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
-        );
-        if (partialHarvests.length === 0 && !hasFinalInput) {
-          toast.error('Please enter harvest details with a mandatory Count');
+    // Harvest details validations (separated for partial_harvest, final_harvest, and harvest_details)
+    if (meetingType === 'partial_harvest') {
+      if (partialHarvests.length === 0) {
+        toast.error('Please add at least one partial harvest entry');
+        setLoading(false);
+        return;
+      }
+      for (let i = 0; i < partialHarvests.length; i++) {
+        const ph = partialHarvests[i];
+        if (!ph.count || String(ph.count).trim() === '') {
+          toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
           setLoading(false);
           return;
         }
-        for (let i = 0; i < partialHarvests.length; i++) {
-          const ph = partialHarvests[i];
-          if (!ph.count || String(ph.count).trim() === '') {
-            toast.error(`Count is mandatory for Partial Harvest #${i + 1}`);
-            setLoading(false);
-            return;
-          }
+      }
+    } else if (meetingType === 'final_harvest') {
+      if (!finalHarvest.count || String(finalHarvest.count).trim() === '') {
+        toast.error('Count is mandatory for Final Harvest');
+        setLoading(false);
+        return;
+      }
+    } else if (meetingType === 'harvest_details') {
+      const hasFinalInput = Boolean(
+        finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
+        finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
+      );
+      if (partialHarvests.length === 0 && !hasFinalInput) {
+        toast.error('Please enter harvest details with a mandatory Count');
+        setLoading(false);
+        return;
+      }
+      for (let i = 0; i < partialHarvests.length; i++) {
+        const ph = partialHarvests[i];
+        if (!ph.count || String(ph.count).trim() === '') {
+          toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
+          setLoading(false);
+          return;
         }
-        if (hasFinalInput || partialHarvests.length === 0) {
-          if (!finalHarvest.count || String(finalHarvest.count).trim() === '') {
-            toast.error('Count is mandatory for Final Harvest');
-            setLoading(false);
-            return;
-          }
-        }
-      } else {
-        for (let i = 0; i < partialHarvests.length; i++) {
-          const ph = partialHarvests[i];
-          if (!ph.count || String(ph.count).trim() === '') {
-            toast.error(`Count is mandatory for Partial Harvest #${i + 1}`);
-            setLoading(false);
-            return;
-          }
-        }
-        const hasFinalInput = Boolean(
-          finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
-          finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
-        );
-        if (hasFinalInput && (!finalHarvest.count || String(finalHarvest.count).trim() === '')) {
+      }
+      if (hasFinalInput || partialHarvests.length === 0) {
+        if (!finalHarvest.count || String(finalHarvest.count).trim() === '') {
           toast.error('Count is mandatory for Final Harvest');
           setLoading(false);
           return;
         }
+      }
+    } else if (showHarvest) {
+      for (let i = 0; i < partialHarvests.length; i++) {
+        const ph = partialHarvests[i];
+        if (!ph.count || String(ph.count).trim() === '') {
+          toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
+          setLoading(false);
+          return;
+        }
+      }
+      const hasFinalInput = Boolean(
+        finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
+        finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
+      );
+      if (hasFinalInput && (!finalHarvest.count || String(finalHarvest.count).trim() === '')) {
+        toast.error('Count is mandatory for Final Harvest');
+        setLoading(false);
+        return;
       }
     }
 
@@ -542,13 +621,17 @@ export default function VisitForm() {
       medication_details: showMedication ? medications : null,
       disease_details: showDisease ? diseaseDetails : null,
       harvest_details: showHarvest ? {
-        partial_harvests: partialHarvests,
-        final_harvest: finalHarvest,
+        partial_harvests: showPartialHarvest ? partialHarvests : [],
+        final_harvest: showFinalHarvest ? finalHarvest : null,
         derived: harvestDerived,
       } : null,
     };
 
     try {
+      queryClient.invalidateQueries({ queryKey: ['client'] });
+      queryClient.invalidateQueries({ queryKey: ['clients-list'] });
+      queryClient.invalidateQueries({ queryKey: ['visits'] });
+
       if (isEdit) {
         await visitApi.update(id, payload);
         toast.success('Visit updated successfully');
@@ -1024,7 +1107,7 @@ export default function VisitForm() {
                 {DISEASE_OPTIONS.map((d) => {
                   const checked = (diseaseDetails.diseases || []).includes(d);
                   return (
-                    <label key={d} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs cursor-pointer select-none ${checked ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-100 text-gray-700'}`}>
+                    <label key={d} className={`flex items-center gap-2 rounded border px-2 py-1.5 text-xs cursor-pointer select-none ${checked ? 'bg-gray-100 border-gray-400 text-gray-900 font-semibold' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
                       <input
                         type="checkbox"
                         className="h-3.5 w-3.5 shrink-0"
@@ -1043,114 +1126,165 @@ export default function VisitForm() {
           </div>
         )}
 
-        {/* Harvest Details (Only displays when selected) */}
-        {showHarvest && (
+        {/* Partial Harvest Section */}
+        {showPartialHarvest && (
           <div className="card">
             <div className="card-header flex items-center justify-between py-2.5 px-4">
-              <h3 className="font-semibold text-gray-900 text-sm">Harvest Details</h3>
-              {partialHarvests.length < 3 && (
-                <button
-                  type="button"
-                  onClick={addPartialHarvest}
-                  className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
-                >
-                  <PlusIcon className="w-3 h-3" />
-                  <span>+ Partial Harvest</span>
-                </button>
-              )}
+              <h3 className="font-semibold text-gray-900 text-sm">Partial Harvest</h3>
+              <button
+                type="button"
+                onClick={addPartialHarvest}
+                className="btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1"
+              >
+                <PlusIcon className="w-3.5 h-3.5" />
+                <span>+ Partial Harvest</span>
+              </button>
             </div>
 
             <div className="card-body p-4 space-y-3">
-              {partialHarvests.map((ph, idx) => (
-                <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
-                    <span>Partial Harvest #{idx + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => removePartialHarvest(idx)}
-                      className="text-gray-400 hover:text-red-600 p-0.5"
-                    >
-                      <TrashIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
-                    <div>
-                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Date</label>
-                      <input
-                        type="date"
-                        value={ph.date || ''}
-                        onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
-                        className="input text-xs py-1 w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">DOC</label>
-                      <input
-                        type="number"
-                        value={ph.doc ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
-                        placeholder="DOC"
-                        readOnly={isDocAutoOnly && !isEdit}
-                        className={`input text-xs py-1 w-full ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-700 font-semibold block mb-0.5">
-                        Count <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="number"
-                        step="any"
-                        required
-                        value={ph.count ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'count', e.target.value)}
-                        placeholder="Count *"
-                        className="input text-xs py-1 w-full border-amber-300 focus:border-red-500 font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">ABW (g)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={ph.abw ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
-                        placeholder="ABW (g)"
-                        className="input text-xs py-1 w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Qty (pcs)</label>
-                      <input
-                        type="number"
-                        value={ph.harvested_quantity ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
-                        placeholder="Qty (pcs)"
-                        className="input text-xs py-1 w-full"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Biomass (kg)</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={ph.harvested_biomass ?? ''}
-                        onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
-                        placeholder="Biomass (kg)"
-                        className="input text-xs py-1 font-mono w-full"
-                      />
-                    </div>
+              {/* Previous Partial Harvests */}
+              {previousPartialHarvests.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="text-xs font-semibold text-gray-700 block">Previous Partial Harvests</span>
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table className="table text-xs w-full bg-white">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-700">
+                          <th className="py-2 px-3 text-left">Harvest #</th>
+                          <th className="py-2 px-3 text-left">Date</th>
+                          <th className="py-2 px-3 text-left">DOC</th>
+                          <th className="py-2 px-3 text-left">Count</th>
+                          <th className="py-2 px-3 text-left">ABW (g)</th>
+                          <th className="py-2 px-3 text-left">Quantity (kg)</th>
+                          <th className="py-2 px-3 text-left">Biomass (kg)</th>
+                          <th className="py-2 px-3 text-left">Remarks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previousPartialHarvests.map((ph, idx) => (
+                          <tr key={idx} className="border-t border-gray-100">
+                            <td className="py-2 px-3 font-semibold text-gray-900">
+                              #{ph.harvest_no || (idx + 1)}
+                            </td>
+                            <td className="py-2 px-3 text-gray-700">{ph.date || '—'}</td>
+                            <td className="py-2 px-3 text-gray-700">{ph.doc || '—'}</td>
+                            <td className="py-2 px-3 font-mono text-gray-900">{ph.count || '—'}</td>
+                            <td className="py-2 px-3 text-gray-700">{ph.abw || '—'}</td>
+                            <td className="py-2 px-3 text-gray-900">{ph.harvested_quantity || '—'}</td>
+                            <td className="py-2 px-3 text-gray-900">{ph.harvested_biomass || '—'}</td>
+                            <td className="py-2 px-3 text-gray-500">{ph.remarks || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
-              ))}
+              )}
 
-              {/* Final Harvest */}
+              {/* New Partial Harvest Entries */}
+              {partialHarvests.map((ph, idx) => {
+                const currentHarvestNum = previousPartialHarvests.length + idx + 1;
+                return (
+                  <div key={idx} className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
+                      <span>Partial Harvest #{currentHarvestNum}</span>
+                      {partialHarvests.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePartialHarvest(idx)}
+                          className="text-gray-400 hover:text-gray-600 p-0.5"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Date</label>
+                        <input
+                          type="date"
+                          value={ph.date || ''}
+                          onChange={e => updatePartialHarvest(idx, 'date', e.target.value)}
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">DOC</label>
+                        <input
+                          type="number"
+                          value={ph.doc ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'doc', e.target.value)}
+                          placeholder="DOC"
+                          readOnly={isDocAutoOnly && !isEdit}
+                          className={`input text-xs py-1 w-full ${(isDocAutoOnly && !isEdit) ? 'bg-gray-50 text-gray-600 cursor-not-allowed' : ''}`}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-700 font-medium block mb-0.5">
+                          Count *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          required
+                          value={ph.count ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'count', e.target.value)}
+                          placeholder="Count *"
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">ABW (g)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={ph.abw ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
+                          placeholder="ABW (g)"
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Quantity (kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={ph.harvested_quantity ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'harvested_quantity', e.target.value)}
+                          placeholder="Qty (kg)"
+                          className="input text-xs py-1 w-full"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Biomass (kg)</label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={ph.harvested_biomass ?? ''}
+                          onChange={e => updatePartialHarvest(idx, 'harvested_biomass', e.target.value)}
+                          placeholder="Biomass (kg)"
+                          className="input text-xs py-1 font-mono w-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Final Harvest Section */}
+        {showFinalHarvest && (
+          <div className="card">
+            <div className="card-header py-2.5 px-4">
+              <h3 className="font-semibold text-gray-900 text-sm">Final Harvest</h3>
+            </div>
+
+            <div className="card-body p-4 space-y-3">
               <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100 space-y-1.5">
                 <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
                   <span>Final Harvest</span>
-                  {meetingType === 'harvest_details' && (
-                    <span className="text-[11px] text-amber-600 font-medium">Count is mandatory</span>
-                  )}
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                   <div>
@@ -1174,8 +1308,8 @@ export default function VisitForm() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-700 font-semibold block mb-0.5">
-                      Count <span className="text-red-500">*</span>
+                    <label className="text-[10px] text-gray-700 font-medium block mb-0.5">
+                      Count *
                     </label>
                     <input
                       type="number"
@@ -1183,7 +1317,7 @@ export default function VisitForm() {
                       value={finalHarvest.count ?? ''}
                       onChange={e => updateFinalHarvest('count', e.target.value)}
                       placeholder="Count *"
-                      className="input text-xs py-1 w-full border-amber-300 focus:border-red-500 font-semibold"
+                      className="input text-xs py-1 w-full"
                     />
                   </div>
                   <div>
@@ -1198,12 +1332,13 @@ export default function VisitForm() {
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Qty (pcs)</label>
+                    <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Quantity (kg)</label>
                     <input
                       type="number"
+                      step="0.1"
                       value={finalHarvest.harvested_quantity ?? ''}
                       onChange={e => updateFinalHarvest('harvested_quantity', e.target.value)}
-                      placeholder="Qty (pcs)"
+                      placeholder="Qty (kg)"
                       className="input text-xs py-1 w-full"
                     />
                   </div>
@@ -1221,13 +1356,13 @@ export default function VisitForm() {
                 </div>
               </div>
 
-              {/* Minimal Summary Strip */}
+              {/* Production Summary Strip */}
               <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
-                <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_biomass} kg</span></div>
-                <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_feed} kg</span></div>
-                <div>Overall FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
-                <div>Total Pieces: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.total_harvest_qty}</span></div>
-                <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival_percentage}</span></div>
+                <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.avgBiomass} kg</span></div>
+                <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.totalFeed}</span></div>
+                <div>FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
+                <div>Total Count: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.totalCount}</span></div>
+                <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival}</span></div>
               </div>
             </div>
           </div>

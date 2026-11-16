@@ -395,6 +395,83 @@ const getClient = async (req, res) => {
       { replacements: [req.params.id, req.params.id] }
     );
 
+        if (ponds && ponds.length > 0) {
+      for (const pond of ponds) {
+        const [visits] = await sequelize.query(
+          `SELECT id, visit_date, visit_time, meeting_type, feeding_details, harvest_details, water_quality
+           FROM visits
+           WHERE (tank_id = ? OR (client_id = ? AND tank_number = ?))
+             AND deleted_at IS NULL
+           ORDER BY visit_date ASC, id ASC`,
+          { replacements: [pond.id, req.params.id, pond.tank_number || pond.pond_name] }
+        );
+
+        const allPartials = [];
+        let maxCumulativeFeed = 0;
+        let sumDailyFeed = 0;
+
+        for (const v of visits) {
+          let hd = v.harvest_details;
+          let fd = v.feeding_details;
+          if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+          if (typeof fd === 'string') { try { fd = JSON.parse(fd); } catch(e){} }
+
+          if (fd && typeof fd === 'object') {
+            const cum = parseFloat(fd.cumulative_feed);
+            if (!isNaN(cum) && cum > 0) {
+              maxCumulativeFeed = Math.max(maxCumulativeFeed, cum);
+            }
+            const daily = parseFloat(fd.daily_feed_quantity);
+            if (!isNaN(daily) && daily > 0) {
+              sumDailyFeed += daily;
+            }
+          }
+
+          if (hd && typeof hd === 'object') {
+            if (Array.isArray(hd.partial_harvests)) {
+              for (const p of hd.partial_harvests) {
+                if (p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw)) {
+                  allPartials.push({
+                    ...p,
+                    date: p.date || v.visit_date,
+                    visit_id: v.id,
+                  });
+                }
+              }
+            } else if (hd.partial_harvest && typeof hd.partial_harvest === 'object') {
+              const p = hd.partial_harvest;
+              if (p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw)) {
+                allPartials.push({
+                  ...p,
+                  date: p.date || v.visit_date,
+                  visit_id: v.id,
+                });
+              }
+            }
+          }
+        }
+
+        const uniquePartials = [];
+        const seen = new Set();
+        for (const p of allPartials) {
+          const key = `${p.date}_${p.count}_${p.harvested_quantity || p.harvested_biomass || ''}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniquePartials.push(p);
+          }
+        }
+
+        uniquePartials.forEach((p, index) => {
+          p.harvest_no = index + 1;
+        });
+
+        const calculatedTotalFeed = maxCumulativeFeed > 0 ? maxCumulativeFeed : sumDailyFeed;
+        pond.partial_harvests = uniquePartials;
+        pond.total_feed = calculatedTotalFeed;
+        pond.cumulative_feed = calculatedTotalFeed;
+      }
+    }
+
     return sendSuccess(res, 'Client fetched', { ...client, brands: [], categories: [], ponds: ponds || [] });
   } catch (pondErr) {
     console.error('getClient ponds lookup failed:', pondErr);

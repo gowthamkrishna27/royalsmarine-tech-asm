@@ -7,6 +7,7 @@ import { downloadBlob } from '../../hooks/useApi';
 import { ArrowDownTrayIcon, UserIcon } from '@heroicons/react/24/outline';
 import Badge from '../../components/common/Badge';
 import toast from 'react-hot-toast';
+import TechnicianReports from './TechnicianReports';
 import {
   ResponsiveContainer,
   BarChart,
@@ -76,7 +77,16 @@ const MinimalPieTooltip = ({ active, payload }) => {
 
 export default function Reports() {
   const { user } = useAuth();
-  const isSalesExec = user?.role === 'sales_executive';
+
+  if (user?.role === 'sales_executive') {
+    return <TechnicianReports />;
+  }
+
+  return <AdminReports user={user} />;
+}
+
+function AdminReports({ user }) {
+  const isSalesExec = false;
   const availableTabs = useMemo(() => (isSalesExec ? ['visits'] : TABS), [isSalesExec]);
 
   const [tab, setTab] = useState('visits');

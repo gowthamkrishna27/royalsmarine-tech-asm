@@ -103,7 +103,7 @@ const listVisits = async (req, res) => {
       `SELECT v.id, v.uuid, v.visit_date, v.visit_time, v.meeting_type, v.person_met,
               v.visit_outcome, v.approval_status, v.next_followup_date, v.created_at,
               TIMESTAMPDIFF(SECOND, v.created_at, NOW()) as seconds_since_creation,
-              v.tank_id, v.tank_number,
+              v.tank_id, v.tank_number, v.harvest_details,
               c.company_name, c.city,
               sp.full_name as salesperson_name
        FROM visits v
@@ -115,12 +115,15 @@ const listVisits = async (req, res) => {
     );
 
     const visitsWithEditInfo = visits.map(v => {
+      let parsedHd = v.harvest_details;
+      if (typeof parsedHd === 'string') { try { parsedHd = JSON.parse(parsedHd); } catch(e){} }
       const secDb = Number(v.seconds_since_creation);
       const secNode = v.created_at ? Math.max(0, Math.floor((Date.now() - new Date(v.created_at).getTime()) / 1000)) : 999999;
       const elapsed = !isNaN(secDb) && secDb >= 0 ? secDb : secNode;
       const isEditable = elapsed <= VISIT_EDIT_WINDOW_SECONDS && v.approval_status !== 'approved';
       return {
         ...v,
+        harvest_details: parsedHd,
         is_editable: isEditable,
         edit_time_remaining_seconds: Math.max(0, VISIT_EDIT_WINDOW_SECONDS - elapsed),
       };
@@ -163,8 +166,25 @@ const createVisit = async (req, res) => {
         return sendError(res, `Water quality fields are required: ${missing.join(', ')}`, 400);
       }
     }
-    // Harvest details mandatory count validation
-    if (meeting_type === 'harvest_details') {
+    // Harvest details validations (separated for partial_harvest, final_harvest, and harvest_details)
+    if (meeting_type === 'partial_harvest') {
+      const hd = harvest_details || {};
+      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      if (partials.length === 0) {
+        return sendError(res, 'Please provide at least one partial harvest entry with Count.', 400);
+      }
+      for (let i = 0; i < partials.length; i++) {
+        if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
+        }
+      }
+    } else if (meeting_type === 'final_harvest') {
+      const hd = harvest_details || {};
+      const finalH = hd.final_harvest || {};
+      if (finalH.count === undefined || finalH.count === null || String(finalH.count).trim() === '') {
+        return sendError(res, 'Count is mandatory for Final Harvest', 400);
+      }
+    } else if (meeting_type === 'harvest_details') {
       const hd = harvest_details || {};
       const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
       const finalH = hd.final_harvest || {};
@@ -176,7 +196,7 @@ const createVisit = async (req, res) => {
 
       for (let i = 0; i < partials.length; i++) {
         if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
-          return sendError(res, `Count is mandatory for Partial Harvest #${i + 1}`, 400);
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
         }
       }
 
@@ -193,7 +213,7 @@ const createVisit = async (req, res) => {
 
       for (let i = 0; i < partials.length; i++) {
         if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
-          return sendError(res, `Count is mandatory for Partial Harvest #${i + 1}`, 400);
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
         }
       }
 
@@ -378,7 +398,24 @@ const updateVisit = async (req, res) => {
     tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details, disease_details,
   } = req.body;
 
-    if (meeting_type === 'harvest_details' && harvest_details !== undefined) {
+    if (meeting_type === 'partial_harvest' && harvest_details !== undefined) {
+      const hd = harvest_details || {};
+      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      if (partials.length === 0) {
+        return sendError(res, 'Please provide at least one partial harvest entry with Count.', 400);
+      }
+      for (let i = 0; i < partials.length; i++) {
+        if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
+        }
+      }
+    } else if (meeting_type === 'final_harvest' && harvest_details !== undefined) {
+      const hd = harvest_details || {};
+      const finalH = hd.final_harvest || {};
+      if (finalH.count === undefined || finalH.count === null || String(finalH.count).trim() === '') {
+        return sendError(res, 'Count is mandatory for Final Harvest', 400);
+      }
+    } else if (meeting_type === 'harvest_details' && harvest_details !== undefined) {
       const hd = harvest_details || {};
       const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
       const finalH = hd.final_harvest || {};
@@ -388,7 +425,7 @@ const updateVisit = async (req, res) => {
       }
       for (let i = 0; i < partials.length; i++) {
         if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
-          return sendError(res, `Count is mandatory for Partial Harvest #${i + 1}`, 400);
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
         }
       }
       if (hasFinalData || partials.length === 0) {
@@ -403,7 +440,7 @@ const updateVisit = async (req, res) => {
       const hasFinalData = Object.values(finalH).some(val => val !== null && val !== undefined && String(val).trim() !== '');
       for (let i = 0; i < partials.length; i++) {
         if (partials[i].count === undefined || partials[i].count === null || String(partials[i].count).trim() === '') {
-          return sendError(res, `Count is mandatory for Partial Harvest #${i + 1}`, 400);
+          return sendError(res, `Count is mandatory for Partial Harvest #${partials[i].harvest_no || (i + 1)}`, 400);
         }
       }
       if (hasFinalData) {

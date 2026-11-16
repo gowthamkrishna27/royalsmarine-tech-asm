@@ -32,6 +32,8 @@ export const MEETING_TYPES = [
   { value: 'feeding_details', label: 'Feeding Details' },
   { value: 'medication_details', label: 'Medication & Treatments' },
   { value: 'disease', label: 'Disease' },
+  { value: 'partial_harvest', label: 'Partial Harvest' },
+  { value: 'final_harvest', label: 'Final Harvest' },
   { value: 'harvest_details', label: 'Harvest Details' },
   { value: 'all', label: 'All Details (Full Inspection)' },
   { value: 'follow_up', label: 'Follow-up' },

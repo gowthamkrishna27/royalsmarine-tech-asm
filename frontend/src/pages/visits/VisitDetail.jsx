@@ -425,7 +425,7 @@ export default function VisitDetail() {
                         <th>DOC</th>
                         <th>Count</th>
                         <th>ABW (g)</th>
-                        <th>Quantity (pcs)</th>
+                        <th>Quantity (kg)</th>
                         <th>Biomass (kg)</th>
                       </tr>
                     </thead>
@@ -436,8 +436,8 @@ export default function VisitDetail() {
                           <td>{ph.doc || '—'}</td>
                           <td className="font-bold font-mono text-gray-900">{ph.count || '—'}</td>
                           <td>{ph.abw || '—'}</td>
-                          <td>{ph.harvested_quantity || '—'}</td>
-                          <td className="font-bold">{ph.harvested_biomass || '—'}</td>
+                          <td>{ph.harvested_quantity ? `${ph.harvested_quantity} kg` : '—'}</td>
+                          <td className="font-bold">{ph.harvested_biomass ? `${ph.harvested_biomass} kg` : '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -454,8 +454,33 @@ export default function VisitDetail() {
                   <div>DOC: <strong className="text-gray-900">{finalHarvest.doc || '—'}</strong></div>
                   <div>Count: <strong className="text-gray-900 font-mono font-bold">{finalHarvest.count || '—'}</strong></div>
                   <div>ABW: <strong className="text-gray-900">{finalHarvest.abw || '—'} g</strong></div>
-                  <div>Quantity: <strong className="text-gray-900">{finalHarvest.harvested_quantity || '—'}</strong></div>
+                  <div>Quantity: <strong className="text-gray-900">{finalHarvest.harvested_quantity ? `${finalHarvest.harvested_quantity} kg` : '—'}</strong></div>
                   <div>Biomass: <strong className="text-gray-900 font-bold">{finalHarvest.harvested_biomass || '—'} kg</strong></div>
+                </div>
+              </div>
+            )}
+
+            {harvest.derived && (
+              <div className="p-3 bg-white border border-gray-200 rounded-xl text-xs grid grid-cols-2 sm:grid-cols-5 gap-3 shadow-xs">
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Total Biomass</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.avgBiomass || harvest.derived.total_biomass || '—'} kg</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Total Feed</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.totalFeed || (harvest.derived.total_feed ? `${harvest.derived.total_feed} kg` : '—')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">FCR</span>
+                  <span className="font-bold text-emerald-700 font-mono text-sm">{harvest.derived.fcr || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Total Count</span>
+                  <span className="font-bold text-blue-700 font-mono text-sm">{harvest.derived.totalCount || finalHarvest.count || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 text-[10px] block">Survival</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.survival || harvest.derived.survival_percentage || '—'}</span>
                 </div>
               </div>
             )}

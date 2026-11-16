@@ -9,6 +9,8 @@ import {
   Square3Stack3DIcon,
   MapPinIcon,
   CalendarDaysIcon,
+  UserGroupIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 
 const getL = () => (typeof window !== 'undefined' ? window.L : null);
@@ -43,6 +45,7 @@ export default function MapPage() {
 
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
+  const [farmerId, setFarmerId] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [mapMode, setMapMode] = useState('satellite'); // Satellite view by default
   const [showFilterMenu, setShowFilterMenu] = useState(false);
@@ -108,6 +111,35 @@ export default function MapPage() {
 
   const clients = data?.clients || [];
   const ponds = data?.ponds || [];
+
+  // Fetch technician's assigned active farmers
+  const { data: techFarmers } = useQuery({
+    queryKey: ['technician-farmers'],
+    queryFn: () => clientService.list({ limit: 500, status: 'active' }).then(res => res.data.data),
+  });
+
+  const farmerOptions = useMemo(() => {
+    const map = new Map();
+    (techFarmers || []).forEach(c => {
+      if (c && c.id) {
+        map.set(String(c.id), {
+          value: String(c.id),
+          label: c.company_name || c.contact_person || `Farmer #${c.id}`,
+          city: c.city || '',
+        });
+      }
+    });
+    (clients || []).forEach(c => {
+      if (c && c.id && !map.has(String(c.id))) {
+        map.set(String(c.id), {
+          value: String(c.id),
+          label: c.company_name || c.contact_person || `Farmer #${c.id}`,
+          city: c.city || '',
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => (a.label || '').localeCompare(b.label || ''));
+  }, [techFarmers, clients]);
 
   // Mappable items with valid coordinates
   const items = useMemo(() => {
@@ -400,9 +432,49 @@ export default function MapPage() {
     }
   }, [isLeafletReady]);
 
+  // Auto-center and zoom to farmer when farmer is selected
+  useEffect(() => {
+    if (farmerId && items.length > 0 && mapInstanceRef.current) {
+      const farmerItem = items.find(
+        (i) => i.type === 'farmer' && String(i.rawId) === String(farmerId)
+      );
+      const farmerPonds = items.filter(
+        (i) => i.type === 'pond' && String(i.clientId) === String(farmerId)
+      );
+
+      suppressFitBoundsRef.current = true;
+
+      if (farmerItem) {
+        mapInstanceRef.current.flyTo([farmerItem.latitude, farmerItem.longitude], 16, { duration: 1.2 });
+        const marker = markerMapRef.current[farmerItem.id];
+        if (marker) {
+          setTimeout(() => marker.openPopup(), 1200);
+        }
+      } else if (farmerPonds.length > 0) {
+        if (farmerPonds.length === 1) {
+          mapInstanceRef.current.flyTo([farmerPonds[0].latitude, farmerPonds[0].longitude], 16, { duration: 1.2 });
+          const marker = markerMapRef.current[farmerPonds[0].id];
+          if (marker) {
+            setTimeout(() => marker.openPopup(), 1200);
+          }
+        } else {
+          const L = getL();
+          if (L) {
+            const bounds = L.latLngBounds(farmerPonds.map(p => [p.latitude, p.longitude]));
+            mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 16 });
+          }
+        }
+      }
+    }
+  }, [farmerId, items]);
+
   // Filtered items on map canvas
   const filtered = useMemo(() => {
     return items.filter(item => {
+      if (farmerId) {
+        if (item.type === 'farmer' && String(item.rawId) !== String(farmerId)) return false;
+        if (item.type === 'pond' && String(item.clientId) !== String(farmerId)) return false;
+      }
       if (typeFilter && item.type !== typeFilter) return false;
       if (search.trim() && !directCoords) {
         const q = search.toLowerCase();
@@ -414,7 +486,7 @@ export default function MapPage() {
       }
       return true;
     });
-  }, [items, typeFilter, search, directCoords]);
+  }, [items, farmerId, typeFilter, search, directCoords]);
 
   // Init map
   useEffect(() => {
@@ -814,11 +886,11 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* Floating Top Controls (Search + Filter + Layer + My Location) */}
-      <div className="absolute top-3 sm:top-4 left-3 right-3 sm:right-auto sm:w-[32rem] z-10 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto">
+      {/* Floating Top Controls (Search + Farmers + Date + Filter + Layer + My Location) */}
+      <div className="absolute top-3 sm:top-4 left-3 right-3 z-10 pointer-events-none">
+        <div className="flex items-center gap-2 pointer-events-auto w-full overflow-x-auto pb-1 scrollbar-none">
           {/* Search Box with Real-Time Suggestions */}
-          <div ref={searchContainerRef} className="relative flex-1">
+          <div ref={searchContainerRef} className="relative min-w-[180px] sm:min-w-[220px] flex-1 max-w-xs shrink-0">
             <form
               onSubmit={handleSearchSubmit}
               className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center px-3 py-2"
@@ -949,6 +1021,39 @@ export default function MapPage() {
                   )}
                 </div>
               )}
+          </div>
+
+          {/* Farmers Dropdown Filter */}
+          <div className="relative shrink-0">
+            <select
+              value={farmerId}
+              onChange={(e) => setFarmerId(e.target.value)}
+              className={`h-10 pl-3 pr-8 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[130px] max-w-[200px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 truncate appearance-none ${
+                farmerId
+                  ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                  : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
+              }`}
+              title="Filter by Farmer"
+            >
+              <option value="">Farmers (All)</option>
+              {farmerOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}{opt.city ? ` (${opt.city})` : ''}
+                </option>
+              ))}
+            </select>
+            {farmerId ? (
+              <button
+                type="button"
+                onClick={() => setFarmerId('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 bg-white/80 rounded"
+                title="Clear farmer filter"
+              >
+                <XMarkIcon className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            )}
           </div>
 
           {/* Date Filter Control */}
@@ -1085,6 +1190,26 @@ export default function MapPage() {
               <button
                 type="button"
                 onClick={() => setSelectedDate('')}
+                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Farmer Filter Active Status Banner */}
+        {farmerId && (
+          <div className="mt-2 flex items-center gap-2 pointer-events-auto">
+            <div className="px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border bg-blue-600/95 border-blue-500 text-white animate-in fade-in slide-in-from-top-2">
+              <UserGroupIcon className="w-4 h-4 shrink-0" />
+              <span>
+                Farmer: <b>{farmerOptions.find(f => String(f.value) === String(farmerId))?.label || 'Selected Farmer'}</b>
+                {filtered.length > 0 && ` (${filtered.length} ${filtered.length === 1 ? 'location' : 'locations'} on map)`}
+              </span>
+              <button
+                type="button"
+                onClick={() => setFarmerId('')}
                 className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
               >
                 Clear
