@@ -8,6 +8,9 @@
   input, select, textarea {
     @apply outline-none;
   }
+  input[type="date"] {
+    color-scheme: light;
+  }
 }
 
 @layer components {

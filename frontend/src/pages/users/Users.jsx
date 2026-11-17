@@ -94,9 +94,10 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
 
   const filteredExecutives = useMemo(() => {
     if (!technicalExecutives) return [];
-    if (!execSearch.trim()) return technicalExecutives;
+    const activeTechs = technicalExecutives.filter(e => (e.status ? e.status === 'active' : true));
+    if (!execSearch.trim()) return activeTechs;
     const term = execSearch.toLowerCase();
-    return technicalExecutives.filter(e =>
+    return activeTechs.filter(e =>
       e.full_name?.toLowerCase().includes(term) ||
       e.email?.toLowerCase().includes(term) ||
       e.area?.toLowerCase().includes(term) ||
@@ -106,7 +107,7 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
 
   const selectAllUnassigned = () => {
     const unassignedIds = (technicalExecutives || [])
-      .filter(e => !e.manager_id || (user && e.manager_id === user.id))
+      .filter(e => (e.status ? e.status === 'active' : true) && (!e.manager_id || (user && e.manager_id === user.id)))
       .map(e => e.id);
     setSelectedExecIds(Array.from(new Set([...selectedExecIds, ...unassignedIds])));
   };
@@ -380,7 +381,7 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
                   className="input bg-white font-medium"
                 >
                   <option value="">Select ASM (Area Sales Manager)</option>
-                  {asms?.map(m => (
+                  {asms?.filter(m => (m.status ? m.status === 'active' : true))?.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.full_name} {m.region ? `— Region: ${m.region}` : ''}
                     </option>
@@ -404,7 +405,7 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
                 <label className="label">Reporting Manager</label>
                 <select {...register('manager_id')} className="input">
                   <option value="">No manager</option>
-                  {asms?.map(m => (
+                  {asms?.filter(m => (m.status ? m.status === 'active' : true))?.map(m => (
                     <option key={m.id} value={m.id}>
                       {m.full_name} {m.region ? `(${m.region})` : ''}
                     </option>
@@ -463,7 +464,7 @@ export default function Users() {
 
   const { data: technicalExecutives } = useQuery({
     queryKey: ['technicalExecutives'],
-    queryFn: () => userApi.list({ role: 'sales_executive', limit: 100 }).then(r => r.data.data),
+    queryFn: () => userApi.list({ role: 'sales_executive', status: 'active', limit: 100 }).then(r => r.data.data),
   });
 
   const toggleStatus = async (user) => {

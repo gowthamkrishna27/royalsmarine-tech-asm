@@ -130,15 +130,21 @@ export default function Reports() {
       region: region || undefined,
       asm_id: asmId || undefined,
       technician_id: technicianId || undefined,
+      salesperson_id: technicianId || undefined,
       farmer_id: farmerId || undefined,
     }).then(r => r.data.data || r.data),
     enabled: tab === 'visits',
   });
 
   const { data: followupReport, isLoading: fuLoading } = useQuery({
-    queryKey: ['report-followups', fromDate, toDate],
+    queryKey: ['report-followups', fromDate, toDate, region, asmId, technicianId, farmerId],
     queryFn: () => reportApi.followups({
       from_date: fromDate, to_date: toDate,
+      region: region || undefined,
+      asm_id: asmId || undefined,
+      technician_id: technicianId || undefined,
+      salesperson_id: technicianId || undefined,
+      farmer_id: farmerId || undefined,
     }).then(r => r.data.data || r.data),
     enabled: tab === 'followups' && !isSalesExec,
   });
@@ -152,6 +158,7 @@ export default function Reports() {
         params.region = region || undefined;
         params.asm_id = asmId || undefined;
         params.technician_id = technicianId || undefined;
+        params.salesperson_id = technicianId || undefined;
         params.farmer_id = farmerId || undefined;
       }
       const res = await reportApi.export(params);
@@ -253,7 +260,7 @@ export default function Reports() {
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All ASMs</option>
-            {asms?.map(a => <option key={a.id} value={a.id}>{a.full_name}</option>)}
+            {asms?.filter(a => (a.status ? a.status === 'active' : true))?.map(a => <option key={a.id} value={a.id}>{a.full_name}</option>)}
           </select>
         )}
         {tab === 'visits' && !isSalesExec && (
@@ -263,7 +270,7 @@ export default function Reports() {
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All Technicians</option>
-            {technicians?.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+            {technicians?.filter(t => (t.status ? t.status === 'active' : true))?.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
           </select>
         )}
         {tab === 'visits' && !isSalesExec && (

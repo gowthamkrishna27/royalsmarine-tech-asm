@@ -76,7 +76,8 @@ const listFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
+    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
+    replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);
@@ -141,6 +142,19 @@ const createFollowup = async (req, res) => {
   }
 
   const { title, client_id, visit_id, opportunity_id, assigned_salesperson_id, followup_date, followup_time, priority, remarks } = req.body;
+
+  if (req.user.role === 'sales_executive') {
+    const [c] = await sequelize.query(
+      'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+      { replacements: [client_id] }
+    );
+    if (!c[0]) return sendError(res, 'Farmer not found', 404);
+    const isAssigned = Number(c[0].assigned_salesperson_id) === Number(req.user.id);
+    const isUnassignedCreator = !c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id);
+    if (!isAssigned && !isUnassignedCreator) {
+      return sendError(res, 'Access denied: You can only create follow-ups for your assigned farmers', 403);
+    }
+  }
 
   try {
     const uuid = uuidv4();
@@ -300,7 +314,7 @@ const getTodayFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
+    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
     replacements.push(userId, userId);
@@ -332,7 +346,7 @@ const getDuesFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
+    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);
@@ -365,7 +379,7 @@ const getOverdueFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.assigned_salesperson_id = ?'; replacements.push(userId);
+    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
     replacements.push(userId, userId);

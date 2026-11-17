@@ -56,7 +56,7 @@ export default function HarvestedTanks() {
 
   // ASM dropdown options (filtered by selected Region)
   const asmOptions = useMemo(() => {
-    let list = filterMeta?.asms || [];
+    let list = (filterMeta?.asms || []).filter((a) => (a.status ? a.status === 'active' : true));
     if (regionFilter) {
       list = list.filter((a) => (a.region || '').toLowerCase() === regionFilter.toLowerCase());
     }
@@ -68,7 +68,7 @@ export default function HarvestedTanks() {
 
   // Technician dropdown options (filtered by selected ASM, or selected Region)
   const techOptions = useMemo(() => {
-    let list = filterMeta?.techs || [];
+    let list = (filterMeta?.techs || []).filter((t) => (t.status ? t.status === 'active' : true));
     if (asmFilter) {
       list = list.filter((t) => String(t.manager_id) === String(asmFilter));
     } else if (regionFilter) {

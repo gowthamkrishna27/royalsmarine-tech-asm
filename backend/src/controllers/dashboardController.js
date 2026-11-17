@@ -38,7 +38,7 @@ const getSalesExecutiveDashboard = async (userId) => {
       COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive_farmers,
       COUNT(CASE WHEN status IN ('forcely_closed', 'forced_closed', 'closed') THEN 1 END) as forcely_closed_farmers
     FROM clients 
-    WHERE (assigned_salesperson_id=? OR created_by=?) AND deleted_at IS NULL`,
+    WHERE (assigned_salesperson_id=? OR (assigned_salesperson_id IS NULL AND created_by=?)) AND deleted_at IS NULL`,
     { replacements: [userId, userId] }
   );
   const [tankStats] = await sequelize.query(
@@ -57,12 +57,12 @@ const getSalesExecutiveDashboard = async (userId) => {
       COUNT(CASE WHEN p.status != 'active' OR p.status IS NULL THEN 1 END) as inactive_tanks
     FROM ponds p
     JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
-    WHERE (c.assigned_salesperson_id=? OR c.created_by=?) AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
+    WHERE (c.assigned_salesperson_id=? OR (c.assigned_salesperson_id IS NULL AND c.created_by=?)) AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
     { replacements: [userId, userId] }
   );
   const [submissionsCount] = await sequelize.query(
-    "SELECT COUNT(*) as count FROM visits WHERE salesperson_id=? AND deleted_at IS NULL",
-    { replacements: [userId] }
+    "SELECT COUNT(*) as count FROM visits v WHERE v.salesperson_id=? AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id=? OR (assigned_salesperson_id IS NULL AND created_by=?)) AND deleted_at IS NULL) AND v.deleted_at IS NULL",
+    { replacements: [userId, userId, userId] }
   );
   const [dueFollowups] = await sequelize.query(
     "SELECT COUNT(*) as count FROM followups WHERE assigned_salesperson_id=? AND status IN ('pending','overdue') AND followup_date <= CURDATE() AND deleted_at IS NULL",
@@ -86,9 +86,9 @@ const getSalesExecutiveDashboard = async (userId) => {
      FROM visits v
      JOIN clients c ON v.client_id = c.id
      JOIN users sp ON v.salesperson_id = sp.id
-     WHERE v.salesperson_id=? AND v.deleted_at IS NULL
+     WHERE v.salesperson_id=? AND (c.assigned_salesperson_id=? OR (c.assigned_salesperson_id IS NULL AND c.created_by=?)) AND v.deleted_at IS NULL
      ORDER BY v.visit_date DESC, v.created_at DESC LIMIT 5`,
-    { replacements: [userId] }
+    { replacements: [userId, userId, userId] }
   );
   const [recentFollowups] = await sequelize.query(
     `SELECT f.id, f.title, f.followup_date, f.priority, f.status, c.company_name
@@ -101,7 +101,7 @@ const getSalesExecutiveDashboard = async (userId) => {
   const [myFarmersList] = await sequelize.query(
     `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.city, c.village, c.farm_extent_acres, c.number_of_tanks, c.status
      FROM clients c
-     WHERE (c.assigned_salesperson_id = ? OR c.created_by = ?) AND c.deleted_at IS NULL
+     WHERE (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?)) AND c.deleted_at IS NULL
      ORDER BY c.company_name ASC`,
     { replacements: [userId, userId] }
   );

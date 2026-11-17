@@ -96,7 +96,7 @@ function AdminReports({ user }) {
 
   const { data: salespeople } = useQuery({
     queryKey: ['salespeople'],
-    queryFn: () => userApi.list({ role: 'sales_executive' }).then(r => r.data.data),
+    queryFn: () => userApi.list({ role: 'sales_executive', status: 'active', limit: 1000 }).then(r => r.data.data),
     enabled: !isSalesExec,
   });
 
@@ -114,7 +114,7 @@ function AdminReports({ user }) {
 
   const handleExport = async () => {
     try {
-      const res = await reportApi.export({ type: tab, from_date: fromDate, to_date: toDate });
+      const res = await reportApi.export({ type: tab, from_date: fromDate, to_date: toDate, salesperson_id: salespersonId || undefined, technician_id: salespersonId || undefined });
       downloadBlob(res.data, `${tab}-report.xlsx`);
     } catch {
       toast.error('Export failed');
@@ -203,7 +203,7 @@ function AdminReports({ user }) {
             className="input text-xs sm:text-sm col-span-2 sm:col-span-1 sm:w-auto"
           >
             <option value="">All Technical Executives</option>
-            {salespeople?.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+            {salespeople?.filter(s => (s.status ? s.status === 'active' : true))?.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
           </select>
         )}
         {isSalesExec && (

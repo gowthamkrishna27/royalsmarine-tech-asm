@@ -32,7 +32,7 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
 
   // Technical executives assigned to this ASM (where manager_id matches ASM)
   const directReports = (users || []).filter(
-    (u) => u.role === 'sales_executive' && (u.manager_id === currentUser?.id)
+    (u) => (u.status ? u.status === 'active' : true) && u.role === 'sales_executive' && (u.manager_id === currentUser?.id)
   );
 
   // Filter farmers assigned to the selected technical executive / ASM
@@ -111,7 +111,7 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
               </option>
             )}
             {(users || [])
-              .filter((u) => ['sales_manager', 'sales_executive'].includes(u.role))
+              .filter((u) => (u.status ? u.status === 'active' : true) && ['sales_manager', 'sales_executive'].includes(u.role))
               .map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name} ({u.role_display || (u.role === 'sales_manager' ? 'ASM' : 'Technical Executive')})
@@ -235,7 +235,7 @@ export default function Followups() {
 
   // 1. ASM dropdown options
   const asmOptions = useMemo(() => {
-    const list = filterMeta?.asms || [];
+    const list = (filterMeta?.asms || []).filter((a) => (a.status ? a.status === 'active' : true));
     return list.map((a) => ({
       value: String(a.id),
       label: a.name + (a.region ? ` (${a.region})` : ''),
@@ -244,7 +244,7 @@ export default function Followups() {
 
   // 2. Tech dropdown options (filtered by selected ASM)
   const techOptions = useMemo(() => {
-    let list = filterMeta?.techs || [];
+    let list = (filterMeta?.techs || []).filter((t) => (t.status ? t.status === 'active' : true));
     if (asmId) {
       list = list.filter((t) => String(t.manager_id) === String(asmId));
     }

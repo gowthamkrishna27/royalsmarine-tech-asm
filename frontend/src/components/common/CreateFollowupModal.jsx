@@ -88,7 +88,7 @@ export default function CreateFollowupModal({ open, onClose, clients, users, cur
               </option>
             )}
             {(users || [])
-              .filter((u) => ['sales_manager', 'sales_executive'].includes(u.role))
+              .filter((u) => u.status === 'active' && ['sales_manager', 'sales_executive'].includes(u.role))
               .map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.full_name} ({u.role_display || (u.role === 'sales_manager' ? 'ASM' : 'Technical Executive')})

@@ -360,7 +360,7 @@ export default function ClientForm() {
                 <label className="label">Assigned Technical Executive</label>
                 <select {...register('assigned_salesperson_id')} className="input">
                   <option value="">Self / Default ({user?.full_name || 'Current User'})</option>
-                  {teamUsers?.map(u => (
+                  {teamUsers?.filter(u => (u.status ? u.status === 'active' : true))?.map(u => (
                     <option key={u.id} value={u.id}>
                       {u.full_name} ({u.role?.replace('_', ' ')})
                     </option>

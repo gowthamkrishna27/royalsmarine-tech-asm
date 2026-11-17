@@ -76,7 +76,7 @@ const buildClientWhere = (query, userId, role) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND (c.assigned_salesperson_id = ? OR c.created_by = ?)';
+    where += ' AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
     replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     if (query.scope === 'my_farmers') {
@@ -201,7 +201,9 @@ const createClient = async (req, res) => {
     let salespersonId = assigned_salesperson_id ? parseInt(assigned_salesperson_id, 10) : null;
     let managerId = assigned_manager_id ? parseInt(assigned_manager_id, 10) : null;
 
-    if (!salespersonId) {
+    if (req.user.role === 'sales_executive') {
+      salespersonId = req.user.id;
+    } else if (!salespersonId) {
       salespersonId = req.user.id;
     }
 
@@ -380,11 +382,23 @@ const getClient = async (req, res) => {
     );
     if (!clients[0]) return sendError(res, 'Client not found', 404);
 
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(clients[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !clients[0].assigned_salesperson_id && Number(clients[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
+    }
+
     const client = clients[0];
 
     // Data isolation
-    if (req.user.role === 'sales_executive' && client.assigned_salesperson_id && client.assigned_salesperson_id !== req.user.id && client.created_by !== req.user.id) {
-      return sendError(res, 'Access denied: not your client', 403);
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(client.assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !client.assigned_salesperson_id && Number(client.created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
     }
 
   try {
@@ -503,9 +517,13 @@ const updateClient = async (req, res) => {
     }
     const cur = existing[0];
 
-    if (req.user.role === 'sales_executive' && cur.assigned_salesperson_id && cur.assigned_salesperson_id !== req.user.id && cur.created_by !== req.user.id) {
-      await t.rollback();
-      return sendError(res, 'Access denied: not your client', 403);
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(cur.assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !cur.assigned_salesperson_id && Number(cur.created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        await t.rollback();
+        return sendError(res, 'Access denied: not your client', 403);
+      }
     }
 
     const cols = await getClientCols();
@@ -518,9 +536,11 @@ const updateClient = async (req, res) => {
     }
 
     // Preserve existing values/assignments when not explicitly passed (supports status-only close)
-    const salespersonId = (assigned_salesperson_id !== undefined && assigned_salesperson_id !== null && assigned_salesperson_id !== '')
-      ? parseInt(assigned_salesperson_id, 10)
-      : cur.assigned_salesperson_id;
+    const salespersonId = (req.user.role === 'sales_executive')
+      ? (cur.assigned_salesperson_id || req.user.id)
+      : ((assigned_salesperson_id !== undefined && assigned_salesperson_id !== null && assigned_salesperson_id !== '')
+          ? parseInt(assigned_salesperson_id, 10)
+          : cur.assigned_salesperson_id);
 
     let managerId = (assigned_manager_id !== undefined && assigned_manager_id !== null && assigned_manager_id !== '')
       ? parseInt(assigned_manager_id, 10)
@@ -871,6 +891,18 @@ const importClients = async (req, res) => {
 
 const listPonds = async (req, res) => {
   try {
+    if (req.user.role === 'sales_executive') {
+      const [c] = await sequelize.query(
+        'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        { replacements: [req.params.id] }
+      );
+      if (!c[0]) return sendError(res, 'Farmer not found', 404);
+      const isAssigned = Number(c[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
+    }
     const docCols = await getPondDocCols();
     const [ponds] = await sequelize.query(
       `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
@@ -899,8 +931,12 @@ const createPond = async (req, res) => {
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
-      return sendError(res, 'Access denied: not your client', 403);
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(clientRows[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !clientRows[0].assigned_salesperson_id && Number(clientRows[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
     }
 
     const uuid = uuidv4();
@@ -958,8 +994,12 @@ const updatePond = async (req, res) => {
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
-      return sendError(res, 'Access denied: not your client', 403);
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(clientRows[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !clientRows[0].assigned_salesperson_id && Number(clientRows[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
     }
 
     const [existing] = await sequelize.query(
@@ -1030,8 +1070,12 @@ const deletePond = async (req, res) => {
     );
     if (!clientRows[0]) return sendError(res, 'Farmer not found', 404);
 
-    if (req.user.role === 'sales_executive' && clientRows[0].assigned_salesperson_id && clientRows[0].assigned_salesperson_id !== req.user.id && clientRows[0].created_by !== req.user.id) {
-      return sendError(res, 'Access denied: not your client', 403);
+    if (req.user.role === 'sales_executive') {
+      const isAssigned = Number(clientRows[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !clientRows[0].assigned_salesperson_id && Number(clientRows[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: not your client', 403);
+      }
     }
 
     await sequelize.query(
@@ -1145,8 +1189,8 @@ const listHarvestedTanks = async (req, res) => {
     const replacements = [];
 
     if (req.user.role === 'sales_executive') {
-      scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
-      replacements.push(req.user.id, req.user.id, req.user.id);
+      scopingClause = 'AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+      replacements.push(req.user.id, req.user.id);
     } else if (req.user.role === 'sales_manager') {
       scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
       replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
@@ -1358,8 +1402,8 @@ const getHarvestedFcrTanksData = async (query = {}, user = {}) => {
   const replacements = [];
 
   if (user.role === 'sales_executive') {
-    scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
-    replacements.push(user.id, user.id, user.id);
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+    replacements.push(user.id, user.id);
   } else if (user.role === 'sales_manager') {
     scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
     replacements.push(user.id, user.id, user.id, user.id, user.id);
@@ -1646,8 +1690,8 @@ const listDealers = async (req, res) => {
     const replacements = [];
 
     if (req.user.role === 'sales_executive') {
-      scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
-      replacements.push(req.user.id, req.user.id, req.user.id);
+      scopingClause = 'AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+      replacements.push(req.user.id, req.user.id);
     } else if (req.user.role === 'sales_manager') {
       scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
       replacements.push(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
@@ -1807,8 +1851,8 @@ const getCountTanksData = async (query = {}, user = {}) => {
   const replacements = [];
 
   if (user.role === 'sales_executive') {
-    scopingClause = 'AND (c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ?)';
-    replacements.push(user.id, user.id, user.id);
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+    replacements.push(user.id, user.id);
   } else if (user.role === 'sales_manager') {
     scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
     replacements.push(user.id, user.id, user.id, user.id, user.id);

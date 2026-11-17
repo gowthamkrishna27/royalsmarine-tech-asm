@@ -19,8 +19,8 @@ const buildVisitWhere = (query, userId, role) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND v.salesperson_id = ?';
-    replacements.push(userId);
+    where += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
+    replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = \'active\' AND deleted_at IS NULL))';
     replacements.push(userId, userId);
@@ -104,7 +104,7 @@ const listVisits = async (req, res) => {
               v.visit_outcome, v.approval_status, v.next_followup_date, v.created_at,
               TIMESTAMPDIFF(SECOND, v.created_at, NOW()) as seconds_since_creation,
               v.tank_id, v.tank_number, v.harvest_details,
-              c.company_name, c.city,
+              c.company_name, c.contact_person, c.city,
               sp.full_name as salesperson_name
        FROM visits v
        JOIN clients c ON v.client_id = c.id
@@ -146,6 +146,23 @@ const createVisit = async (req, res) => {
     next_followup_date, brands, categories,
     tank_id, tank_number, water_quality, feeding_details, medication_details, harvest_details, disease_details,
   } = req.body;
+
+  try {
+    if (req.user.role === 'sales_executive') {
+      const [c] = await sequelize.query(
+        'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        { replacements: [client_id] }
+      );
+      if (!c[0]) return sendError(res, 'Farmer not found', 404);
+      const isAssigned = Number(c[0].assigned_salesperson_id) === Number(req.user.id);
+      const isUnassignedCreator = !c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id);
+      if (!isAssigned && !isUnassignedCreator) {
+        return sendError(res, 'Access denied: You can only log visits for your assigned farmers', 403);
+      }
+    }
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
 
   const t = await sequelize.transaction();
   try {
@@ -306,9 +323,19 @@ const getVisit = async (req, res) => {
 
     const visit = visits[0];
 
-    // Data isolation: Sales Executive can only view their own visits
-    if (req.user.role === 'sales_executive' && visit.salesperson_id !== req.user.id) {
-      return sendError(res, 'Access denied: not your visit', 403);
+    // Data isolation: Sales Executive can only view their assigned farmers' visits
+    if (req.user.role === 'sales_executive') {
+      const [c] = await sequelize.query(
+        'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        { replacements: [visit.client_id] }
+      );
+      const isAssigned = c[0] && (
+        Number(c[0].assigned_salesperson_id) === Number(req.user.id) ||
+        (!c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id))
+      );
+      if (!isAssigned) {
+        return sendError(res, 'Access denied: not your assigned farmer', 403);
+      }
     }
 
     // Data isolation: Sales Manager can only view their own visits or their team's visits
@@ -376,6 +403,17 @@ const updateVisit = async (req, res) => {
     }
     if (req.user.role === 'sales_executive') {
       if (visit.salesperson_id !== req.user.id) return sendError(res, 'Access denied: not your visit', 403);
+      const [c] = await sequelize.query(
+        'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        { replacements: [visit.client_id] }
+      );
+      const isAssigned = c[0] && (
+        Number(c[0].assigned_salesperson_id) === Number(req.user.id) ||
+        (!c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id))
+      );
+      if (!isAssigned) {
+        return sendError(res, 'Access denied: not your assigned farmer', 403);
+      }
     }
 
     if (visit.approval_status === 'approved') {
@@ -542,8 +580,19 @@ const uploadAttachment = async (req, res) => {
     );
     if (!visits[0]) return sendError(res, 'Visit not found', 404);
     const visit = visits[0];
-    if (req.user.role === 'sales_executive' && visit.salesperson_id !== req.user.id) {
-      return sendError(res, 'Access denied: not your visit', 403);
+    if (req.user.role === 'sales_executive') {
+      if (visit.salesperson_id !== req.user.id) return sendError(res, 'Access denied: not your visit', 403);
+      const [c] = await sequelize.query(
+        'SELECT id, assigned_salesperson_id, created_by FROM clients WHERE id = ? AND deleted_at IS NULL LIMIT 1',
+        { replacements: [visit.client_id] }
+      );
+      const isAssigned = c[0] && (
+        Number(c[0].assigned_salesperson_id) === Number(req.user.id) ||
+        (!c[0].assigned_salesperson_id && Number(c[0].created_by) === Number(req.user.id))
+      );
+      if (!isAssigned) {
+        return sendError(res, 'Access denied: not your assigned farmer', 403);
+      }
     }
     if (visit.approval_status === 'approved') {
       return sendError(res, 'Approved visits cannot be modified', 400);
@@ -614,12 +663,18 @@ const getVisitFilters = async (req, res) => {
              m.region as manager_region, m.full_name as manager_name
       FROM users u
       JOIN roles r ON u.role_id = r.id
-      LEFT JOIN users m ON u.manager_id = m.id
+      LEFT JOIN users m ON u.manager_id = m.id AND m.status = 'active' AND m.deleted_at IS NULL
       WHERE r.name = 'sales_executive' AND u.deleted_at IS NULL AND u.status = 'active'
       ORDER BY u.full_name ASC
     `);
 
     // 3. Fetch Farmers (assigned to active personnel)
+    let farmerWhere = "c.deleted_at IS NULL AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))";
+    const farmerReplacements = [];
+    if (req.user.role === 'sales_executive') {
+      farmerWhere += ' AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+      farmerReplacements.push(req.user.id, req.user.id);
+    }
     const [farmers] = await sequelize.query(`
       SELECT c.id, c.company_name as name, c.contact_person,
              c.assigned_salesperson_id, c.assigned_manager_id,
@@ -627,13 +682,12 @@ const getVisitFilters = async (req, res) => {
              sp.manager_id as sp_manager_id,
              COALESCE(m.region, sp_m.region, sp.region, c.district, c.city) as region
       FROM clients c
-      LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
-      LEFT JOIN users m ON c.assigned_manager_id = m.id
-      LEFT JOIN users sp_m ON sp.manager_id = sp_m.id
-      WHERE c.deleted_at IS NULL
-        AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))
+      LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id AND sp.status = 'active' AND sp.deleted_at IS NULL
+      LEFT JOIN users m ON c.assigned_manager_id = m.id AND m.status = 'active' AND m.deleted_at IS NULL
+      LEFT JOIN users sp_m ON sp.manager_id = sp_m.id AND sp_m.status = 'active' AND sp_m.deleted_at IS NULL
+      WHERE ${farmerWhere}
       ORDER BY c.company_name ASC
-    `);
+    `, { replacements: farmerReplacements });
 
     // 4. Derive distinct regions from ASMs, Techs, and Farmers
     const regionMap = new Map();
@@ -653,7 +707,8 @@ const getVisitFilters = async (req, res) => {
 
     const regions = Array.from(regionMap.values()).sort((a, b) => a.localeCompare(b));
 
-    const normalizedTechs = techs.map(t => {
+    const filteredTechs = req.user.role === 'sales_executive' ? techs.filter(t => t.id === req.user.id) : techs;
+    const normalizedTechs = filteredTechs.map(t => {
       const reg = t.region || t.manager_region || '';
       return {
         id: t.id,

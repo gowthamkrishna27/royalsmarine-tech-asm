@@ -68,7 +68,7 @@ export default function MapPage() {
 
   // 2. ASM dropdown options (filtered by selected Region)
   const asmOptions = useMemo(() => {
-    const list = filterMeta?.asms || [];
+    const list = (filterMeta?.asms || []).filter((a) => (a.status ? a.status === 'active' : true));
     const filtered = region
       ? list.filter((a) => (a.region || '').toLowerCase() === region.toLowerCase())
       : list;
@@ -80,7 +80,7 @@ export default function MapPage() {
 
   // 3. Tech dropdown options (filtered by selected ASM, or by selected Region)
   const techOptions = useMemo(() => {
-    let list = filterMeta?.techs || [];
+    let list = (filterMeta?.techs || []).filter((t) => (t.status ? t.status === 'active' : true));
     if (asmId) {
       list = list.filter((t) => String(t.manager_id) === String(asmId));
     } else if (region) {

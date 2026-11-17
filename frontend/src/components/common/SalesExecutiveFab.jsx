@@ -35,7 +35,7 @@ export default function SalesExecutiveFab() {
 
   const { data: usersData } = useQuery({
     queryKey: ['users-list-followup'],
-    queryFn: () => userApi.list({ limit: 200 }).then((r) => r.data.data),
+    queryFn: () => userApi.list({ status: 'active', limit: 200 }).then((r) => r.data.data),
     enabled: canAssignUsers,
     staleTime: 60000,
   });

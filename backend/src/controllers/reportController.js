@@ -4,36 +4,52 @@ const { sendSuccess, sendError } = require('../utils/response');
 
 const salespersonVisitReport = async (req, res) => {
   const { from_date, to_date, salesperson_id, region, asm_id, technician_id, farmer_id } = req.query;
+  const targetTechId = technician_id || salesperson_id;
+
   let where = "v.deleted_at IS NULL AND u.status = 'active' AND u.deleted_at IS NULL";
   const replacements = [];
   if (from_date) { where += ' AND v.visit_date >= ?'; replacements.push(from_date); }
   if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
   if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
-  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
-  if (asm_id) { where += ' AND (u.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
-  if (technician_id) { where += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
+  if (region && String(region).trim()) {
+    where += ` AND (
+      LOWER(u.region) = LOWER(?)
+      OR LOWER(m.region) = LOWER(?)
+      OR LOWER(c.district) = LOWER(?)
+      OR LOWER(c.city) = LOWER(?)
+    )`;
+    replacements.push(region, region, region, region);
+  }
+  if (asm_id) {
+    where += ' AND (u.manager_id = ? OR v.salesperson_id = ? OR c.assigned_manager_id = ?)';
+    replacements.push(asm_id, asm_id, asm_id);
+  }
+  if (targetTechId) {
+    where += ' AND v.salesperson_id = ?';
+    replacements.push(targetTechId);
+  }
 
-  // Data isolation: Sales executive can only see their own reports
+  // Data isolation: Sales executive can only see their assigned farmers' reports
   if (req.user.role === 'sales_executive') {
-    where += ' AND v.salesperson_id = ?';
-    replacements.push(req.user.id);
+    where += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
+    replacements.push(req.user.id, req.user.id);
   } else if (req.user.role === 'sales_manager') {
-    if (salesperson_id) {
-      where += ' AND v.salesperson_id = ? AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
-      replacements.push(salesperson_id, req.user.id, req.user.id);
+    if (targetTechId) {
+      where += ' AND (v.salesperson_id = ? OR u.manager_id = ? OR c.assigned_manager_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
     } else {
-      where += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
-      replacements.push(req.user.id, req.user.id);
+      where += ' AND (v.salesperson_id = ? OR u.manager_id = ? OR c.assigned_manager_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
     }
-  } else if (salesperson_id) {
-    where += ' AND v.salesperson_id = ?';
-    replacements.push(salesperson_id);
   }
 
   try {
     const [data] = await sequelize.query(
       `SELECT u.full_name as salesperson, COUNT(v.id) as total_visits
-       FROM visits v JOIN users u ON v.salesperson_id=u.id
+       FROM visits v
+       JOIN users u ON v.salesperson_id = u.id
+       LEFT JOIN users m ON u.manager_id = m.id
+       LEFT JOIN clients c ON v.client_id = c.id
        WHERE ${where} GROUP BY u.id, u.full_name ORDER BY total_visits DESC`,
       { replacements }
     );
@@ -46,31 +62,44 @@ const salespersonVisitReport = async (req, res) => {
 
 const followupReport = async (req, res) => {
   const { from_date, to_date, salesperson_id, status, region, asm_id, technician_id, farmer_id } = req.query;
-  let where = 'f.deleted_at IS NULL';
+  const targetTechId = technician_id || salesperson_id;
+
+  let where = 'f.deleted_at IS NULL AND u.status = \'active\' AND u.deleted_at IS NULL';
   const replacements = [];
   if (from_date) { where += ' AND f.followup_date >= ?'; replacements.push(from_date); }
   if (to_date) { where += ' AND f.followup_date <= ?'; replacements.push(to_date); }
   if (status) { where += ' AND f.status = ?'; replacements.push(status); }
   if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
-  if (region) { where += ' AND u.region = ?'; replacements.push(region); }
-  if (asm_id) { where += ' AND (u.manager_id = ? OR f.assigned_salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
-  if (technician_id) { where += ' AND f.assigned_salesperson_id = ?'; replacements.push(technician_id); }
+  if (region && String(region).trim()) {
+    where += ` AND (
+      LOWER(u.region) = LOWER(?)
+      OR LOWER(m.region) = LOWER(?)
+      OR LOWER(c.district) = LOWER(?)
+      OR LOWER(c.city) = LOWER(?)
+    )`;
+    replacements.push(region, region, region, region);
+  }
+  if (asm_id) {
+    where += ' AND (u.manager_id = ? OR f.assigned_salesperson_id = ? OR c.assigned_manager_id = ?)';
+    replacements.push(asm_id, asm_id, asm_id);
+  }
+  if (targetTechId) {
+    where += ' AND f.assigned_salesperson_id = ?';
+    replacements.push(targetTechId);
+  }
 
-  // Data isolation: Sales executive can only see their own followups
+  // Data isolation: Sales executive can only see their assigned farmers' followups
   if (req.user.role === 'sales_executive') {
-    where += ' AND f.assigned_salesperson_id = ?';
-    replacements.push(req.user.id);
+    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
+    replacements.push(req.user.id, req.user.id);
   } else if (req.user.role === 'sales_manager') {
-    if (salesperson_id) {
-      where += ' AND f.assigned_salesperson_id = ? AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
-      replacements.push(salesperson_id, req.user.id, req.user.id);
+    if (targetTechId) {
+      where += ' AND (f.assigned_salesperson_id = ? OR u.manager_id = ? OR c.assigned_manager_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
     } else {
-      where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
-      replacements.push(req.user.id, req.user.id);
+      where += ' AND (f.assigned_salesperson_id = ? OR u.manager_id = ? OR c.assigned_manager_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
     }
-  } else if (salesperson_id) {
-    where += ' AND f.assigned_salesperson_id = ?';
-    replacements.push(salesperson_id);
   }
 
   try {
@@ -80,7 +109,10 @@ const followupReport = async (req, res) => {
               SUM(CASE WHEN f.status='overdue' THEN 1 ELSE 0 END) as overdue,
               SUM(CASE WHEN f.status='pending' THEN 1 ELSE 0 END) as pending,
               COUNT(*) as total
-       FROM followups f JOIN users u ON f.assigned_salesperson_id=u.id
+       FROM followups f
+       JOIN users u ON f.assigned_salesperson_id = u.id
+       LEFT JOIN users m ON u.manager_id = m.id
+       LEFT JOIN clients c ON f.client_id = c.id
        WHERE ${where} GROUP BY u.id, u.full_name`,
       { replacements }
     );
@@ -108,16 +140,32 @@ const exportReport = async (req, res) => {
     if (targetFarmerId) { baseWhere += ' AND v.client_id = ?'; replacements.push(targetFarmerId); }
     if (meeting_type) { baseWhere += ' AND v.meeting_type = ?'; replacements.push(meeting_type); }
 
-    if (req.user.role === 'sales_executive') {
+    const targetTechId = technician_id || req.query.salesperson_id;
+
+    if (region && String(region).trim()) {
+      baseWhere += ` AND (
+        LOWER(sp.region) = LOWER(?)
+        OR sp.manager_id IN (SELECT id FROM users WHERE LOWER(region) = LOWER(?))
+        OR LOWER(c.district) = LOWER(?)
+        OR LOWER(c.city) = LOWER(?)
+      )`;
+      replacements.push(region, region, region, region);
+    }
+    if (asm_id) {
+      baseWhere += ' AND (sp.manager_id = ? OR v.salesperson_id = ? OR c.assigned_manager_id = ?)';
+      replacements.push(asm_id, asm_id, asm_id);
+    }
+    if (targetTechId) {
       baseWhere += ' AND v.salesperson_id = ?';
-      replacements.push(req.user.id);
-    } else if (req.user.role === 'sales_manager') {
-      baseWhere += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(targetTechId);
+    }
+
+    if (req.user.role === 'sales_executive') {
+      baseWhere += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
       replacements.push(req.user.id, req.user.id);
-    } else {
-      if (technician_id) { baseWhere += ' AND v.salesperson_id = ?'; replacements.push(technician_id); }
-      if (asm_id) { baseWhere += ' AND (sp.manager_id = ? OR v.salesperson_id = ?)'; replacements.push(asm_id, asm_id); }
-      if (region) { baseWhere += ' AND sp.region = ?'; replacements.push(region); }
+    } else if (req.user.role === 'sales_manager') {
+      baseWhere += ' AND (v.salesperson_id = ? OR sp.manager_id = ? OR c.assigned_manager_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+      replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
     }
 
     if (type === 'farmer_report') {

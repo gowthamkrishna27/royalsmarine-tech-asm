@@ -41,11 +41,11 @@ const listUsers = async (req, res) => {
               u.manager_id, u.role_id,
               r.name as role, r.display_name as role_display,
               m.full_name as manager_name,
-              (SELECT GROUP_CONCAT(te.full_name SEPARATOR ', ') FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL) as assigned_executives_names,
-              (SELECT COUNT(*) FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL) as assigned_executives_count
+              (SELECT GROUP_CONCAT(te.full_name SEPARATOR ', ') FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL AND te.status = 'active') as assigned_executives_names,
+              (SELECT COUNT(*) FROM users te WHERE te.manager_id = u.id AND te.deleted_at IS NULL AND te.status = 'active') as assigned_executives_count
        FROM users u
        JOIN roles r ON u.role_id = r.id
-       LEFT JOIN users m ON u.manager_id = m.id
+       LEFT JOIN users m ON u.manager_id = m.id AND m.deleted_at IS NULL AND m.status = 'active'
        WHERE ${where}
        ORDER BY u.created_at DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
@@ -117,7 +117,7 @@ const getUser = async (req, res) => {
 
     // Get assigned technical executives if any (e.g. for ASM)
     const [assignedExecutives] = await sequelize.query(
-      `SELECT id, full_name, email, mobile, area, status FROM users WHERE manager_id = ? AND deleted_at IS NULL`,
+      `SELECT id, full_name, email, mobile, area, status FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active'`,
       { replacements: [user.id] }
     );
     user.assigned_executives = assignedExecutives;
