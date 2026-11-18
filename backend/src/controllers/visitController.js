@@ -19,8 +19,8 @@ const buildVisitWhere = (query, userId, role) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
-    replacements.push(userId, userId);
+    where += ' AND v.salesperson_id = ?';
+    replacements.push(userId);
   } else if (role === 'sales_manager') {
     where += ' AND (v.salesperson_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = \'active\' AND deleted_at IS NULL))';
     replacements.push(userId, userId);

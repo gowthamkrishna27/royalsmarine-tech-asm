@@ -29,10 +29,10 @@ const salespersonVisitReport = async (req, res) => {
     replacements.push(targetTechId);
   }
 
-  // Data isolation: Sales executive can only see their assigned farmers' reports
+  // Data isolation: Sales executive can only see their own visits
   if (req.user.role === 'sales_executive') {
-    where += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
-    replacements.push(req.user.id, req.user.id);
+    where += ' AND v.salesperson_id = ?';
+    replacements.push(req.user.id);
   } else if (req.user.role === 'sales_manager') {
     if (targetTechId) {
       where += ' AND (v.salesperson_id = ? OR u.manager_id = ? OR c.assigned_manager_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
@@ -88,9 +88,9 @@ const followupReport = async (req, res) => {
     replacements.push(targetTechId);
   }
 
-  // Data isolation: Sales executive can only see their assigned farmers' followups
+  // Data isolation: Sales executive can only see their assigned followups
   if (req.user.role === 'sales_executive') {
-    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
+    where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
     replacements.push(req.user.id, req.user.id);
   } else if (req.user.role === 'sales_manager') {
     if (targetTechId) {
@@ -161,8 +161,8 @@ const exportReport = async (req, res) => {
     }
 
     if (req.user.role === 'sales_executive') {
-      baseWhere += ' AND v.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)';
-      replacements.push(req.user.id, req.user.id);
+      baseWhere += ' AND v.salesperson_id = ?';
+      replacements.push(req.user.id);
     } else if (req.user.role === 'sales_manager') {
       baseWhere += ' AND (v.salesperson_id = ? OR sp.manager_id = ? OR c.assigned_manager_id = ? OR v.salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
       replacements.push(req.user.id, req.user.id, req.user.id, req.user.id);
@@ -550,11 +550,16 @@ const exportReport = async (req, res) => {
       if (targetFarmerId) { where += ' AND f.client_id = ?'; fuReplacements.push(targetFarmerId); }
 
       if (req.user.role === 'sales_executive') {
-        where += ' AND f.assigned_salesperson_id = ?';
-        fuReplacements.push(req.user.id);
-      } else if (req.user.role === 'sales_manager') {
-        where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+        where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
         fuReplacements.push(req.user.id, req.user.id);
+      } else if (req.user.role === 'sales_manager') {
+        if (targetTechId) {
+          where += ' AND f.assigned_salesperson_id = ?';
+          fuReplacements.push(targetTechId);
+        } else {
+          where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+          fuReplacements.push(req.user.id, req.user.id);
+        }
       }
 
       const [rows] = await sequelize.query(

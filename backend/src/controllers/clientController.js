@@ -122,8 +122,8 @@ const buildClientWhere = (query, userId, role) => {
   // Filter by Tech (Sales Executive)
   const techId = query.tech_id || query.salesperson_id;
   if (techId) {
-    where += ' AND c.assigned_salesperson_id = ?';
-    replacements.push(techId);
+    where += ' AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+    replacements.push(techId, techId);
   }
 
   // Filter by Farmer (Client)

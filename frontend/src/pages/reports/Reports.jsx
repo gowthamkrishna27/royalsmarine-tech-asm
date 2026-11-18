@@ -78,7 +78,7 @@ const MinimalPieTooltip = ({ active, payload }) => {
 export default function Reports() {
   const { user } = useAuth();
 
-  if (user?.role === 'sales_executive') {
+  if (user?.role === 'sales_executive' || user?.role === 'sales_manager') {
     return <TechnicianReports />;
   }
 
