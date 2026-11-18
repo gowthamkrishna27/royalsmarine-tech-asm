@@ -177,7 +177,7 @@ export default function TechnicianReports() {
           try {
             input.showPicker();
             return;
-          } catch {}
+          } catch { }
         }
         input.focus();
       }
@@ -223,27 +223,45 @@ export default function TechnicianReports() {
 
   return (
     <div className="space-y-3 max-w-5xl mx-auto pb-6">
-      {/* Header with Title and Tabs */}
+      {/* Header with Title (Tabs & count visible for ASM) */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-b border-gray-200 pb-2">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Reports</h1>
-          <p className="text-xs text-gray-500">
-            {activeTab === 'visits'
-              ? `${visitsResponse?.pagination?.total ?? visits.length} visit records`
-              : `${followupsResponse?.pagination?.total ?? followups.length} follow-up records`}
-          </p>
+          {isASM && (
+            <p className="text-xs text-gray-500">
+              {activeTab === 'visits'
+                ? `${visitsResponse?.pagination?.total ?? visits.length} visit records`
+                : `${followupsResponse?.pagination?.total ?? followups.length} follow-up records`}
+            </p>
+          )}
         </div>
 
-        {/* Tab Switcher - Visits */}
-        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-          <button
-            type="button"
-            onClick={() => handleTabChange('visits')}
-            className="px-4 py-1.5 text-xs font-semibold rounded-md bg-white text-gray-900 shadow-xs transition"
-          >
-            Visits
-          </button>
-        </div>
+        {isASM && (
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-fit">
+            <button
+              type="button"
+              onClick={() => handleTabChange('visits')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-semibold rounded-md transition ${
+                activeTab === 'visits'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Visits
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('followups')}
+              className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-semibold rounded-md transition ${
+                activeTab === 'followups'
+                  ? 'bg-white text-gray-900 shadow-xs'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Follow-ups
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -309,15 +327,13 @@ export default function TechnicianReports() {
           {/* Date Filters - Aligned Side by Side on Mobile */}
           <label
             onClick={openDatePicker}
-            className={`col-span-1 flex items-center gap-1.5 border rounded px-2 text-xs text-gray-900 bg-white cursor-pointer hover:border-gray-400 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0 h-8 ${
-              fromDate ? 'border-blue-300 bg-blue-50/20' : 'border-gray-300'
-            }`}
+            className={`col-span-1 flex items-center gap-1.5 border rounded px-2 text-xs text-gray-900 bg-white cursor-pointer hover:border-gray-400 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0 h-8 ${fromDate ? 'border-blue-300 bg-blue-50/20' : 'border-gray-300'
+              }`}
             title="From date"
           >
             <CalendarDaysIcon
-              className={`w-3.5 h-3.5 shrink-0 pointer-events-none ${
-                fromDate ? 'text-blue-600' : 'text-gray-400'
-              }`}
+              className={`w-3.5 h-3.5 shrink-0 pointer-events-none ${fromDate ? 'text-blue-600' : 'text-gray-400'
+                }`}
             />
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider shrink-0 pointer-events-none">
               From
@@ -333,15 +349,13 @@ export default function TechnicianReports() {
 
           <label
             onClick={openDatePicker}
-            className={`col-span-1 flex items-center gap-1.5 border rounded px-2 text-xs text-gray-900 bg-white cursor-pointer hover:border-gray-400 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0 h-8 ${
-              toDate ? 'border-blue-300 bg-blue-50/20' : 'border-gray-300'
-            }`}
+            className={`col-span-1 flex items-center gap-1.5 border rounded px-2 text-xs text-gray-900 bg-white cursor-pointer hover:border-gray-400 focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0 h-8 ${toDate ? 'border-blue-300 bg-blue-50/20' : 'border-gray-300'
+              }`}
             title="To date"
           >
             <CalendarDaysIcon
-              className={`w-3.5 h-3.5 shrink-0 pointer-events-none ${
-                toDate ? 'text-blue-600' : 'text-gray-400'
-              }`}
+              className={`w-3.5 h-3.5 shrink-0 pointer-events-none ${toDate ? 'text-blue-600' : 'text-gray-400'
+                }`}
             />
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider shrink-0 pointer-events-none">
               To
@@ -385,6 +399,17 @@ export default function TechnicianReports() {
             >
               Visits
             </button>
+
+            {isASM && (
+              <button
+                type="button"
+                onClick={() => handleDownload('followups')}
+                disabled={downloading}
+                className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition"
+              >
+                Follow-ups
+              </button>
+            )}
           </div>
 
           {hasActiveFilters && (
@@ -429,9 +454,6 @@ export default function TechnicianReports() {
                           <span className="capitalize">• {v.meeting_type.replace(/_/g, ' ')}</span>
                         )}
                         {v.city && <span>• {v.city}</span>}
-                        {v.salesperson_name && (
-                          <span className="text-blue-700 font-medium">• By: {v.salesperson_name}</span>
-                        )}
                       </div>
                     </div>
                     <Link
@@ -454,13 +476,12 @@ export default function TechnicianReports() {
                           {f.company_name || f.client_name || `Farmer #${f.client_id}`}
                         </span>
                         <span
-                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0 ${
-                            f.status === 'completed'
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize shrink-0 ${f.status === 'completed'
                               ? 'bg-emerald-100 text-emerald-800'
                               : f.status === 'overdue'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
                         >
                           {f.status}
                         </span>
@@ -469,9 +490,6 @@ export default function TechnicianReports() {
                         {f.title && <span className="font-medium text-gray-700">{f.title}</span>}
                         {f.followup_date && <span>• Due: {f.followup_date}</span>}
                         {f.priority && <span className="capitalize">• {f.priority} priority</span>}
-                        {f.salesperson_name && (
-                          <span className="text-blue-700 font-medium">• Assigned: {f.salesperson_name}</span>
-                        )}
                       </div>
                     </div>
                     <Link
