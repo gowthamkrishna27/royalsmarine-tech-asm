@@ -22,7 +22,7 @@ export default function Clients() {
   const [region, setRegion] = useState('');
   const [asmId, setAsmId] = useState('');
   const [techId, setTechId] = useState('');
-    const [status, setStatus] = useState(searchParams.get('status') || '');
+  const [status, setStatus] = useState(searchParams.get('status') || '');
 
   // Fetch filter metadata (regions, ASMs, techs)
   const { data: filterMeta } = useQuery({
@@ -191,9 +191,6 @@ export default function Clients() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Farmers</h1>
-          <p className="text-sm text-gray-500">
-            {data?.pagination?.total || 0} total farmers {hasActiveFilters && '(filtered)'}
-          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {hasActiveFilters && (
@@ -237,11 +234,10 @@ export default function Clients() {
           <select
             value={region}
             onChange={(e) => handleRegionChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              region
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${region
                 ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+              }`}
           >
             <option value="">All Regions</option>
             {regionOptions.map((opt) => (
@@ -255,11 +251,10 @@ export default function Clients() {
           <select
             value={asmId}
             onChange={(e) => handleAsmChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              asmId
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${asmId
                 ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+              }`}
           >
             <option value="">All ASMs</option>
             {asmOptions.map((opt) => (
@@ -273,11 +268,10 @@ export default function Clients() {
           <select
             value={techId}
             onChange={(e) => handleTechChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              techId
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${techId
                 ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+              }`}
           >
             <option value="">All Techs</option>
             {techOptions.map((opt) => (
@@ -294,11 +288,10 @@ export default function Clients() {
               setStatus(e.target.value);
               setPage(1);
             }}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[110px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              status
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[110px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${status
                 ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
                 : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+              }`}
           >
             <option value="">All Status</option>
             <option value="active">Active</option>

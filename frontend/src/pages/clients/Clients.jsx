@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
@@ -15,31 +16,101 @@ import toast from 'react-hot-toast';
 
 const CLIENT_TYPE_COLOR = { existing_client: 'green', new_prospect: 'blue', retailer: 'orange', corporate: 'purple', distributor: 'indigo', government: 'yellow', other: 'gray' };
 
+const ASM_SCOPE_OPTIONS = [
+  { value: 'my_farmers', label: 'My Farmers' },
+  { value: 'tech_exec_farmers', label: 'Tech Farmers' },
+];
+
 export default function Clients() {
   const [searchParams] = useSearchParams();
+  const { user } = useAuth();
+  const isASM = user?.role === 'sales_manager';
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [clientType, setClientType] = useState('');
+  const [scope, setScope] = useState(searchParams.get('scope') || '');
+  const [techId, setTechId] = useState(searchParams.get('tech_id') || '');
   const [status, setStatus] = useState(searchParams.get('status') || '');
-  const scope = searchParams.get('scope') || '';
   const [importModal, setImportModal] = useState(false);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
   const fileRef = useRef(null);
 
+  // Sync state if searchParams change
+  useEffect(() => {
+    const s = searchParams.get('scope');
+    if (s !== null) setScope(s);
+    const t = searchParams.get('tech_id');
+    if (t !== null) setTechId(t);
+    const st = searchParams.get('status');
+    if (st !== null) setStatus(st);
+  }, [searchParams]);
+
+  // Fetch filter metadata to get technicians under this ASM
+  const { data: filterMeta } = useQuery({
+    queryKey: ['visit-filters'],
+    queryFn: () => clientApi.getFilters().then((r) => r.data.data),
+    staleTime: 60000,
+    enabled: isASM,
+  });
+
+  // Filter technicians reporting to this ASM
+  const myTechs = useMemo(() => {
+    if (!filterMeta?.techs?.length || !user?.id) return [];
+    return filterMeta.techs
+      .filter((t) => String(t.manager_id) === String(user.id))
+      .map((t) => ({ value: String(t.id), label: t.name }));
+  }, [filterMeta?.techs, user?.id]);
+
+  const isTechFarmers = scope === 'tech_exec_farmers' || scope === 'tech_farmers';
+
+  const handleScopeChange = (val) => {
+    setScope(val);
+    setTechId('');
+    setPage(1);
+  };
+
+  const handleResetFilters = () => {
+    setSearch('');
+    setScope('');
+    setTechId('');
+    setClientType('');
+    setStatus('');
+    setPage(1);
+  };
+
   const { data, isLoading } = useQuery({
-    queryKey: ['clients', page, search, clientType, status, scope],
-    queryFn: () => clientApi.list({ page, limit: 20, search, client_type: clientType, status, scope: scope || undefined }).then(r => r.data),
+    queryKey: ['clients', page, search, clientType, status, isASM ? scope : '', isASM ? techId : ''],
+    queryFn: () =>
+      clientApi
+        .list({
+          page,
+          limit: 20,
+          search: search || undefined,
+          client_type: !isASM && clientType ? clientType : undefined,
+          status: status || undefined,
+          scope: isASM && scope ? scope : undefined,
+          tech_id: isASM && isTechFarmers && techId ? techId : undefined,
+        })
+        .then((r) => r.data),
   });
 
   const handleExport = async () => {
     try {
-      const res = await clientApi.export({ search, client_type: clientType, status, scope: scope || undefined });
+      const res = await clientApi.export({
+        search: search || undefined,
+        client_type: !isASM && clientType ? clientType : undefined,
+        status: status || undefined,
+        scope: isASM && scope ? scope : undefined,
+        tech_id: isASM && isTechFarmers && techId ? techId : undefined,
+      });
       downloadBlob(res.data, 'clients.xlsx');
       toast.success('Exported successfully');
-    } catch { toast.error('Export failed'); }
+    } catch {
+      toast.error('Export failed');
+    }
   };
 
   const handleImport = async () => {
@@ -64,7 +135,16 @@ export default function Clients() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Farmers</h1>
-          <p className="text-sm text-gray-500">{data?.pagination?.total || 0} total farmers</p>
+          <p className="text-sm text-gray-500">
+            {data?.pagination?.total || 0}{' '}
+            {isASM && scope === 'my_farmers'
+              ? 'farmers directly under you'
+              : isASM && isTechFarmers
+              ? techId
+                ? `farmers under ${myTechs.find((t) => t.value === String(techId))?.label || 'technician'}`
+                : 'farmers under technicians'
+              : 'total farmers'}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleExport} className="btn-secondary btn-sm">
@@ -79,9 +159,51 @@ export default function Clients() {
         </div>
       </div>
 
-      <FilterBar onSearch={setSearch} searchValue={search} onReset={() => { setSearch(''); setClientType(''); setStatus(''); }}>
-        <SelectFilter label="All Types" value={clientType} onChange={setClientType} options={CLIENT_TYPES} />
-        <SelectFilter label="All Status" value={status} onChange={setStatus} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }, { value: 'forcely_closed', label: 'Forcely Closed' }]} />
+      <FilterBar onSearch={setSearch} searchValue={search} onReset={handleResetFilters}>
+        {isASM ? (
+          <>
+            <SelectFilter
+              label="All Types"
+              value={scope}
+              onChange={handleScopeChange}
+              options={ASM_SCOPE_OPTIONS}
+            />
+            {isTechFarmers && myTechs.length > 0 && (
+              <SelectFilter
+                label="All Technicians"
+                value={techId}
+                onChange={(val) => {
+                  setTechId(val);
+                  setPage(1);
+                }}
+                options={myTechs}
+              />
+            )}
+          </>
+        ) : (
+          <SelectFilter
+            label="All Types"
+            value={clientType}
+            onChange={(val) => {
+              setClientType(val);
+              setPage(1);
+            }}
+            options={CLIENT_TYPES}
+          />
+        )}
+        <SelectFilter
+          label="All Status"
+          value={status}
+          onChange={(val) => {
+            setStatus(val);
+            setPage(1);
+          }}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+            { value: 'forcely_closed', label: 'Forcely Closed' },
+          ]}
+        />
       </FilterBar>
 
       {isLoading ? <PageSpinner /> : (

@@ -253,9 +253,6 @@ export default function Visits() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Visit Logs</h1>
-          <p className="text-sm text-gray-500">
-            {data?.pagination?.total || 0} visits {hasActiveFilters && '(filtered)'}
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {hasActiveFilters && (
@@ -281,11 +278,10 @@ export default function Visits() {
           <select
             value={region}
             onChange={(e) => handleRegionChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              region
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${region
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
           >
             <option value="">All Regions</option>
             {regionOptions.map((opt) => (
@@ -299,11 +295,10 @@ export default function Visits() {
           <select
             value={asmId}
             onChange={(e) => handleAsmChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              asmId
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${asmId
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
           >
             <option value="">All ASMs</option>
             {asmOptions.map((opt) => (
@@ -317,11 +312,10 @@ export default function Visits() {
           <select
             value={techId}
             onChange={(e) => handleTechChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              techId
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${techId
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
           >
             <option value="">All Techs</option>
             {techOptions.map((opt) => (
@@ -335,11 +329,10 @@ export default function Visits() {
           <select
             value={farmerId}
             onChange={(e) => handleFarmerChange(e.target.value)}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              farmerId
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${farmerId
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
           >
             <option value="">All Farmers</option>
             {farmerOptions.map((opt) => (
@@ -356,11 +349,10 @@ export default function Visits() {
               setMeetingType(e.target.value);
               setPage(1);
             }}
-            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-              meetingType
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-            }`}
+            className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${meetingType
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              }`}
           >
             <option value="">Meeting Type</option>
             {MEETING_TYPES.map((opt) => (
@@ -372,11 +364,10 @@ export default function Visits() {
 
           {/* 6. Date Range Filter (From - To) */}
           <div
-            className={`flex items-center gap-1.5 bg-white border rounded-lg px-2.5 h-[38px] shadow-xs text-xs transition shrink-0 ${
-              fromDate || toDate
-                ? 'border-blue-300 bg-blue-50/40 ring-1 ring-blue-100'
-                : 'border-gray-300 hover:border-gray-400'
-            }`}
+            className={`flex items-center gap-1.5 bg-white border rounded-lg px-2.5 h-[38px] shadow-xs text-xs transition shrink-0 ${fromDate || toDate
+              ? 'border-blue-300 bg-blue-50/40 ring-1 ring-blue-100'
+              : 'border-gray-300 hover:border-gray-400'
+              }`}
           >
             <CalendarDaysIcon
               className={`w-3.5 h-3.5 shrink-0 ${fromDate || toDate ? 'text-blue-600' : 'text-gray-400'}`}

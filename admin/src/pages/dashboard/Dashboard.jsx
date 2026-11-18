@@ -1044,7 +1044,7 @@ function ManagerDashboard({ data }) {
 
 
 function ManagementDashboard({ data }) {
-      const [showHarvestedModal, setShowHarvestedModal] = useState(false);
+  const [showHarvestedModal, setShowHarvestedModal] = useState(false);
 
   // Query active users to integrate admin features directly into minimal stat cards
   const { data: users } = useQuery({
@@ -1161,7 +1161,7 @@ function ManagementDashboard({ data }) {
         <HarvestedTanksModal onClose={() => setShowHarvestedModal(false)} />
       )}
       {/* Dealers Modal */}
-          </div>
+    </div>
   );
 }
 
@@ -1192,13 +1192,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Dashboard</h1>
-          <p className="text-sm text-gray-500">Welcome back, {user?.full_name}</p>
-        </div>
-      </div>
-
       {role === 'sales_executive' && data && <SalesExecDashboard data={data} />}
       {role === 'sales_manager' && data && <ManagerDashboard data={data} />}
       {['management', 'super_admin', 'admin', 'backend_ops'].includes(role) && data && (

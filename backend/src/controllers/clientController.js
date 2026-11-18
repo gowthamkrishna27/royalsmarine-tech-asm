@@ -80,9 +80,9 @@ const buildClientWhere = (query, userId, role) => {
     replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     if (query.scope === 'my_farmers') {
-      where += ' AND (c.assigned_salesperson_id = ? OR (c.created_by = ? AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = ?)))';
-      replacements.push(userId, userId, userId);
-    } else if (query.scope === 'tech_exec_farmers' || query.scope === 'farmers') {
+      where += ' AND (c.assigned_salesperson_id = ? OR ((c.assigned_manager_id = ? OR c.created_by = ?) AND (c.assigned_salesperson_id IS NULL OR c.assigned_salesperson_id = ?)))';
+      replacements.push(userId, userId, userId, userId);
+    } else if (query.scope === 'tech_exec_farmers' || query.scope === 'tech_farmers' || query.scope === 'farmers') {
       where += " AND c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL)";
       replacements.push(userId);
     } else {
