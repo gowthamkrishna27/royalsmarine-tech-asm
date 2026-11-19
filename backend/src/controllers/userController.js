@@ -104,7 +104,7 @@ const getUser = async (req, res) => {
       `SELECT u.id, u.uuid, u.full_name, u.email, u.mobile, u.department, u.region, u.area, u.status,
               u.joining_date, u.last_login, u.created_at, u.updated_at,
               r.id as role_id, r.name as role, r.display_name as role_display,
-              m.id as manager_id, m.full_name as manager_name
+              m.id as manager_id, m.full_name as manager_name, m.email as manager_email, m.mobile as manager_mobile, m.region as manager_region
        FROM users u
        JOIN roles r ON u.role_id = r.id
        LEFT JOIN users m ON u.manager_id = m.id
@@ -117,11 +117,135 @@ const getUser = async (req, res) => {
 
     // Get assigned technical executives if any (e.g. for ASM)
     const [assignedExecutives] = await sequelize.query(
-      `SELECT id, full_name, email, mobile, area, status FROM users WHERE manager_id = ? AND deleted_at IS NULL AND status = 'active'`,
+      `SELECT u.id, u.full_name, u.email, u.mobile, u.area, u.status, u.last_login,
+              (SELECT COUNT(*) FROM visits WHERE salesperson_id = u.id AND deleted_at IS NULL) as visits_count,
+              (SELECT COUNT(*) FROM clients WHERE (assigned_salesperson_id = u.id OR (assigned_salesperson_id IS NULL AND created_by = u.id)) AND deleted_at IS NULL) as farmers_count
+       FROM users u 
+       WHERE u.manager_id = ? AND u.deleted_at IS NULL
+       ORDER BY u.full_name ASC`,
       { replacements: [user.id] }
     );
     user.assigned_executives = assignedExecutives;
     user.executive_ids = assignedExecutives.map(e => e.id);
+
+    // Compute stats & recent records based on role
+    let totalFarmers = 0;
+    let totalVisits = 0;
+    let totalPonds = 0;
+    user.recent_visits = [];
+    user.recent_farmers = [];
+
+    if (user.role === 'sales_manager') {
+      const execIds = assignedExecutives.map(e => e.id);
+      const allTeamIds = [user.id, ...execIds];
+      const placeholders = allTeamIds.map(() => '?').join(',');
+
+      const [farmerCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT id) as count FROM clients 
+         WHERE (assigned_manager_id = ? OR assigned_salesperson_id IN (${placeholders}) OR created_by IN (${placeholders}))
+           AND deleted_at IS NULL`,
+        { replacements: [user.id, ...allTeamIds, ...allTeamIds] }
+      );
+      totalFarmers = parseInt(farmerCountRes[0]?.count || 0, 10);
+
+      const [visitCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT id) as count FROM visits 
+         WHERE salesperson_id IN (${placeholders}) AND deleted_at IS NULL`,
+        { replacements: allTeamIds }
+      );
+      totalVisits = parseInt(visitCountRes[0]?.count || 0, 10);
+
+      const [pondCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT p.id) as count FROM ponds p
+         JOIN clients c ON p.client_id = c.id
+         WHERE (c.assigned_manager_id = ? OR c.assigned_salesperson_id IN (${placeholders}) OR c.created_by IN (${placeholders}))
+           AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
+        { replacements: [user.id, ...allTeamIds, ...allTeamIds] }
+      );
+      totalPonds = parseInt(pondCountRes[0]?.count || 0, 10);
+
+      // Recent visits across ASM + team
+      const [recentVisits] = await sequelize.query(
+        `SELECT v.id, v.visit_date, v.meeting_type as visit_type, v.remarks, v.created_at,
+                c.id as client_id, c.company_name as farmer_name, c.village, c.district,
+                sp.full_name as technician_name
+         FROM visits v
+         JOIN clients c ON v.client_id = c.id
+         LEFT JOIN users sp ON v.salesperson_id = sp.id
+         WHERE v.salesperson_id IN (${placeholders}) AND v.deleted_at IS NULL
+         ORDER BY v.visit_date DESC, v.id DESC LIMIT 8`,
+        { replacements: allTeamIds }
+      );
+      user.recent_visits = recentVisits;
+
+      // Recent farmers under ASM + team
+      const [recentFarmers] = await sequelize.query(
+        `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.village, c.district, c.area, c.status, c.created_at,
+                sp.full_name as assigned_to_name
+         FROM clients c
+         LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id
+         WHERE (c.assigned_manager_id = ? OR c.assigned_salesperson_id IN (${placeholders}) OR c.created_by IN (${placeholders}))
+           AND c.deleted_at IS NULL
+         ORDER BY c.created_at DESC LIMIT 8`,
+        { replacements: [user.id, ...allTeamIds, ...allTeamIds] }
+      );
+      user.recent_farmers = recentFarmers;
+
+    } else if (user.role === 'sales_executive') {
+      const [farmerCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT id) as count FROM clients 
+         WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?))
+           AND deleted_at IS NULL`,
+        { replacements: [user.id, user.id] }
+      );
+      totalFarmers = parseInt(farmerCountRes[0]?.count || 0, 10);
+
+      const [visitCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT id) as count FROM visits 
+         WHERE salesperson_id = ? AND deleted_at IS NULL`,
+        { replacements: [user.id] }
+      );
+      totalVisits = parseInt(visitCountRes[0]?.count || 0, 10);
+
+      const [pondCountRes] = await sequelize.query(
+        `SELECT COUNT(DISTINCT p.id) as count FROM ponds p
+         JOIN clients c ON p.client_id = c.id
+         WHERE (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))
+           AND p.deleted_at IS NULL AND c.deleted_at IS NULL`,
+        { replacements: [user.id, user.id] }
+      );
+      totalPonds = parseInt(pondCountRes[0]?.count || 0, 10);
+
+      // Recent visits logged by this executive
+      const [recentVisits] = await sequelize.query(
+        `SELECT v.id, v.visit_date, v.meeting_type as visit_type, v.remarks, v.created_at,
+                c.id as client_id, c.company_name as farmer_name, c.village, c.district
+         FROM visits v
+         JOIN clients c ON v.client_id = c.id
+         WHERE v.salesperson_id = ? AND v.deleted_at IS NULL
+         ORDER BY v.visit_date DESC, v.id DESC LIMIT 8`,
+        { replacements: [user.id] }
+      );
+      user.recent_visits = recentVisits;
+
+      // Recent farmers assigned to this executive
+      const [recentFarmers] = await sequelize.query(
+        `SELECT c.id, c.company_name, c.contact_person, c.mobile, c.village, c.district, c.area, c.status, c.created_at
+         FROM clients c
+         WHERE (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))
+           AND c.deleted_at IS NULL
+         ORDER BY c.created_at DESC LIMIT 8`,
+        { replacements: [user.id, user.id] }
+      );
+      user.recent_farmers = recentFarmers;
+    }
+
+    user.stats = {
+      total_farmers: totalFarmers,
+      total_visits: totalVisits,
+      total_ponds: totalPonds,
+      total_team_members: assignedExecutives.length,
+    };
 
     return sendSuccess(res, 'User fetched', user);
   } catch (err) {

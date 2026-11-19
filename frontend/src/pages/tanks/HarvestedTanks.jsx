@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { clientService } from '../../services/clientService';
+import { reportApi } from '../../services/api';
+import { downloadBlob } from '../../hooks/useApi';
 import { PageSpinner } from '../../components/common/Spinner';
+import toast from 'react-hot-toast';
 import {
   ArchiveBoxArrowDownIcon,
   MagnifyingGlassIcon,
@@ -14,6 +17,7 @@ import {
   ScaleIcon,
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
+  ArrowDownTrayIcon,
   CheckCircleIcon,
   ClockIcon,
   ChartBarIcon,
@@ -25,6 +29,23 @@ export default function HarvestedTanks() {
   const [districtFilter, setDistrictFilter] = useState('');
   const [cultureFilter, setCultureFilter] = useState('');
   const [selectedTank, setSelectedTank] = useState(null);
+  const [downloading, setDownloading] = useState(false);
+
+  const handleExportHarvestData = async () => {
+    setDownloading(true);
+    try {
+      const res = await reportApi.export({
+        type: 'harvest_data',
+        district: districtFilter || undefined,
+      });
+      downloadBlob(res.data, `Harvesting_Data_Sheet_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      toast.success('Downloaded Harvesting Data Sheet');
+    } catch {
+      toast.error('Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const { data: tanks = [], isLoading, error, refetch } = useQuery({
     queryKey: ['harvested-tanks', search, districtFilter, cultureFilter],
@@ -97,12 +118,24 @@ export default function HarvestedTanks() {
           </div>
         </div>
 
-        <Link
-          to="/dashboard"
-          className="btn-secondary btn-sm self-start sm:self-auto flex items-center gap-1.5 text-xs"
-        >
-          ← Back to Dashboard
-        </Link>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleExportHarvestData}
+            disabled={downloading}
+            className="btn-secondary btn-sm flex items-center gap-1.5 text-xs disabled:opacity-50"
+            title="Download Harvesting Data Sheet"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4 text-gray-500" />
+            <span>{downloading ? 'Downloading...' : 'Export Harvest Data'}</span>
+          </button>
+          <Link
+            to="/dashboard"
+            className="btn-secondary btn-sm flex items-center gap-1.5 text-xs"
+          >
+            ← Back to Dashboard
+          </Link>
+        </div>
       </div>
 
       {/* Metric Cards Banner */}

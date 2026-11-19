@@ -742,73 +742,22 @@ function ManagementDashboard({ data }) {
     <div className="fade-in space-y-6">
       {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Row 1: Farmers */}
+        {/* Row 1: Area Managers, Field Executives, Dealers (Light Blue) */}
         <StatCard
-          label="Total Farmers"
-          value={data.total_farmers ?? 0}
-          icon={BuildingOfficeIcon}
-          color="blue"
-          to="/clients"
-        />
-        <StatCard
-          label="Active Farmers"
-          value={data.active_farmers ?? 0}
-          icon={CheckCircleIcon}
-          color="emerald"
-          to="/clients"
-        />
-        <StatCard
-          label="Inactive Farmers"
-          value={data.inactive_farmers ?? 0}
-          icon={XCircleIcon}
-          color="gray"
-          to="/clients"
-        />
-
-        {/* Row 2: Tanks */}
-        <StatCard
-          label="Total Tanks"
-          value={data.total_tanks ?? 0}
-          icon={CircleStackIcon}
-          color="indigo"
-          to="/clients"
-        />
-        <StatCard
-          label="Active Tanks"
-          value={data.active_tanks ?? 0}
-          icon={CheckCircleIcon}
-          color="emerald"
-          to="/clients"
-        />
-        <StatCard
-          label="Harvested Tanks"
-          value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
-          icon={ArchiveBoxArrowDownIcon}
-          color="amber"
-          to="/harvested-tanks"
-        />
-
-        {/* Row 3: Submissions & Operations */}
-        <StatCard
-          label="Total Submissions"
-          value={data.total_submissions ?? 0}
-          icon={DocumentTextIcon}
-          color="emerald"
-          to="/visits"
-        />
-        <StatCard
-          label="Due Follow-ups"
-          value={data.due_followups ?? 0}
-          icon={ClockIcon}
-          color="amber"
-          to="/followups"
+          label="Area Managers"
+          value={areaManagers.length}
+          icon={UsersIcon}
+          color="purple"
+          to="/users?role=sales_manager"
+          bg="light-blue"
         />
         <StatCard
           label="Field Executives"
           value={techExecs.length}
           icon={UsersIcon}
           color="indigo"
-          to="/users"
+          to="/users?role=sales_executive"
+          bg="light-blue"
         />
         <StatCard
           label="Dealers"
@@ -819,15 +768,75 @@ function ManagementDashboard({ data }) {
             setDealerSearchTerm('');
             setShowDealersModal(true);
           }}
+          bg="light-blue"
         />
 
-        {/* Row 4: Management & Leadership */}
+        {/* Rows 2 + 3: Submissions, Farmers, Tanks (Mint Green) */}
         <StatCard
-          label="Area Managers"
-          value={areaManagers.length}
-          icon={UsersIcon}
-          color="purple"
-          to="/users"
+          label="Total Submissions"
+          value={data.total_submissions ?? 0}
+          icon={DocumentTextIcon}
+          color="emerald"
+          to="/visits"
+          bg="mint-green"
+        />
+        <StatCard
+          label="Total Farmers"
+          value={data.total_farmers ?? 0}
+          icon={BuildingOfficeIcon}
+          color="blue"
+          to="/clients"
+          bg="mint-green"
+        />
+        <StatCard
+          label="Active Farmers"
+          value={data.active_farmers ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+          bg="mint-green"
+        />
+        <StatCard
+          label="Inactive Farmers"
+          value={data.inactive_farmers ?? 0}
+          icon={XCircleIcon}
+          color="gray"
+          to="/clients"
+          bg="mint-green"
+        />
+        <StatCard
+          label="Total Tanks"
+          value={data.total_tanks ?? 0}
+          icon={CircleStackIcon}
+          color="indigo"
+          to="/clients"
+          bg="mint-green"
+        />
+        <StatCard
+          label="Active Tanks"
+          value={data.active_tanks ?? 0}
+          icon={CheckCircleIcon}
+          color="emerald"
+          to="/clients"
+          bg="mint-green"
+        />
+
+        {/* Row 4: Harvested Tanks, Due Follow-ups, Forcely Closed Farmer (Soft Orange) */}
+        <StatCard
+          label="Harvested Tanks"
+          value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
+          icon={ArchiveBoxArrowDownIcon}
+          color="amber"
+          to="/harvested-tanks"
+          bg="soft-orange"
+        />
+        <StatCard
+          label="Due Follow-ups"
+          value={data.due_followups ?? 0}
+          icon={ClockIcon}
+          color="amber"
+          to="/followups"
+          bg="soft-orange"
         />
         <StatCard
           label="Forcely Closed Farmer"
@@ -835,6 +844,7 @@ function ManagementDashboard({ data }) {
           icon={NoSymbolIcon}
           color="amber"
           to="/clients?status=forcely_closed"
+          bg="soft-orange"
         />
       </div>
 

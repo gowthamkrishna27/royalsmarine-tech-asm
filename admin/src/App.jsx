@@ -19,6 +19,7 @@ import Visits from './pages/visits/Visits';
 import VisitDetail from './pages/visits/VisitDetail';
 import Followups from './pages/followups/Followups';
 import Users from './pages/users/Users';
+import UserDetail from './pages/users/UserDetail';
 import Brands from './pages/brands/Brands';
 import BillingImport from './pages/billing/BillingImport';
 import Reports from './pages/reports/Reports';
@@ -99,6 +100,7 @@ function AppRouter() {
 
         <Route path="admin" element={<Navigate to="/dashboard" replace />} />
         <Route path="users" element={<Users />} />
+        <Route path="users/:id" element={<UserDetail />} />
         <Route path="profile" element={<ProfilePage />} />
         <Route path="settings" element={<ProfilePage />} />
       </Route>

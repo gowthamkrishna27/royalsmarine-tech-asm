@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -440,12 +441,34 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
 
 export default function Users() {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getRoleFromParam = (param) => {
+    if (!param) return '';
+    const lower = param.toLowerCase().trim();
+    if (lower === 'asm' || lower === 'sales_manager' || lower === 'area_manager') return 'sales_manager';
+    if (lower === 'tech' || lower === 'sales_executive' || lower === 'technical_executive' || lower === 'field_executive') return 'sales_executive';
+    return param;
+  };
+
+  const initialRole = getRoleFromParam(searchParams.get('role'));
   const [page, setPage] = useState(1);
-  const [role, setRole] = useState('');
-  const [status, setStatus] = useState('');
-  const [search, setSearch] = useState('');
+  const [role, setRole] = useState(initialRole);
+  const [status, setStatus] = useState(searchParams.get('status') || '');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+
+  useEffect(() => {
+    const roleParam = searchParams.get('role');
+    if (roleParam !== null) {
+      const normalized = getRoleFromParam(roleParam);
+      if (normalized !== role) {
+        setRole(normalized);
+        setPage(1);
+      }
+    }
+  }, [searchParams]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, role, status, search],
@@ -522,12 +545,27 @@ export default function Users() {
       <FilterBar
         onSearch={setSearch}
         searchValue={search}
-        onReset={() => { setRole(''); setStatus(''); setSearch(''); }}
+        onReset={() => {
+          setRole('');
+          setStatus('');
+          setSearch('');
+          setPage(1);
+          setSearchParams({});
+        }}
       >
         <SelectFilter
           label="All Roles"
           value={role}
-          onChange={setRole}
+          onChange={(newRole) => {
+            setRole(newRole);
+            setPage(1);
+            setSearchParams(prev => {
+              const updated = new URLSearchParams(prev);
+              if (newRole) updated.set('role', newRole);
+              else updated.delete('role');
+              return updated;
+            });
+          }}
           options={roles?.map(r => ({
             value: r.name,
             label: r.name === 'sales_manager' ? 'ASM (Area Sales Manager)' : r.name === 'sales_executive' ? 'Technical Executive' : r.display_name,

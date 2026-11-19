@@ -12,17 +12,24 @@ const salespersonVisitReport = async (req, res) => {
   if (to_date) { where += ' AND v.visit_date <= ?'; replacements.push(to_date); }
   if (farmer_id) { where += ' AND v.client_id = ?'; replacements.push(farmer_id); }
   if (region && String(region).trim()) {
+    const reg = String(region).trim();
     where += ` AND (
-      LOWER(u.region) = LOWER(?)
-      OR LOWER(m.region) = LOWER(?)
-      OR LOWER(c.district) = LOWER(?)
-      OR LOWER(c.city) = LOWER(?)
+      LOWER(TRIM(COALESCE(u.region, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(m.region, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.city, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.area, ''))) = LOWER(TRIM(?))
     )`;
-    replacements.push(region, region, region, region);
+    replacements.push(reg, reg, reg, reg, reg);
   }
   if (asm_id) {
-    where += ' AND (u.manager_id = ? OR v.salesperson_id = ? OR c.assigned_manager_id = ?)';
-    replacements.push(asm_id, asm_id, asm_id);
+    where += ` AND (
+      u.manager_id = ?
+      OR v.salesperson_id = ?
+      OR c.assigned_manager_id = ?
+      OR u.id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(asm_id, asm_id, asm_id, asm_id);
   }
   if (targetTechId) {
     where += ' AND v.salesperson_id = ?';
@@ -71,17 +78,24 @@ const followupReport = async (req, res) => {
   if (status) { where += ' AND f.status = ?'; replacements.push(status); }
   if (farmer_id) { where += ' AND f.client_id = ?'; replacements.push(farmer_id); }
   if (region && String(region).trim()) {
+    const reg = String(region).trim();
     where += ` AND (
-      LOWER(u.region) = LOWER(?)
-      OR LOWER(m.region) = LOWER(?)
-      OR LOWER(c.district) = LOWER(?)
-      OR LOWER(c.city) = LOWER(?)
+      LOWER(TRIM(COALESCE(u.region, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(m.region, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.city, ''))) = LOWER(TRIM(?))
+      OR LOWER(TRIM(COALESCE(c.area, ''))) = LOWER(TRIM(?))
     )`;
-    replacements.push(region, region, region, region);
+    replacements.push(reg, reg, reg, reg, reg);
   }
   if (asm_id) {
-    where += ' AND (u.manager_id = ? OR f.assigned_salesperson_id = ? OR c.assigned_manager_id = ?)';
-    replacements.push(asm_id, asm_id, asm_id);
+    where += ` AND (
+      u.manager_id = ?
+      OR f.assigned_salesperson_id = ?
+      OR c.assigned_manager_id = ?
+      OR u.id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(asm_id, asm_id, asm_id, asm_id);
   }
   if (targetTechId) {
     where += ' AND f.assigned_salesperson_id = ?';
@@ -143,17 +157,24 @@ const exportReport = async (req, res) => {
     const targetTechId = technician_id || req.query.salesperson_id;
 
     if (region && String(region).trim()) {
+      const reg = String(region).trim();
       baseWhere += ` AND (
-        LOWER(sp.region) = LOWER(?)
-        OR sp.manager_id IN (SELECT id FROM users WHERE LOWER(region) = LOWER(?))
-        OR LOWER(c.district) = LOWER(?)
-        OR LOWER(c.city) = LOWER(?)
+        LOWER(TRIM(COALESCE(sp.region, ''))) = LOWER(TRIM(?))
+        OR sp.manager_id IN (SELECT id FROM users WHERE LOWER(TRIM(region)) = LOWER(TRIM(?)) AND deleted_at IS NULL)
+        OR LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(?))
+        OR LOWER(TRIM(COALESCE(c.city, ''))) = LOWER(TRIM(?))
+        OR LOWER(TRIM(COALESCE(c.area, ''))) = LOWER(TRIM(?))
       )`;
-      replacements.push(region, region, region, region);
+      replacements.push(reg, reg, reg, reg, reg);
     }
     if (asm_id) {
-      baseWhere += ' AND (sp.manager_id = ? OR v.salesperson_id = ? OR c.assigned_manager_id = ?)';
-      replacements.push(asm_id, asm_id, asm_id);
+      baseWhere += ` AND (
+        sp.manager_id = ?
+        OR v.salesperson_id = ?
+        OR c.assigned_manager_id = ?
+        OR sp.id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      )`;
+      replacements.push(asm_id, asm_id, asm_id, asm_id);
     }
     if (targetTechId) {
       baseWhere += ' AND v.salesperson_id = ?';
@@ -431,115 +452,486 @@ const exportReport = async (req, res) => {
         }
       }
     } else if (type === 'harvest_data') {
-      headers = [
-        'Date',
-        'Farmer Name',
-        'City',
-        'Tank / Pond',
-        'Harvest Type',
-        'Harvest #',
-        'DOC',
-        'Count',
-        'ABW (g)',
-        'Quantity (kg)',
-        'Biomass (kg)',
-        'Total Feed (kg)',
-        'FCR',
-        'Total Count',
-        'Survival',
-        'Technical Executive'
-      ];
-      filename = 'harvest-data-report.xlsx';
+      const wb = new ExcelJS.Workbook();
+      const wsHarvest = wb.addWorksheet('Harvesting Data Sheet');
 
+      // Title Row
+      const titleRow = new Array(31).fill('');
+      titleRow[12] = 'Harvesting Data Sheet';
+      const r1 = wsHarvest.addRow(titleRow);
+      r1.font = { bold: true, size: 14 };
+
+      // Grouping Header Row
+      const groupRow = new Array(31).fill('');
+      groupRow[14] = 'Partial Harvest';
+      groupRow[19] = 'Final Harvest';
+      groupRow[24] = 'Total Material';
+      const r2 = wsHarvest.addRow(groupRow);
+      r2.font = { bold: true, size: 11 };
+
+      // Column Headers Row
+      const harvestHeaders = [
+        'S. No',
+        'ASM/RM',
+        'Farmer Name and Details',
+        'Mobile No',
+        'District',
+        'Village',
+        'Brand Name',
+        'Water Source',
+        'Salinity',
+        'Pond No. ',
+        'Pond Area (Acres)',
+        'Date of Stocking ',
+        'No. of Seed Stocked (Laksh)',
+        'Stocking density (Pcs/sqm)',
+        'Date of Partial Harvest',
+        'DOC at Partial Harvest',
+        'Count of Partial Harvest',
+        'Quantity  of Partial Harvest (Kgs)',
+        'Partial Harvestd Seed',
+        'Date of Final Harvest ',
+        'DOC at Final Harvest',
+        'Count Final  Harvest',
+        'Quantity at Final Harvest (Kgs)',
+        'Final Harvestd Seed',
+        'Total Quantity Harvested (Kgs)',
+        'Cumulative Feed Consumption (Kgs)',
+        ' FCR',
+        'Total No. Harvested',
+        'Survival (%)',
+        'Soil Type',
+        'Remarks'
+      ];
+      const r3 = wsHarvest.addRow(harvestHeaders);
+      r3.font = { bold: true };
+
+      // Query harvest visits matching filters
       const [rows] = await sequelize.query(
-        `SELECT v.id, v.visit_date, v.tank_number, v.harvest_details,
-                c.company_name, c.city,
-                sp.full_name as salesperson_name
+        `SELECT v.id as visit_id, v.visit_date, v.tank_number, v.tank_id, v.harvest_details,
+                v.feeding_details, v.water_quality, v.remarks as visit_remarks,
+                c.id as client_id, c.company_name, c.contact_person, c.mobile as farmer_mobile,
+                c.district, c.village, c.area as farmer_area,
+                sp.id as salesperson_id, sp.full_name as salesperson_name,
+                m.id as manager_id, m.full_name as manager_name,
+                p.id as pond_id, p.pond_name, p.area_acres, p.area as pond_area,
+                p.water_source, p.water_type, p.salinity as pond_salinity, p.soil_type,
+                p.seed_date, p.stocking_quantity_lakhs, p.feed_type, p.dealer_name,
+                p.fcr as pond_fcr, p.remarks as pond_remarks
          FROM visits v
          JOIN clients c ON v.client_id = c.id
          JOIN users sp ON v.salesperson_id = sp.id
-         WHERE ${baseWhere} AND v.harvest_details IS NOT NULL AND v.harvest_details != ''
+         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+         WHERE ${baseWhere} AND v.harvest_details IS NOT NULL AND v.harvest_details != '' AND v.harvest_details != '{}' AND v.harvest_details != 'null'
          ORDER BY v.visit_date DESC, v.id DESC`,
         { replacements }
       );
 
+      // Group visits by unique pond/tank per client so partial & final harvest sit on one row
+      const pondMap = new Map();
       for (const r of rows) {
-        let hd = r.harvest_details;
-        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
-        if (hd && typeof hd === 'object') {
-          const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : (hd.partial_harvest ? [hd.partial_harvest] : []);
-          for (let i = 0; i < partials.length; i++) {
-            const p = partials[i];
-            data.push([
-              p.date || r.visit_date,
-              r.company_name,
-              r.city || '—',
-              r.tank_number || '—',
-              'Partial Harvest',
-              p.harvest_no || (i + 1),
-              p.doc || '—',
-              p.count || '—',
-              p.abw ? `${p.abw} g` : '—',
-              p.harvested_quantity ? `${p.harvested_quantity} kg` : '—',
-              p.harvested_biomass ? `${p.harvested_biomass} kg` : '—',
-              '—',
-              '—',
-              '—',
-              '—',
-              r.salesperson_name
-            ]);
-          }
-          if (hd.final_harvest && typeof hd.final_harvest === 'object') {
-            const fh = hd.final_harvest;
-            const hasData = Object.values(fh).some(val => val !== null && val !== undefined && val !== '');
-            if (hasData) {
-              const derived = hd.derived || {};
-              data.push([
-                fh.date || r.visit_date,
-                r.company_name,
-                r.city || '—',
-                r.tank_number || '—',
-                'Final Harvest',
-                'Final',
-                fh.doc || '—',
-                fh.count || '—',
-                fh.abw ? `${fh.abw} g` : '—',
-                fh.harvested_quantity ? `${fh.harvested_quantity} kg` : '—',
-                fh.harvested_biomass ? `${fh.harvested_biomass} kg` : '—',
-                derived.totalFeed || derived.total_feed || '—',
-                derived.fcr || '—',
-                derived.totalCount || fh.count || '—',
-                derived.survival || derived.survival_percentage || '—',
-                r.salesperson_name
-              ]);
+        const pondKey = `${r.client_id}_${r.pond_id || r.tank_number || r.visit_id}`;
+        if (!pondMap.has(pondKey)) {
+          pondMap.set(pondKey, {
+            rep: r,
+            visits: [],
+          });
+        }
+        pondMap.get(pondKey).visits.push(r);
+      }
+
+      let serialNo = 1;
+      for (const [, item] of pondMap.entries()) {
+        const r = item.rep;
+        let partialHarvest = null;
+        let finalHarvest = null;
+
+        for (const v of item.visits) {
+          let hd = v.harvest_details;
+          if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+          if (hd && typeof hd === 'object') {
+            if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+              const hasFinal = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
+              if (hasFinal) {
+                finalHarvest = { ...hd.final_harvest, date: hd.final_harvest.date || v.visit_date, derived: hd.derived || {} };
+              }
+            }
+            if (!partialHarvest) {
+              const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : (hd.partial_harvest ? [hd.partial_harvest] : []);
+              if (partials.length > 0) {
+                partialHarvest = { ...partials[0], date: partials[0].date || v.visit_date };
+              }
             }
           }
         }
-      }
-    } else if (type === 'visits') {
-      headers = ['Date', 'Technical Executive', 'Farmer', 'City', 'Tank / Pond', 'Meeting Type', 'Outcome', 'Remarks', 'Status'];
-      filename = 'visits-report.xlsx';
 
-      const [rows] = await sequelize.query(
-        `SELECT v.visit_date, sp.full_name, c.company_name, c.city, v.tank_number, v.meeting_type, v.visit_outcome, v.remarks, v.approval_status
+        // Calculations
+        const areaAcres = parseFloat(r.area_acres || r.pond_area || 0) || 0;
+        let seedStocked = 0;
+        if (r.stocking_quantity_lakhs) {
+          const rawQty = parseFloat(r.stocking_quantity_lakhs);
+          seedStocked = rawQty < 1000 ? Math.round(rawQty * 100000) : Math.round(rawQty);
+        }
+        let density = '';
+        if (seedStocked > 0 && areaAcres > 0) {
+          density = Math.round(seedStocked / (areaAcres * 4046.86));
+        }
+
+        // Partial Harvest values
+        const partialDate = partialHarvest?.date || '';
+        const partialDoc = partialHarvest?.doc || '';
+        const partialCount = parseFloat(partialHarvest?.count) || '';
+        const partialQty = parseFloat(partialHarvest?.harvested_quantity || partialHarvest?.harvested_biomass || partialHarvest?.biomass || 0) || 0;
+        const partialSeed = (partialQty > 0 && partialCount > 0) ? Math.round(partialQty * partialCount) : 0;
+
+        // Final Harvest values
+        const finalDate = finalHarvest?.date || '';
+        const finalDoc = finalHarvest?.doc || '';
+        const finalCount = parseFloat(finalHarvest?.count) || '';
+        const finalQty = parseFloat(finalHarvest?.harvested_quantity || finalHarvest?.total_biomass || finalHarvest?.harvested_biomass || 0) || 0;
+        const finalSeed = (finalQty > 0 && finalCount > 0) ? Math.round(finalQty * finalCount) : 0;
+
+        // Total Material values
+        const totalQty = (partialQty + finalQty) || (finalQty || partialQty || 0);
+        const cumFeed = parseFloat(finalHarvest?.derived?.totalFeed || finalHarvest?.derived?.total_feed || finalHarvest?.total_feed || 0) || 0;
+        let fcr = '';
+        if (cumFeed > 0 && totalQty > 0) {
+          fcr = cumFeed / totalQty;
+        } else if (r.pond_fcr) {
+          fcr = parseFloat(r.pond_fcr) || '';
+        }
+        const totalNoHarvested = partialSeed + finalSeed;
+        let survival = '';
+        if (totalNoHarvested > 0 && seedStocked > 0) {
+          survival = Math.round((totalNoHarvested / seedStocked) * 100);
+        } else if (finalHarvest?.derived?.survival || finalHarvest?.derived?.survival_percentage) {
+          survival = parseFloat(finalHarvest.derived.survival || finalHarvest.derived.survival_percentage) || '';
+        }
+
+        const soilType = r.soil_type || 'Black';
+        const remarks = finalHarvest?.remarks || partialHarvest?.remarks || r.visit_remarks || r.pond_remarks || '';
+
+        wsHarvest.addRow([
+          serialNo++,
+          r.manager_name || r.salesperson_name || '',
+          r.company_name || r.contact_person || '',
+          r.farmer_mobile || '',
+          r.district || '',
+          r.village || '',
+          r.feed_type || r.dealer_name || 'Premium',
+          r.water_source || r.water_type || 'Creak+Canel',
+          r.pond_salinity || '',
+          r.tank_number || r.pond_name || '',
+          areaAcres || '',
+          r.seed_date ? String(r.seed_date).slice(0, 10) : '',
+          seedStocked || '',
+          density || '',
+          partialDate,
+          partialDoc,
+          partialCount,
+          partialQty || '',
+          partialSeed,
+          finalDate,
+          finalDoc,
+          finalCount,
+          finalQty || '',
+          finalSeed,
+          totalQty || '',
+          cumFeed || '',
+          fcr !== '' ? Number(fcr) : '',
+          totalNoHarvested || '',
+          survival !== '' ? Number(survival) : '',
+          soilType,
+          remarks
+        ]);
+      }
+
+      // Sheet 2: Sampling & Growth Data Sheet
+      const wsSampling = wb.addWorksheet('Sampling Data');
+      const samplingHeaders = [
+        'Sr. No',
+        'ASM/RM',
+        'Farmer Name ',
+        'Mobile No',
+        'District',
+        'Village',
+        'Brand Name',
+        'water Source',
+        'Salinity',
+        'Pond. No',
+        'Pond Area (Acres)',
+        'No. of Seed Stocked (Laksh)',
+        'Stocking density (Pcs/sqm)',
+        'Date of Stocking ',
+        'Previous Sampling Date',
+        'Present Sampling Date',
+        'Duration between samplings (days)',
+        'Previous ABW (g)',
+        'Present ABW (g)',
+        'Growth Increment (g)',
+        'ADG for the Daily (g)',
+        'Count',
+        'DOC',
+        'Cumulative Feed Consumption',
+        'Cumulative Feed as per chart',
+        'Estimated Survival %',
+        'Estimated Survival Nos',
+        'Estimated Biomass (Kg)',
+        'Estimated FCR',
+        'Remarks'
+      ];
+      const sRow = wsSampling.addRow(samplingHeaders);
+      sRow.font = { bold: true };
+
+      // Query visits with test details / sampling
+      const [sampleVisits] = await sequelize.query(
+        `SELECT v.id, v.visit_date, v.tank_number, v.water_quality, v.feeding_details, v.remarks as visit_remarks,
+                c.company_name, c.mobile as farmer_mobile, c.district, c.village,
+                sp.full_name as salesperson_name, m.full_name as manager_name,
+                p.pond_name, p.area_acres, p.area as pond_area, p.water_source, p.water_type,
+                p.salinity as pond_salinity, p.seed_date, p.stocking_quantity_lakhs, p.feed_type, p.dealer_name,
+                p.doc, p.abw, p.fcr
          FROM visits v
          JOIN clients c ON v.client_id = c.id
          JOIN users sp ON v.salesperson_id = sp.id
+         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
          WHERE ${baseWhere}
-         ORDER BY v.visit_date DESC`,
+         ORDER BY v.visit_date DESC, v.id DESC LIMIT 200`,
         { replacements }
       );
-      data = rows.map(r => [
-        r.visit_date,
-        r.full_name,
-        r.company_name,
-        r.city || '—',
-        r.tank_number || '—',
-        r.meeting_type ? r.meeting_type.replace(/_/g, ' ') : '—',
-        r.visit_outcome || '—',
-        r.remarks || '—',
-        r.approval_status || '—'
-      ]);
+
+      let sNo = 1;
+      for (const sv of sampleVisits) {
+        let wq = sv.water_quality;
+        let fd = sv.feeding_details;
+        if (typeof wq === 'string') { try { wq = JSON.parse(wq); } catch(e){} }
+        if (typeof fd === 'string') { try { fd = JSON.parse(fd); } catch(e){} }
+
+        const areaAcres = parseFloat(sv.area_acres || sv.pond_area || 0) || 0;
+        let seedStocked = 0;
+        if (sv.stocking_quantity_lakhs) {
+          const rawQty = parseFloat(sv.stocking_quantity_lakhs);
+          seedStocked = rawQty < 1000 ? Math.round(rawQty * 100000) : Math.round(rawQty);
+        }
+        let density = '';
+        if (seedStocked > 0 && areaAcres > 0) {
+          density = Math.round(seedStocked / (areaAcres * 4046.86));
+        }
+
+        wsSampling.addRow([
+          sNo++,
+          sv.manager_name || sv.salesperson_name || '',
+          sv.company_name || '',
+          sv.farmer_mobile || '',
+          sv.district || '',
+          sv.village || '',
+          sv.feed_type || sv.dealer_name || 'Premium',
+          sv.water_source || sv.water_type || '',
+          wq?.salinity || sv.pond_salinity || '',
+          sv.tank_number || sv.pond_name || '',
+          areaAcres || '',
+          seedStocked || '',
+          density || '',
+          sv.seed_date ? String(sv.seed_date).slice(0, 10) : '',
+          '',
+          sv.visit_date || '',
+          '',
+          '',
+          sv.abw || '',
+          '',
+          '',
+          '',
+          sv.doc || '',
+          fd?.total_feed || fd?.daily_feed || '',
+          '',
+          '',
+          '',
+          '',
+          sv.fcr || '',
+          sv.visit_remarks || ''
+        ]);
+      }
+
+      // Auto-fit column widths on both worksheets
+      [wsHarvest, wsSampling].forEach(sheet => {
+        sheet.columns.forEach(column => {
+          let maxLength = 0;
+          column.eachCell({ includeEmpty: true }, cell => {
+            const val = cell.value ? String(cell.value) : '';
+            maxLength = Math.max(maxLength, val.length);
+          });
+          column.width = Math.max(maxLength + 2, 11);
+        });
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=harvest-data-report.xlsx`);
+      await wb.xlsx.write(res);
+      return res.end();
+    } else if (type === 'visits') {
+      let empHeader = 'EMP NAME';
+      let selectedAsmName = '';
+      if (technician_id || req.query.salesperson_id) {
+        empHeader = 'TECHNICIAN NAME';
+      } else if (asm_id) {
+        empHeader = 'ASM NAME';
+      }
+
+      let filename = 'visits-report.xlsx';
+      if (targetFarmerId) {
+        const [cNameRow] = await sequelize.query('SELECT company_name FROM clients WHERE id = ?', { replacements: [targetFarmerId] });
+        if (cNameRow && cNameRow[0]?.company_name) {
+          filename = `${cNameRow[0].company_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_report.xlsx`;
+        }
+      } else if (technician_id || req.query.salesperson_id) {
+        const [techRow] = await sequelize.query('SELECT full_name FROM users WHERE id = ?', { replacements: [technician_id || req.query.salesperson_id] });
+        if (techRow && techRow[0]?.full_name) {
+          filename = `${techRow[0].full_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_technician_report.xlsx`;
+        }
+      } else if (asm_id) {
+        const [asmRow] = await sequelize.query('SELECT full_name FROM users WHERE id = ?', { replacements: [asm_id] });
+        if (asmRow && asmRow[0]?.full_name) {
+          selectedAsmName = asmRow[0].full_name;
+          filename = `${asmRow[0].full_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_asm_report.xlsx`;
+        }
+      }
+
+      const [rows] = await sequelize.query(
+        `SELECT v.id, v.visit_date, v.tank_number, v.tank_id,
+                v.feeding_details, v.water_quality, v.remarks as visit_remarks,
+                v.meeting_highlights, v.visit_outcome, v.harvest_details,
+                c.id as client_id, c.company_name, c.contact_person, c.mobile as farmer_mobile,
+                c.village, c.district, c.area as client_area,
+                sp.id as salesperson_id, sp.full_name as salesperson_name, sp.area as tech_area, sp.region as tech_region,
+                m.id as manager_id, m.full_name as manager_name, m.region as manager_region,
+                p.id as pond_id, p.pond_name, p.area_acres, p.area as pond_area,
+                p.water_source, p.water_type, p.salinity as pond_salinity, p.soil_type,
+                p.seed_date, p.stocking_quantity_lakhs, p.doc as pond_doc, p.abw as pond_abw,
+                p.fcr as pond_fcr, p.remarks as pond_remarks
+         FROM visits v
+         JOIN clients c ON v.client_id = c.id
+         JOIN users sp ON v.salesperson_id = sp.id
+         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
+         WHERE ${baseWhere}
+         ORDER BY v.visit_date DESC, v.id DESC`,
+        { replacements }
+      );
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Report');
+
+      // Row 1: empty row
+      ws.addRow(new Array(21).fill(''));
+      // Row 2: empty row
+      ws.addRow(new Array(21).fill(''));
+
+      // Row 3: Standard Headers
+      const visitHeaders = [
+        '',
+        'AREA',
+        'DATE',
+        empHeader,
+        'FAR NAME',
+        'VILLAGE',
+        'PHONE',
+        'POND NO',
+        'ACRES',
+        'SEED LAKH',
+        'DOC',
+        'ABW GRM',
+        'DAY FEED KG',
+        'TCF KGS',
+        'CH TR FEED GRM',
+        'CH TR HRS',
+        'SALINITY',
+        'REMARAK',
+        'OBSERVATION',
+        'OBSERVATIONS',
+        '              REMARK'
+      ];
+      const r3 = ws.addRow(visitHeaders);
+      r3.font = { bold: true };
+
+      for (const r of rows) {
+        let fd = r.feeding_details;
+        let wq = r.water_quality;
+        let hd = r.harvest_details;
+        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
+        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
+        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+
+        const area = (r.client_area || r.tech_area || r.tech_region || r.manager_region || r.district || '').trim();
+        const date = r.visit_date ? String(r.visit_date).slice(0, 10) : '';
+
+        let empName = r.salesperson_name || r.manager_name || '';
+        if (empHeader === 'ASM NAME') {
+          empName = selectedAsmName || r.manager_name || r.salesperson_name || '';
+        } else if (empHeader === 'TECHNICIAN NAME') {
+          empName = r.salesperson_name || '';
+        }
+
+        const farName = r.company_name || r.contact_person || '';
+        const village = r.village || '';
+        const phone = r.farmer_mobile || '';
+        const pondNo = r.tank_number || r.pond_name || '';
+        const acres = parseFloat(r.area_acres || r.pond_area || 0) || '';
+        const seedLakh = parseFloat(r.stocking_quantity_lakhs) || '';
+        const doc = r.pond_doc || hd?.doc || (hd?.final_harvest?.doc) || '';
+        const abw = r.pond_abw || hd?.abw || (hd?.final_harvest?.abw) || '';
+        const dayFeed = fd?.daily_feed || fd?.day_feed || fd?.feed_quantity || '';
+        const tcf = fd?.total_feed || fd?.cumulative_feed || hd?.derived?.total_feed || '';
+        const chTrFeed = fd?.check_tray_feed || fd?.tray_feed || fd?.check_tray || '';
+        const chTrHrs = fd?.check_tray_hours || fd?.tray_hours || fd?.check_tray_time || '';
+        const salinity = wq?.salinity || r.pond_salinity || '';
+
+        const remarksText = (r.visit_remarks || hd?.remarks || (hd?.final_harvest?.remarks) || r.pond_remarks || '').trim();
+        const obs1 = (r.meeting_highlights || '').trim();
+        const obs2 = (r.visit_outcome || '').trim();
+        const hasRemark = Boolean(remarksText || obs1 || obs2);
+        const remarak = hasRemark ? 'Yes' : 'No';
+
+        ws.addRow([
+          '',
+          area,
+          date,
+          empName,
+          farName,
+          village,
+          phone,
+          pondNo,
+          acres,
+          seedLakh,
+          doc,
+          abw,
+          dayFeed,
+          tcf,
+          chTrFeed,
+          chTrHrs,
+          salinity,
+          remarak,
+          obs1,
+          obs2,
+          remarksText
+        ]);
+      }
+
+      // Auto-fit column widths
+      ws.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+          const val = cell.value ? String(cell.value) : '';
+          maxLength = Math.max(maxLength, val.length);
+        });
+        column.width = Math.max(maxLength + 2, 10);
+      });
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+      await wb.xlsx.write(res);
+      return res.end();
     } else {
       headers = ['Followup Title', 'Farmer', 'Technical Executive', 'Date', 'Status'];
       filename = 'followup-report.xlsx';
@@ -548,6 +940,27 @@ const exportReport = async (req, res) => {
       if (from_date) { where += ' AND f.followup_date >= ?'; fuReplacements.push(from_date); }
       if (to_date) { where += ' AND f.followup_date <= ?'; fuReplacements.push(to_date); }
       if (targetFarmerId) { where += ' AND f.client_id = ?'; fuReplacements.push(targetFarmerId); }
+      if (targetTechId) { where += ' AND f.assigned_salesperson_id = ?'; fuReplacements.push(targetTechId); }
+      if (asm_id) {
+        where += ` AND (
+          sp.manager_id = ?
+          OR f.assigned_salesperson_id = ?
+          OR c.assigned_manager_id = ?
+          OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+        )`;
+        fuReplacements.push(asm_id, asm_id, asm_id, asm_id);
+      }
+      if (region && String(region).trim()) {
+        const reg = String(region).trim();
+        where += ` AND (
+          LOWER(TRIM(COALESCE(sp.region, ''))) = LOWER(TRIM(?))
+          OR sp.manager_id IN (SELECT id FROM users WHERE LOWER(TRIM(region)) = LOWER(TRIM(?)) AND deleted_at IS NULL)
+          OR LOWER(TRIM(COALESCE(c.district, ''))) = LOWER(TRIM(?))
+          OR LOWER(TRIM(COALESCE(c.city, ''))) = LOWER(TRIM(?))
+          OR LOWER(TRIM(COALESCE(c.area, ''))) = LOWER(TRIM(?))
+        )`;
+        fuReplacements.push(reg, reg, reg, reg, reg);
+      }
 
       if (req.user.role === 'sales_executive') {
         where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';

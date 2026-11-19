@@ -1062,20 +1062,22 @@ function ManagementDashboard({ data }) {
     <div className="fade-in space-y-6">
       {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Row 1: Farmers */}
+        {/* Row 1: Area Managers, Field Executives, Dealers (Light Blue) */}
         <StatCard
           label="Area Managers"
           value={areaManagers.length}
           icon={UsersIcon}
           color="purple"
-          to="/users"
+          to="/users?role=sales_manager"
+          bg="light-blue"
         />
         <StatCard
           label="Field Executives"
           value={techExecs.length}
           icon={UsersIcon}
           color="indigo"
-          to="/users"
+          to="/users?role=sales_executive"
+          bg="light-blue"
         />
         <StatCard
           label="Dealers"
@@ -1083,13 +1085,17 @@ function ManagementDashboard({ data }) {
           icon={BuildingStorefrontIcon}
           color="blue"
           to="/dealers"
+          bg="light-blue"
         />
+
+        {/* Rows 2 + 3: Submissions, Farmers, Tanks (Mint Green) */}
         <StatCard
           label="Total Submissions"
           value={data.total_submissions ?? 0}
           icon={DocumentTextIcon}
           color="emerald"
           to="/visits"
+          bg="mint-green"
         />
         <StatCard
           label="Total Farmers"
@@ -1097,6 +1103,7 @@ function ManagementDashboard({ data }) {
           icon={BuildingOfficeIcon}
           color="blue"
           to="/clients"
+          bg="mint-green"
         />
         <StatCard
           label="Active Farmers"
@@ -1104,6 +1111,7 @@ function ManagementDashboard({ data }) {
           icon={CheckCircleIcon}
           color="emerald"
           to="/clients"
+          bg="mint-green"
         />
         <StatCard
           label="Inactive Farmers"
@@ -1111,15 +1119,15 @@ function ManagementDashboard({ data }) {
           icon={XCircleIcon}
           color="gray"
           to="/clients"
+          bg="mint-green"
         />
-
-        {/* Row 2: Tanks */}
         <StatCard
           label="Total Tanks"
           value={data.total_tanks ?? 0}
           icon={CircleStackIcon}
           color="indigo"
           to="/clients"
+          bg="mint-green"
         />
         <StatCard
           label="Active Tanks"
@@ -1127,32 +1135,33 @@ function ManagementDashboard({ data }) {
           icon={CheckCircleIcon}
           color="emerald"
           to="/clients"
+          bg="mint-green"
         />
+
+        {/* Row 4: Harvested Tanks, Due Follow-ups, Forcely Closed Farmer (Soft Orange) */}
         <StatCard
           label="Harvested Tanks"
           value={data.harvested_tanks ?? data.inactive_tanks ?? 0}
           icon={ArchiveBoxArrowDownIcon}
           color="amber"
           to="/harvested-tanks"
+          bg="soft-orange"
         />
-
-        {/* Row 3: Submissions & Operations */}
         <StatCard
           label="Due Follow-ups"
           value={data.due_followups ?? 0}
           icon={ClockIcon}
           color="amber"
           to="/followups"
+          bg="soft-orange"
         />
-
-        {/* Row 4: Management & Leadership */}
-
         <StatCard
           label="Forcely Closed Farmer"
           value={data.forcely_closed_farmers ?? 0}
           icon={NoSymbolIcon}
           color="amber"
           to="/clients?status=forcely_closed"
+          bg="soft-orange"
         />
       </div>
 

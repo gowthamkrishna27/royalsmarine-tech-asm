@@ -1,6 +1,37 @@
 import { Link } from 'react-router-dom';
 
-export default function StatCard({ label, value, icon: Icon, color = 'blue', trend, sub, to, onClick }) {
+const bgColors = {
+  'light-blue': 'bg-sky-50/70 border-sky-200/70 hover:border-sky-300',
+  'mint-green': 'bg-emerald-50/60 border-emerald-200/70 hover:border-emerald-300',
+  'soft-orange': 'bg-orange-50/60 border-orange-200/70 hover:border-orange-300',
+};
+
+const iconTextColors = {
+  blue: 'text-blue-600',
+  green: 'text-green-600',
+  red: 'text-red-600',
+  yellow: 'text-yellow-600',
+  purple: 'text-purple-600',
+  orange: 'text-orange-600',
+  indigo: 'text-indigo-600',
+  amber: 'text-amber-600',
+  emerald: 'text-emerald-600',
+  cyan: 'text-cyan-600',
+  gray: 'text-gray-600',
+};
+
+export default function StatCard({
+  label,
+  value,
+  icon: Icon,
+  color = 'blue',
+  trend,
+  sub,
+  to,
+  onClick,
+  className = '',
+  bg = '',
+}) {
   const colors = {
     blue: 'bg-blue-50 text-blue-600',
     green: 'bg-green-50 text-green-600',
@@ -15,13 +46,21 @@ export default function StatCard({ label, value, icon: Icon, color = 'blue', tre
     gray: 'bg-gray-100 text-gray-600',
   };
 
+  const activeBg = bgColors[bg] || bg;
+
   const card = (
     <div
       onClick={onClick}
-      className={`stat-card ${to || onClick ? 'hover:shadow-md hover:border-blue-200 transition-all cursor-pointer' : ''}`}
+      className={`stat-card ${activeBg} ${className} ${to || onClick ? 'hover:shadow-md transition-all cursor-pointer' : ''}`}
     >
       {Icon && (
-        <div className={`stat-icon ${colors[color] || colors.blue}`}>
+        <div
+          className={`stat-icon ${
+            activeBg
+              ? `bg-white/90 shadow-xs border border-white/60 ${iconTextColors[color] || 'text-blue-600'}`
+              : colors[color] || colors.blue
+          }`}
+        >
           <Icon className="w-6 h-6" />
         </div>
       )}

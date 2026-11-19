@@ -203,6 +203,7 @@ export default function TechnicianReports() {
         to_date: toDate || undefined,
         salesperson_id: effectiveTechId || undefined,
         technician_id: effectiveTechId || undefined,
+        asm_id: isASM ? user?.id : undefined,
       });
 
       const prefix = selectedFarmer

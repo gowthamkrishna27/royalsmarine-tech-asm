@@ -206,7 +206,7 @@ export default function HarvestedTanks() {
 
       const finalH = t.harvest_info?.final_harvest;
       if (finalH) {
-        const biomass = parseFloat(finalH.total_biomass || finalH.harvested_biomass || 0);
+        const biomass = parseFloat(finalH.total_biomass || finalH.harvested_biomass || finalH.harvested_quantity || 0);
         if (!isNaN(biomass)) totalBiomass += biomass;
         const doc = parseInt(finalH.doc, 10);
         if (!isNaN(doc) && doc > 0) {
@@ -214,12 +214,25 @@ export default function HarvestedTanks() {
           docCount += 1;
         }
       }
+
+      const partials = Array.isArray(t.harvest_info?.partial_harvests)
+        ? t.harvest_info.partial_harvests
+        : [];
+      partials.forEach((p) => {
+        const biomass = parseFloat(p.harvested_biomass || p.harvested_quantity || p.biomass || 0);
+        if (!isNaN(biomass)) totalBiomass += biomass;
+        const doc = parseInt(p.doc, 10);
+        if (!isNaN(doc) && doc > 0) {
+          docSum += doc;
+          docCount += 1;
+        }
+      });
     });
 
     return {
       totalTanks,
       totalAcres: totalAcres.toFixed(1),
-      totalBiomass: totalBiomass > 0 ? `${totalBiomass.toLocaleString()} kg` : '—',
+      totalBiomass: totalBiomass > 0 ? `${totalBiomass.toLocaleString(undefined, { maximumFractionDigits: 1 })} kg` : '—',
       avgDoc: docCount > 0 ? `${Math.round(docSum / docCount)}d` : '—',
     };
   }, [tanks]);
@@ -339,64 +352,133 @@ export default function HarvestedTanks() {
     filterMeta?.techs,
   ]);
 
-  // Export Table Data to CSV
+  // Export Table Data to CSV in exact Harvesting Data Sheet format
   const handleExportCsv = () => {
     if (!displayedTanks.length) return;
+    const row1 = ',,,,,,,,,,,,Harvesting Data Sheet,,,,,,,,,,,,,,,,,,';
+    const row2 = ',,,,,,,,,,,,,,Partial Harvest,,,,,Final Harvest,,,,,Total Material,,,,,,';
     const headers = [
-      'No.',
-      'Farmer / Company',
-      'Contact Person',
-      'Phone',
-      'Tank / Pond',
-      'Area (Acres)',
-      'Region',
-      'District / Village',
-      'ASM (Manager)',
-      'Technician',
-      'Harvest Type',
-      'Harvest Date',
-      'Biomass (kg)',
-      'Count',
-      'ABW (g)',
-      'DOC',
+      'S. No',
+      'ASM/RM',
+      'Farmer Name and Details',
+      'Mobile No',
+      'District',
+      'Village',
+      'Brand Name',
+      'Water Source',
+      'Salinity',
+      'Pond No. ',
+      'Pond Area (Acres)',
+      'Date of Stocking ',
+      'No. of Seed Stocked (Laksh)',
+      'Stocking density (Pcs/sqm)',
+      'Date of Partial Harvest',
+      'DOC at Partial Harvest',
+      'Count of Partial Harvest',
+      'Quantity  of Partial Harvest (Kgs)',
+      'Partial Harvestd Seed',
+      'Date of Final Harvest ',
+      'DOC at Final Harvest',
+      'Count Final  Harvest',
+      'Quantity at Final Harvest (Kgs)',
+      'Final Harvestd Seed',
+      'Total Quantity Harvested (Kgs)',
+      'Cumulative Feed Consumption (Kgs)',
+      ' FCR',
+      'Total No. Harvested',
+      'Survival (%)',
+      'Soil Type',
+      'Remarks'
     ];
 
     const rows = displayedTanks.map((t, idx) => {
-      const finalH = t.harvest_info?.final_harvest;
-      const partials = t.harvest_info?.partial_harvests || [];
-      const isPartial = t.has_partial_harvest || (!finalH && partials.length > 0);
-      const harvestType = isPartial ? 'Partial Harvest' : 'Final Harvest';
-      const harvestDate = finalH?.date || (partials[0]?.date) || (t.updated_at ? String(t.updated_at).slice(0, 10) : '');
-      const biomass = finalH?.total_biomass || finalH?.harvested_biomass || partials.reduce((sum, p) => sum + (parseFloat(p.harvested_biomass || p.biomass || 0) || 0), 0) || '';
-      const count = finalH?.count || (partials[0]?.count) || t.count || '';
-      const abw = finalH?.abw || (partials[0]?.abw) || t.abw || '';
-      const doc = finalH?.doc || (partials[0]?.doc) || t.doc || '';
+      const finalH = t.harvest_info?.final_harvest || null;
+      const partials = Array.isArray(t.harvest_info?.partial_harvests) ? t.harvest_info.partial_harvests : [];
+      const partial = partials[0] || null;
+
+      const areaAcres = parseFloat(t.area_acres || t.area || 0) || 0;
+      let seedStocked = 0;
+      if (t.stocking_quantity_lakhs) {
+        const raw = parseFloat(t.stocking_quantity_lakhs);
+        seedStocked = raw < 1000 ? Math.round(raw * 100000) : Math.round(raw);
+      }
+      let density = '';
+      if (seedStocked > 0 && areaAcres > 0) {
+        density = Math.round(seedStocked / (areaAcres * 4000));
+      }
+
+      // Partial and partial seed count
+      const partialDate = partial?.date || '';
+      const partialDoc = partial?.doc || '';
+      const partialCount = parseFloat(partial?.count) || '';
+      const partialQty = parseFloat(partial?.harvested_quantity || partial?.harvested_biomass || partial?.biomass || 0) || 0;
+      const partialSeed = (partialQty > 0 && partialCount > 0) ? Math.round(partialQty * partialCount) : 0;
+
+      // Final
+      const finalDate = finalH?.date || '';
+      const finalDoc = finalH?.doc || '';
+      const finalCount = parseFloat(finalH?.count) || '';
+      const finalQty = parseFloat(finalH?.harvested_quantity || finalH?.total_biomass || finalH?.harvested_biomass || 0) || 0;
+      const finalSeed = (finalQty > 0 && finalCount > 0) ? Math.round(finalQty * finalCount) : 0;
+
+      // Total Material
+      const totalQty = (partialQty + finalQty) || (finalQty || partialQty || 0);
+      const cumFeed = parseFloat(finalH?.total_feed || (t.fcr && totalQty ? totalQty * parseFloat(t.fcr) : 0)) || 0;
+      let fcr = '';
+      if (cumFeed > 0 && totalQty > 0) {
+        fcr = (cumFeed / totalQty).toFixed(2);
+      } else if (t.fcr) {
+        fcr = parseFloat(t.fcr) || '';
+      }
+      const totalNoHarvested = partialSeed + finalSeed;
+      let survival = '';
+      if (totalNoHarvested > 0 && seedStocked > 0) {
+        survival = Math.round((totalNoHarvested / seedStocked) * 100);
+      }
+
+      const soilType = t.soil_type || 'Black';
+      const remarks = finalH?.remarks || partial?.remarks || t.remarks || '';
 
       return [
         idx + 1,
-        `"${(t.company_name || '').replace(/"/g, '""')}"`,
-        `"${(t.contact_person || '').replace(/"/g, '""')}"`,
+        `"${(t.manager_name || t.salesperson_name || '').replace(/"/g, '""')}"`,
+        `"${(t.company_name || t.contact_person || '').replace(/"/g, '""')}"`,
         `"${(t.farmer_phone || '').replace(/"/g, '""')}"`,
+        `"${(t.district || '').replace(/"/g, '""')}"`,
+        `"${(t.village || '').replace(/"/g, '""')}"`,
+        `"${(t.feed_type || t.dealer_name || 'Premium').replace(/"/g, '""')}"`,
+        `"${(t.water_source || t.water_type || 'Creak+Canel').replace(/"/g, '""')}"`,
+        `"${(t.salinity || '').replace(/"/g, '""')}"`,
         `"${(t.tank_number || t.pond_name || `Tank #${t.id}`).replace(/"/g, '""')}"`,
-        Number(t.area_acres || t.area || 0).toFixed(2),
-        `"${(t.region || '').replace(/"/g, '""')}"`,
-        `"${([t.village, t.district].filter(Boolean).join(', ')).replace(/"/g, '""')}"`,
-        `"${(t.manager_name || '').replace(/"/g, '""')}"`,
-        `"${(t.salesperson_name || '').replace(/"/g, '""')}"`,
-        harvestType,
-        harvestDate,
-        biomass,
-        count,
-        abw,
-        doc,
+        areaAcres || '',
+        `"${(t.seed_date ? String(t.seed_date).slice(0, 10) : '').replace(/"/g, '""')}"`,
+        seedStocked || '',
+        density || '',
+        partialDate,
+        partialDoc,
+        partialCount || '',
+        partialQty || '',
+        partialSeed,
+        finalDate,
+        finalDoc,
+        finalCount || '',
+        finalQty || '',
+        finalSeed,
+        totalQty || '',
+        cumFeed || '',
+        fcr || '',
+        totalNoHarvested || '',
+        survival || '',
+        `"${soilType.replace(/"/g, '""')}"`,
+        `"${remarks.replace(/"/g, '""')}"`,
       ].join(',');
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows].join('\n');
+    const csvContent = 'data:text/csv;charset=utf-8,' + [row1, row2, headers.join(','), ...rows].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `harvested_tanks_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Harvesting_Data_Sheet_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -409,21 +491,19 @@ export default function HarvestedTanks() {
   return (
     <div className="space-y-4 w-full fade-in pb-10">
       {/* 1. Header: Minimal & Responsive */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <Link
             to="/dashboard"
-            className="w-9 h-9 rounded-xl border border-gray-200 bg-white hover:bg-blue-50/50 flex items-center justify-center text-gray-500 hover:text-blue-700 transition shrink-0"
+            className="w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-gray-900 transition shrink-0"
             title="Back to Dashboard"
           >
             <ArrowLeftIcon className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
-                Harvested Tanks
-              </h1>
-            </div>
+            <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+              Harvested Tanks
+            </h1>
           </div>
         </div>
 
@@ -432,229 +512,204 @@ export default function HarvestedTanks() {
             type="button"
             onClick={handleExportCsv}
             disabled={!displayedTanks.length}
-            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 hover:border-blue-300 hover:text-blue-700 transition disabled:opacity-50"
+            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 transition disabled:opacity-40"
             title="Export Table to CSV"
           >
-            <ArrowDownTrayIcon className="w-4 h-4 text-gray-500" />
-            <span>Export CSV</span>
+            <ArrowDownTrayIcon className="w-3.5 h-3.5 text-gray-400" />
+            <span>Export Harvest Data</span>
           </button>
           <Link
             to="/clients"
-            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 hover:border-blue-300 hover:text-blue-700 transition"
+            className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 transition"
           >
-            <BuildingOfficeIcon className="w-4 h-4 text-gray-500" />
+            <BuildingOfficeIcon className="w-3.5 h-3.5 text-gray-400" />
             <span>Farmers & Tanks</span>
           </Link>
         </div>
       </div>
 
-      {/* 2. Sleek Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200/80 rounded-2xl divide-y sm:divide-y-0 sm:divide-x divide-gray-100 shadow-2xs overflow-hidden">
-        <div className="p-3.5 sm:p-4 bg-blue-50/20">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+      {/* 2. Minimal Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-gray-100 shadow-2xs overflow-hidden">
+        <div className="p-3 sm:p-4">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
             Total Harvested
           </p>
-          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
-            {summary.totalTanks} <span className="text-xs font-normal text-gray-500">tanks</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
+            {summary.totalTanks} <span className="text-xs font-normal text-gray-400">tanks</span>
           </p>
         </div>
 
-        <div className="p-3.5 sm:p-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+        <div className="p-3 sm:p-4">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
             Harvest Types
           </p>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-sky-800 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/80">
-              {partialCount} Partial
-            </span>
-            <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/80">
-              {finalCount} Final
-            </span>
+          <div className="flex items-center gap-2 mt-1 text-xs">
+            <span className="text-gray-900 font-semibold">{partialCount} <span className="text-gray-500 font-normal">Partial</span></span>
+            <span className="text-gray-300">•</span>
+            <span className="text-gray-900 font-semibold">{finalCount} <span className="text-gray-500 font-normal">Final</span></span>
           </div>
         </div>
 
-        <div className="p-3.5 sm:p-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+        <div className="p-3 sm:p-4">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
             Total Biomass
           </p>
-          <p className="text-lg sm:text-2xl font-bold text-blue-900 mt-1">
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
             {summary.totalBiomass}
           </p>
         </div>
 
-        <div className="p-3.5 sm:p-4">
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-            Harvest Area & DOC
+        <div className="p-3 sm:p-4">
+          <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            Harvest Area
           </p>
-          <p className="text-lg sm:text-2xl font-bold text-gray-900 mt-1">
-            {summary.totalAcres} <span className="text-xs font-normal text-gray-500">Ac</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
+            {summary.totalAcres} <span className="text-xs font-normal text-gray-400">Ac</span>
             {summary.avgDoc !== '—' && (
-              <span className="text-xs font-medium text-blue-600 ml-1.5">
-                • {summary.avgDoc} avg
+              <span className="text-xs font-normal text-gray-500 ml-1.5">
+                ({summary.avgDoc} avg)
               </span>
             )}
           </p>
         </div>
       </div>
 
-      {/* 3. Filter Bar: Region, ASM, Technician, Farmer, Search & Type Pills */}
-      <div className="bg-white border border-gray-200/80 rounded-2xl p-3 sm:p-4 space-y-3 shadow-2xs">
-        {/* Row A: Type Pills & Search */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Segmented Filter Pills */}
-          <div className="inline-flex items-center p-1 bg-blue-50/40 border border-blue-100 rounded-xl gap-1 shrink-0">
+      {/* 3. Filter Bar: Neutral, Compact & Responsive */}
+      <div className="bg-white border border-gray-200 rounded-xl p-3 sm:p-3.5 space-y-2.5 shadow-2xs">
+        {/* Top Row: Type Pills & Search */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          {/* Neutral Segmented Switch */}
+          <div className="inline-flex items-center p-0.5 bg-gray-100 rounded-lg shrink-0">
             <button
               type="button"
               onClick={() => handleTypeChange('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'all'
-                ? 'bg-white text-blue-700 shadow-2xs border border-blue-100'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${harvestTypeFilter === 'all'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-500 hover:text-gray-900'
                 }`}
             >
-              <span>All</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'all' ? 'bg-blue-50 text-blue-700' : 'text-gray-400'
-                }`}>
-              </span>
+              All
             </button>
-
             <button
               type="button"
               onClick={() => handleTypeChange('partial')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'partial'
-                ? 'bg-white text-sky-700 shadow-2xs border border-sky-100'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${harvestTypeFilter === 'partial'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-500 hover:text-gray-900'
                 }`}
             >
-              <span>Partial</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'partial' ? 'bg-sky-50 text-sky-700' : 'text-gray-400'
-                }`}>
-              </span>
+              Partial
             </button>
-
             <button
               type="button"
               onClick={() => handleTypeChange('final')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${harvestTypeFilter === 'final'
-                ? 'bg-white text-blue-800 shadow-2xs border border-blue-100'
-                : 'text-gray-600 hover:text-gray-900'
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${harvestTypeFilter === 'final'
+                  ? 'bg-white text-gray-900 shadow-2xs'
+                  : 'text-gray-500 hover:text-gray-900'
                 }`}
             >
-              <span>Final</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${harvestTypeFilter === 'final' ? 'bg-blue-50 text-blue-700' : 'text-gray-400'
-                }`}>
-              </span>
+              Final
             </button>
           </div>
 
           {/* Search Input */}
-          <div className="relative flex-1 max-w-md">
-            <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <div className="relative flex-1 sm:max-w-xs">
+            <MagnifyingGlassIcon className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search tank, farmer, phone, village, tech..."
+              placeholder="Search farmer, tank, phone..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-gray-50/60 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition"
+              className="w-full pl-8 pr-7 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:border-gray-400 transition placeholder:text-gray-400"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                <XMarkIcon className="w-4 h-4" />
+                <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Row B: 4 Mandatory Dropdown Filters: Region, ASM, Technician, Farmer */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1 border-t border-gray-100">
-          {/* 1. Region Filter */}
-          <div className="flex flex-col gap-1">
-            <select
-              value={regionFilter}
-              onChange={(e) => handleRegionChange(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
-            >
-              <option value="">All Regions</option>
-              {regionOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Dropdowns Row: Region, ASM, Technician, Farmer */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-gray-100">
+          <select
+            value={regionFilter}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="text-xs py-1.5 px-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:border-gray-400 text-gray-700 w-full"
+          >
+            <option value="">All Regions</option>
+            {regionOptions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
 
-          {/* 2. ASM Filter */}
-          <div className="flex flex-col gap-1">
-            <select
-              value={asmFilter}
-              onChange={(e) => handleAsmChange(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
-            >
-              <option value="">All ASMs</option>
-              {asmOptions.map((a) => (
-                <option key={a.value} value={a.value}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={asmFilter}
+            onChange={(e) => handleAsmChange(e.target.value)}
+            className="text-xs py-1.5 px-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:border-gray-400 text-gray-700 w-full"
+          >
+            <option value="">All ASMs</option>
+            {asmOptions.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </select>
 
-          {/* 3. Technician Filter */}
-          <div className="flex flex-col gap-1">
-            <select
-              value={techFilter}
-              onChange={(e) => handleTechChange(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
-            >
-              <option value="">All Technicians</option>
-              {techOptions.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={techFilter}
+            onChange={(e) => handleTechChange(e.target.value)}
+            className="text-xs py-1.5 px-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:border-gray-400 text-gray-700 w-full"
+          >
+            <option value="">All Technicians</option>
+            {techOptions.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
+              </option>
+            ))}
+          </select>
 
-          {/* 4. Farmer Filter */}
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              {hasActiveFilters && (
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800"
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-            <select
-              value={farmerFilter}
-              onChange={(e) => setFarmerFilter(e.target.value)}
-              className="text-xs sm:text-sm py-2 px-3 bg-gray-50/70 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 text-gray-700 w-full"
-            >
-              <option value="">All Farmers</option>
-              {farmerOptions.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={farmerFilter}
+            onChange={(e) => setFarmerFilter(e.target.value)}
+            className="text-xs py-1.5 px-2 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:outline-none focus:border-gray-400 text-gray-700 w-full"
+          >
+            <option value="">All Farmers</option>
+            {farmerOptions.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
         </div>
+
+        {hasActiveFilters && (
+          <div className="flex justify-end pt-0.5">
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-[11px] text-gray-500 hover:text-gray-900 transition font-medium"
+            >
+              Reset filters
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* 4. Table Format Content Area (Zero Bottom Sliding Bar) */}
+      {/* 4. Minimal Table Format */}
       {isLoading ? (
-        <div className="py-20 text-center bg-white border border-sky-100 rounded-2xl">
+        <div className="py-20 text-center bg-white border border-gray-200 rounded-xl">
           <PageSpinner />
-          <p className="text-xs text-sky-800 mt-2">Loading harvested tanks...</p>
+          <p className="text-xs text-gray-500 mt-2">Loading harvested tanks...</p>
         </div>
       ) : error ? (
-        <div className="p-8 text-center text-red-600 bg-red-50/80 border border-red-200 rounded-2xl">
+        <div className="p-8 text-center text-red-600 bg-red-50 border border-red-200 rounded-xl">
           <p className="font-semibold text-sm">Failed to load harvested tanks</p>
           <p className="text-xs mt-1 text-gray-500">{error.message}</p>
           <button
@@ -666,9 +721,9 @@ export default function HarvestedTanks() {
           </button>
         </div>
       ) : displayedTanks.length === 0 ? (
-        <div className="p-12 text-center bg-white border border-gray-200/80 rounded-2xl">
-          <ArchiveBoxArrowDownIcon className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-          <h3 className="text-sm font-bold text-gray-800">
+        <div className="p-12 text-center bg-white border border-gray-200 rounded-xl">
+          <ArchiveBoxArrowDownIcon className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+          <h3 className="text-sm font-semibold text-gray-800">
             {harvestTypeFilter === 'partial'
               ? 'No Partial Harvested Tanks Found'
               : harvestTypeFilter === 'final'
@@ -677,37 +732,37 @@ export default function HarvestedTanks() {
           </h3>
           <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 mb-4">
             {hasActiveFilters
-              ? 'No results matched your active filters. Try resetting the filters.'
-              : 'Harvest records are automatically captured when harvest tests are logged during technical field visits.'}
+              ? 'No results matched your active filters.'
+              : 'Harvest records are automatically captured during technical field visits.'}
           </p>
           {hasActiveFilters && (
             <button
               type="button"
               onClick={handleResetFilters}
-              className="btn-secondary btn-sm text-xs hover:border-blue-300 hover:text-blue-700"
+              className="btn-secondary btn-sm text-xs"
             >
-              Reset All Filters
+              Reset Filters
             </button>
           )}
         </div>
       ) : (
-        <div className="bg-white border border-sky-200/80 rounded-2xl shadow-2xs overflow-hidden">
-          {/* Desktop & Tablet Table (w-full, zero horizontal scrollbar) */}
-          <div className="hidden sm:block w-full overflow-x-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-2xs overflow-hidden">
+          {/* Desktop & Tablet Table */}
+          <div className="hidden sm:block w-full overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-sky-100 bg-sky-50/70 text-[11px] font-semibold text-sky-900 uppercase tracking-wider">
-                  <th className="py-3 px-3 w-10 text-center text-sky-800/60">No.</th>
-                  <th className="py-3 px-3">Farmer / Company</th>
-                  <th className="py-3 px-3 w-28">Tank Details</th>
-                  <th className="py-3 px-3 w-32">Region / Area</th>
-                  <th className="py-3 px-3 w-28">ASM</th>
-                  <th className="py-3 px-3 w-28">Technician</th>
-                  <th className="py-3 px-3 w-32">Harvest Type</th>
-                  <th className="py-3 px-3 w-24 text-right">Action</th>
+                <tr className="border-b border-gray-200 bg-gray-50/75 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-10 text-center">#</th>
+                  <th className="py-2.5 px-3">Farmer</th>
+                  <th className="py-2.5 px-3 w-28">Tank Details</th>
+                  <th className="py-2.5 px-3 w-32">Region / Area</th>
+                  <th className="py-2.5 px-3 w-28">ASM</th>
+                  <th className="py-2.5 px-3 w-28">Technician</th>
+                  <th className="py-2.5 px-3 w-32">Harvest Type</th>
+                  <th className="py-2.5 px-3 w-20 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-sky-50 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white">
                 {displayedTanks.map((tank, idx) => {
                   const finalH = tank.harvest_info?.final_harvest || null;
                   const partials = Array.isArray(tank.harvest_info?.partial_harvests)
@@ -718,91 +773,99 @@ export default function HarvestedTanks() {
                     finalH?.date ||
                     partials[0]?.date ||
                     (tank.updated_at ? String(tank.updated_at).slice(0, 10) : '—');
+                  const harvestBiomass =
+                    finalH?.total_biomass ||
+                    finalH?.harvested_biomass ||
+                    finalH?.harvested_quantity ||
+                    partials[0]?.harvested_biomass ||
+                    partials[0]?.harvested_quantity ||
+                    partials[0]?.biomass ||
+                    null;
 
                   return (
                     <tr
                       key={tank.id}
-                      className="hover:bg-sky-50/40 transition-colors duration-150"
+                      className="hover:bg-gray-50/70 transition-colors"
                     >
-                      {/* No. */}
-                      <td className="py-3 px-3 text-center text-gray-400 font-mono text-xs">
+                      {/* # */}
+                      <td className="py-2.5 px-3 text-center text-gray-400 font-mono text-xs">
                         {idx + 1}
                       </td>
 
-                      {/* Farmer / Company */}
-                      <td className="py-3 px-3">
+                      {/* Farmer */}
+                      <td className="py-2.5 px-3">
                         <Link
                           to={`/clients/${tank.client_id}`}
-                          className="font-semibold text-sky-950 hover:text-sky-600 transition block truncate max-w-[220px]"
+                          className="font-medium text-gray-900 hover:text-blue-600 transition block truncate max-w-[200px]"
                           title={tank.company_name}
                         >
                           {tank.company_name || 'Unknown Farmer'}
                         </Link>
-                        <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                          {tank.contact_person && <span>{tank.contact_person}</span>}
-                          {tank.farmer_phone && (
-                            <a
-                              href={`tel:${tank.farmer_phone}`}
-                              className="text-gray-500 hover:text-sky-700 font-mono"
-                            >
-                              • {tank.farmer_phone}
-                            </a>
-                          )}
-                        </div>
+                        {tank.farmer_phone && (
+                          <span className="text-[11px] text-gray-400 font-mono block mt-0.5">
+                            {tank.farmer_phone}
+                          </span>
+                        )}
                       </td>
 
                       {/* Tank Details */}
-                      <td className="py-3 px-3">
-                        <span className="font-semibold text-gray-900 block truncate">
+                      <td className="py-2.5 px-3">
+                        <span className="font-medium text-gray-900 block truncate">
                           {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
                         </span>
-                        <div className="text-[11px] font-mono text-gray-500 mt-0.5">
+                        <span className="text-[11px] font-mono text-gray-400 block mt-0.5">
                           {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
-                        </div>
+                        </span>
                       </td>
 
                       {/* Region / Area */}
-                      <td className="py-3 px-3">
-                        <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-sky-100 text-sky-800 border border-sky-200">
+                      <td className="py-2.5 px-3">
+                        <span className="text-gray-800 font-medium capitalize block truncate max-w-[120px]">
                           {tank.region || tank.district || '—'}
                         </span>
-                        <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[130px]">
-                          {[tank.village, tank.district].filter(Boolean).join(', ') || '—'}
-                        </div>
+                        <span className="text-[11px] text-gray-400 block mt-0.5 truncate max-w-[120px]">
+                          {tank.village || tank.district || ''}
+                        </span>
                       </td>
 
                       {/* ASM */}
-                      <td className="py-3 px-3 text-gray-800 font-medium truncate max-w-[120px]">
+                      <td className="py-2.5 px-3 text-gray-700 truncate max-w-[110px]">
                         {tank.manager_name || '—'}
                       </td>
 
                       {/* Technician */}
-                      <td className="py-3 px-3 text-gray-800 font-medium truncate max-w-[120px]">
+                      <td className="py-2.5 px-3 text-gray-700 truncate max-w-[110px]">
                         {tank.salesperson_name || '—'}
                       </td>
 
                       {/* Harvest Type & Date */}
-                      <td className="py-3 px-3">
+                      <td className="py-2.5 px-3">
                         {isPartial ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
                             Partial Harvest
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          <span className="inline-block px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                             Final Harvest
                           </span>
                         )}
-                        <div className="text-[11px] text-gray-500 font-mono mt-0.5">
-                          {harvestDate}
+                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-mono mt-0.5">
+                          <span>{harvestDate}</span>
+                          {harvestBiomass && (
+                            <>
+                              <span>•</span>
+                              <span className="text-gray-600 font-medium">{Number(harvestBiomass).toLocaleString()} kg</span>
+                            </>
+                          )}
                         </div>
                       </td>
 
                       {/* Action */}
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-2.5 px-3 text-right">
                         <button
                           type="button"
                           onClick={() => setSelectedTank(tank)}
-                          className="btn-secondary btn-sm py-1 px-2.5 text-xs inline-flex items-center gap-1 hover:border-sky-300 hover:text-sky-700 transition"
+                          className="text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 px-2.5 py-1 rounded transition inline-flex items-center gap-1"
                         >
                           <span>View</span>
                           <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
@@ -815,8 +878,8 @@ export default function HarvestedTanks() {
             </table>
           </div>
 
-          {/* Mobile Card List (Zero Horizontal Scrollbar on Mobile) */}
-          <div className="sm:hidden divide-y divide-sky-100 p-2.5 space-y-2.5">
+          {/* Mobile Card List */}
+          <div className="sm:hidden divide-y divide-gray-100 p-2.5 space-y-2.5">
             {displayedTanks.map((tank, idx) => {
               const finalH = tank.harvest_info?.final_harvest || null;
               const partials = Array.isArray(tank.harvest_info?.partial_harvests)
@@ -827,6 +890,14 @@ export default function HarvestedTanks() {
                 finalH?.date ||
                 partials[0]?.date ||
                 (tank.updated_at ? String(tank.updated_at).slice(0, 10) : '—');
+              const harvestBiomass =
+                finalH?.total_biomass ||
+                finalH?.harvested_biomass ||
+                finalH?.harvested_quantity ||
+                partials[0]?.harvested_biomass ||
+                partials[0]?.harvested_quantity ||
+                partials[0]?.biomass ||
+                null;
 
               return (
                 <div key={tank.id} className="pt-2 first:pt-0 space-y-2">
@@ -835,53 +906,55 @@ export default function HarvestedTanks() {
                       <span className="text-[11px] font-mono text-gray-400 mr-1.5">{idx + 1}.</span>
                       <Link
                         to={`/clients/${tank.client_id}`}
-                        className="font-semibold text-sky-950 text-xs hover:text-sky-600"
+                        className="font-medium text-gray-900 text-xs hover:text-blue-600"
                       >
                         {tank.company_name || 'Unknown Farmer'}
                       </Link>
-                      <div className="text-[11px] text-gray-500 mt-0.5">
-                        {tank.contact_person} {tank.farmer_phone ? `• ${tank.farmer_phone}` : ''}
-                      </div>
+                      {tank.farmer_phone && (
+                        <div className="text-[11px] text-gray-400 font-mono mt-0.5">
+                          {tank.farmer_phone}
+                        </div>
+                      )}
                     </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-sky-100 text-sky-800 font-medium shrink-0">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 capitalize shrink-0 font-medium">
                       {tank.region || '—'}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs bg-sky-50/50 p-2 rounded-lg border border-sky-100">
+                  <div className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded-lg border border-gray-100">
                     <div>
-                      <span className="font-semibold text-gray-900 block">
+                      <span className="font-medium text-gray-900 block">
                         {tank.tank_number || tank.pond_name || `Tank #${tank.id}`}
                       </span>
-                      <span className="text-[11px] text-gray-500 font-mono">
+                      <span className="text-[11px] text-gray-400 font-mono">
                         {Number(tank.area_acres || tank.area || 0).toFixed(2)} Ac
                       </span>
                     </div>
 
                     <div className="text-right">
                       {isPartial ? (
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-100 text-sky-700">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
                           Partial
                         </span>
                       ) : (
-                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">
+                        <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                           Final
                         </span>
                       )}
-                      <div className="text-[10px] text-gray-500 font-mono mt-0.5">
-                        {harvestDate}
+                      <div className="text-[10px] text-gray-400 font-mono mt-0.5">
+                        {harvestDate} {harvestBiomass ? `• ${Number(harvestBiomass).toLocaleString()} kg` : ''}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-gray-500 pt-0.5">
-                    <span>Tech: <strong className="text-gray-700 font-medium">{tank.salesperson_name || '—'}</strong></span>
+                    <span>Tech: <strong className="text-gray-700 font-normal">{tank.salesperson_name || '—'}</strong></span>
                     <button
                       type="button"
                       onClick={() => setSelectedTank(tank)}
-                      className="btn-secondary btn-sm py-0.5 px-2 text-[11px] inline-flex items-center gap-1 hover:border-sky-300 hover:text-sky-700"
+                      className="text-xs font-medium text-gray-600 hover:text-gray-900 px-2 py-0.5 rounded hover:bg-gray-100 inline-flex items-center gap-1"
                     >
-                      <span>Details</span>
+                      <span>View</span>
                       <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
                     </button>
                   </div>
@@ -891,7 +964,7 @@ export default function HarvestedTanks() {
           </div>
 
           {/* Table Footer: Result Count */}
-          <div className="px-4 py-3 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+          <div className="px-4 py-2.5 bg-gray-50/60 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
             <span>
               Showing <strong>{displayedTanks.length}</strong> of <strong>{tanks.length}</strong> harvested tanks
             </span>
@@ -899,7 +972,7 @@ export default function HarvestedTanks() {
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="text-blue-600 hover:text-blue-800 font-medium"
+                className="text-gray-500 hover:text-gray-900 font-medium"
               >
                 Clear all filters
               </button>

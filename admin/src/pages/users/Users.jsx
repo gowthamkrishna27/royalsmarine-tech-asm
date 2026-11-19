@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams, Link } from 'react-router-dom';
 import { userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -23,7 +24,7 @@ import {
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 
-function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSaved }) {
+export function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSaved }) {
   const isEdit = Boolean(user?.id);
   const { register, handleSubmit, reset, watch, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
@@ -440,12 +441,34 @@ function UserModal({ open, onClose, user, roles, asms, technicalExecutives, onSa
 
 export default function Users() {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const getRoleFromParam = (param) => {
+    if (!param) return '';
+    const lower = param.toLowerCase().trim();
+    if (lower === 'asm' || lower === 'sales_manager' || lower === 'area_manager') return 'sales_manager';
+    if (lower === 'tech' || lower === 'sales_executive' || lower === 'technical_executive' || lower === 'field_executive') return 'sales_executive';
+    return param;
+  };
+
+  const initialRole = getRoleFromParam(searchParams.get('role'));
   const [page, setPage] = useState(1);
-  const [role, setRole] = useState('');
-  const [status, setStatus] = useState('');
-  const [search, setSearch] = useState('');
+  const [role, setRole] = useState(initialRole);
+  const [status, setStatus] = useState(searchParams.get('status') || '');
+  const [search, setSearch] = useState(searchParams.get('search') || '');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+
+  useEffect(() => {
+    const roleParam = searchParams.get('role');
+    if (roleParam !== null) {
+      const normalized = getRoleFromParam(roleParam);
+      if (normalized !== role) {
+        setRole(normalized);
+        setPage(1);
+      }
+    }
+  }, [searchParams]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, role, status, search],
@@ -522,12 +545,27 @@ export default function Users() {
       <FilterBar
         onSearch={setSearch}
         searchValue={search}
-        onReset={() => { setRole(''); setStatus(''); setSearch(''); }}
+        onReset={() => {
+          setRole('');
+          setStatus('');
+          setSearch('');
+          setPage(1);
+          setSearchParams({});
+        }}
       >
         <SelectFilter
           label="All Roles"
           value={role}
-          onChange={setRole}
+          onChange={(newRole) => {
+            setRole(newRole);
+            setPage(1);
+            setSearchParams(prev => {
+              const updated = new URLSearchParams(prev);
+              if (newRole) updated.set('role', newRole);
+              else updated.delete('role');
+              return updated;
+            });
+          }}
           options={roles?.map(r => ({
             value: r.name,
             label: r.name === 'sales_manager' ? 'ASM (Area Sales Manager)' : r.name === 'sales_executive' ? 'Technical Executive' : r.display_name,
@@ -581,15 +619,25 @@ export default function Users() {
                         <tr key={u.id} className="hover:bg-gray-50/80 transition">
                           <td>
                             <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                                isAsmUser ? 'bg-blue-600' :
-                                isTechExecUser ? 'bg-emerald-600' :
-                                'bg-gray-600'
-                              }`}>
+                              <Link
+                                to={`/users/${u.id}`}
+                                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 hover:opacity-90 transition ${
+                                  isAsmUser ? 'bg-blue-600' :
+                                  isTechExecUser ? 'bg-emerald-600' :
+                                  'bg-gray-600'
+                                }`}
+                                title="View full user details"
+                              >
                                 {u.full_name?.[0]?.toUpperCase() || 'U'}
-                              </div>
+                              </Link>
                               <div className="min-w-0">
-                                <div className="font-semibold text-gray-900 truncate">{u.full_name}</div>
+                                <Link
+                                  to={`/users/${u.id}`}
+                                  className="font-semibold text-gray-900 hover:text-blue-600 transition truncate block"
+                                  title="View full user details"
+                                >
+                                  {u.full_name}
+                                </Link>
                                 {u.department ? (
                                   <span className="text-[11px] text-gray-400 font-medium">{u.department}</span>
                                 ) : (
@@ -721,15 +769,25 @@ export default function Users() {
                     <div key={u.id} className="p-4 space-y-3 hover:bg-gray-50/70 transition">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${
-                            isAsmUser ? 'bg-blue-600' :
-                            isTechExecUser ? 'bg-emerald-600' :
-                            'bg-gray-600'
-                          }`}>
+                          <Link
+                            to={`/users/${u.id}`}
+                            className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 hover:opacity-90 transition ${
+                              isAsmUser ? 'bg-blue-600' :
+                              isTechExecUser ? 'bg-emerald-600' :
+                              'bg-gray-600'
+                            }`}
+                            title="View full user details"
+                          >
                             {u.full_name?.[0]?.toUpperCase() || 'U'}
-                          </div>
+                          </Link>
                           <div className="min-w-0">
-                            <div className="font-semibold text-gray-900 text-sm leading-tight truncate">{u.full_name}</div>
+                            <Link
+                              to={`/users/${u.id}`}
+                              className="font-semibold text-gray-900 text-sm leading-tight truncate hover:text-blue-600 transition block"
+                              title="View full user details"
+                            >
+                              {u.full_name}
+                            </Link>
                             <div className="flex items-center gap-2 mt-1">
                               <Badge color={isAsmUser ? 'blue' : isTechExecUser ? 'green' : 'gray'}>
                                 {u.role_display}
