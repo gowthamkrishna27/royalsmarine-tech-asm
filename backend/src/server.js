@@ -14,7 +14,7 @@ const app = express();
 const API = process.env.API_PREFIX || '/api/v1';
 
 // Security & middleware
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
@@ -23,26 +23,34 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'https://royalsmarine.vercel.app',
-  'https://royalsmarine.pages.dev/',
+  'https://royalsmarine.pages.dev',
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
-].filter(Boolean);
+]
+  .filter(Boolean)
+  .map(url => url.replace(/\/+$/, ''));
 
-app.use(cors({
+const corsOptions = {
   origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.replace(/\/+$/, '');
     if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      /\.vercel\.app$/.test(origin) ||
-      (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+      allowedOrigins.includes(cleanOrigin) ||
+      /\.vercel\.app$/.test(cleanOrigin) ||
+      /\.pages\.dev$/.test(cleanOrigin) ||
+      (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin))
     ) {
       return callback(null, true);
     }
-    return callback(new Error('Blocked by CORS policy'));
+    return callback(new Error(`Blocked by CORS policy: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
