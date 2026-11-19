@@ -266,7 +266,7 @@ const exportReport = async (req, res) => {
 
       for (const r of harvestRows) {
         let hd = r.harvest_details;
-        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch (e) { } }
         if (hd && typeof hd === 'object') {
           const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : (hd.partial_harvest ? [hd.partial_harvest] : []);
           for (let i = 0; i < partials.length; i++) {
@@ -369,7 +369,7 @@ const exportReport = async (req, res) => {
 
       for (const r of rows) {
         let hd = r.harvest_details;
-        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch (e) { } }
         if (hd && typeof hd === 'object') {
           const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : (hd.partial_harvest ? [hd.partial_harvest] : []);
           for (let i = 0; i < partials.length; i++) {
@@ -425,7 +425,7 @@ const exportReport = async (req, res) => {
 
       for (const r of rows) {
         let hd = r.harvest_details;
-        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+        if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch (e) { } }
         if (hd && typeof hd === 'object' && hd.final_harvest && typeof hd.final_harvest === 'object') {
           const fh = hd.final_harvest;
           const hasData = Object.values(fh).some(val => val !== null && val !== undefined && val !== '');
@@ -513,7 +513,8 @@ const exportReport = async (req, res) => {
                 c.id as client_id, c.company_name, c.contact_person, c.mobile as farmer_mobile,
                 c.district, c.village, c.area as farmer_area,
                 sp.id as salesperson_id, sp.full_name as salesperson_name,
-                m.id as manager_id, m.full_name as manager_name,
+                COALESCE(cm.id, sm.id) as manager_id,
+                COALESCE(cm.full_name, sm.full_name) as manager_name,
                 p.id as pond_id, p.pond_name, p.area_acres, p.area as pond_area,
                 p.water_source, p.water_type, p.salinity as pond_salinity, p.soil_type,
                 p.seed_date, p.stocking_quantity_lakhs, p.feed_type, p.dealer_name,
@@ -521,7 +522,8 @@ const exportReport = async (req, res) => {
          FROM visits v
          JOIN clients c ON v.client_id = c.id
          JOIN users sp ON v.salesperson_id = sp.id
-         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN users cm ON cm.id = c.assigned_manager_id AND cm.status = 'active' AND cm.deleted_at IS NULL
+         LEFT JOIN users sm ON sm.id = sp.manager_id AND sm.status = 'active' AND sm.deleted_at IS NULL
          LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
          WHERE ${baseWhere} AND v.harvest_details IS NOT NULL AND v.harvest_details != '' AND v.harvest_details != '{}' AND v.harvest_details != 'null'
          ORDER BY v.visit_date DESC, v.id DESC`,
@@ -549,7 +551,7 @@ const exportReport = async (req, res) => {
 
         for (const v of item.visits) {
           let hd = v.harvest_details;
-          if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch(e){} }
+          if (typeof hd === 'string') { try { hd = JSON.parse(hd); } catch (e) { } }
           if (hd && typeof hd === 'object') {
             if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
               const hasFinal = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && val !== '');
@@ -575,7 +577,7 @@ const exportReport = async (req, res) => {
         }
         let density = '';
         if (seedStocked > 0 && areaAcres > 0) {
-          density = Math.round(seedStocked / (areaAcres * 4046.86));
+          density = Math.round(seedStocked / (areaAcres * 4000));
         }
 
         // Partial Harvest values
@@ -688,14 +690,16 @@ const exportReport = async (req, res) => {
       const [sampleVisits] = await sequelize.query(
         `SELECT v.id, v.visit_date, v.tank_number, v.water_quality, v.feeding_details, v.remarks as visit_remarks,
                 c.company_name, c.mobile as farmer_mobile, c.district, c.village,
-                sp.full_name as salesperson_name, m.full_name as manager_name,
+                sp.full_name as salesperson_name,
+                COALESCE(cm.full_name, sm.full_name) as manager_name,
                 p.pond_name, p.area_acres, p.area as pond_area, p.water_source, p.water_type,
                 p.salinity as pond_salinity, p.seed_date, p.stocking_quantity_lakhs, p.feed_type, p.dealer_name,
                 p.doc, p.abw, p.fcr
          FROM visits v
          JOIN clients c ON v.client_id = c.id
          JOIN users sp ON v.salesperson_id = sp.id
-         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN users cm ON cm.id = c.assigned_manager_id AND cm.status = 'active' AND cm.deleted_at IS NULL
+         LEFT JOIN users sm ON sm.id = sp.manager_id AND sm.status = 'active' AND sm.deleted_at IS NULL
          LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
          WHERE ${baseWhere}
          ORDER BY v.visit_date DESC, v.id DESC LIMIT 200`,
@@ -706,8 +710,8 @@ const exportReport = async (req, res) => {
       for (const sv of sampleVisits) {
         let wq = sv.water_quality;
         let fd = sv.feeding_details;
-        if (typeof wq === 'string') { try { wq = JSON.parse(wq); } catch(e){} }
-        if (typeof fd === 'string') { try { fd = JSON.parse(fd); } catch(e){} }
+        if (typeof wq === 'string') { try { wq = JSON.parse(wq); } catch (e) { } }
+        if (typeof fd === 'string') { try { fd = JSON.parse(fd); } catch (e) { } }
 
         const areaAcres = parseFloat(sv.area_acres || sv.pond_area || 0) || 0;
         let seedStocked = 0;
@@ -805,7 +809,9 @@ const exportReport = async (req, res) => {
                 c.id as client_id, c.company_name, c.contact_person, c.mobile as farmer_mobile,
                 c.village, c.district, c.area as client_area,
                 sp.id as salesperson_id, sp.full_name as salesperson_name, sp.area as tech_area, sp.region as tech_region,
-                m.id as manager_id, m.full_name as manager_name, m.region as manager_region,
+                COALESCE(cm.id, sm.id) as manager_id,
+                COALESCE(cm.full_name, sm.full_name) as manager_name,
+                COALESCE(cm.region, sm.region) as manager_region,
                 p.id as pond_id, p.pond_name, p.area_acres, p.area as pond_area,
                 p.water_source, p.water_type, p.salinity as pond_salinity, p.soil_type,
                 p.seed_date, p.stocking_quantity_lakhs, p.doc as pond_doc, p.abw as pond_abw,
@@ -813,7 +819,8 @@ const exportReport = async (req, res) => {
          FROM visits v
          JOIN clients c ON v.client_id = c.id
          JOIN users sp ON v.salesperson_id = sp.id
-         LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, sp.manager_id)
+         LEFT JOIN users cm ON cm.id = c.assigned_manager_id AND cm.status = 'active' AND cm.deleted_at IS NULL
+         LEFT JOIN users sm ON sm.id = sp.manager_id AND sm.status = 'active' AND sm.deleted_at IS NULL
          LEFT JOIN ponds p ON (v.tank_id = p.id OR (v.client_id = p.client_id AND v.tank_number = p.tank_number))
          WHERE ${baseWhere}
          ORDER BY v.visit_date DESC, v.id DESC`,
@@ -859,17 +866,20 @@ const exportReport = async (req, res) => {
         let fd = r.feeding_details;
         let wq = r.water_quality;
         let hd = r.harvest_details;
-        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch(e){}
-        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch(e){}
-        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+        try { if (typeof fd === 'string') fd = JSON.parse(fd); } catch (e) { }
+        try { if (typeof wq === 'string') wq = JSON.parse(wq); } catch (e) { }
+        try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch (e) { }
 
         const area = (r.client_area || r.tech_area || r.tech_region || r.manager_region || r.district || '').trim();
         const date = r.visit_date ? String(r.visit_date).slice(0, 10) : '';
 
-        let empName = r.salesperson_name || r.manager_name || '';
+        let empName = r.salesperson_name || '';
         if (empHeader === 'ASM NAME') {
           empName = selectedAsmName || r.manager_name || r.salesperson_name || '';
         } else if (empHeader === 'TECHNICIAN NAME') {
+          empName = r.salesperson_name || '';
+        } else {
+          // Default / EMP NAME: whoever performed the visit/tests
           empName = r.salesperson_name || '';
         }
 

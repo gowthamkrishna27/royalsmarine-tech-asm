@@ -1262,13 +1262,14 @@ const listHarvestedTanks = async (req, res) => {
         u.mobile as salesperson_phone,
         u.region as salesperson_region,
         c.area,
-        m.id as manager_id,
-        m.full_name as manager_name,
-        m.region as manager_region
+        COALESCE(cm.id, sm.id) as manager_id,
+        COALESCE(cm.full_name, sm.full_name) as manager_name,
+        COALESCE(cm.region, sm.region) as manager_region
       FROM ponds p
       JOIN clients c ON c.id = COALESCE(p.client_id, p.farmer_id)
       LEFT JOIN users u ON u.id = COALESCE(c.assigned_salesperson_id, p.created_by)
-      LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, u.manager_id)
+      LEFT JOIN users cm ON cm.id = c.assigned_manager_id AND cm.status = 'active' AND cm.deleted_at IS NULL
+      LEFT JOIN users sm ON sm.id = u.manager_id AND sm.status = 'active' AND sm.deleted_at IS NULL
       WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
         AND (
           p.status = 'harvested'
@@ -1727,12 +1728,13 @@ const listDealers = async (req, res) => {
         u.full_name as salesperson_name,
         u.region as salesperson_region,
         u.area as salesperson_area,
-        m.region as manager_region,
-        m.area as manager_area
+        COALESCE(cm.region, sm.region) as manager_region,
+        COALESCE(cm.area, sm.area) as manager_area
       FROM ponds p
       JOIN clients c ON c.id = COALESCE(p.client_id, p.farmer_id)
       LEFT JOIN users u ON u.id = COALESCE(c.assigned_salesperson_id, p.created_by)
-      LEFT JOIN users m ON m.id = COALESCE(c.assigned_manager_id, u.manager_id)
+      LEFT JOIN users cm ON cm.id = c.assigned_manager_id AND cm.status = 'active' AND cm.deleted_at IS NULL
+      LEFT JOIN users sm ON sm.id = u.manager_id AND sm.status = 'active' AND sm.deleted_at IS NULL
       WHERE p.dealer_name IS NOT NULL 
         AND TRIM(p.dealer_name) != ''
         AND p.deleted_at IS NULL 
