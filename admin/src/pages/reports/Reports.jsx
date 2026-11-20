@@ -379,9 +379,6 @@ export default function Reports() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            View technical reports, field breakdowns, and export consolidated records
-          </p>
         </div>
         <button
           onClick={handleExport}
@@ -401,9 +398,8 @@ export default function Reports() {
               <button
                 key={t}
                 onClick={() => { setTab(t); setPage(1); }}
-                className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-center truncate capitalize transition ${
-                  tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
+                className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-center truncate capitalize transition ${tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 {TAB_LABELS[t]}
               </button>
@@ -559,18 +555,16 @@ export default function Reports() {
                     <button
                       type="button"
                       onClick={() => setVisitChartType('pie')}
-                      className={`px-2.5 py-1 rounded-md font-medium transition ${
-                        visitChartType === 'pie' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md font-medium transition ${visitChartType === 'pie' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        }`}
                     >
                       Pie Share
                     </button>
                     <button
                       type="button"
                       onClick={() => setVisitChartType('bar')}
-                      className={`px-2.5 py-1 rounded-md font-medium transition ${
-                        visitChartType === 'bar' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md font-medium transition ${visitChartType === 'bar' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-500 hover:text-gray-900'
+                        }`}
                     >
                       Bar Trend
                     </button>
@@ -942,13 +936,12 @@ export default function Reports() {
                           </td>
                           <td className="py-2.5 text-right">
                             <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${
-                                f.status === 'completed'
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${f.status === 'completed'
                                   ? 'bg-emerald-100 text-emerald-800'
                                   : f.status === 'overdue'
                                     ? 'bg-red-100 text-red-800'
                                     : 'bg-amber-100 text-amber-800'
-                              }`}
+                                }`}
                             >
                               {f.status}
                             </span>

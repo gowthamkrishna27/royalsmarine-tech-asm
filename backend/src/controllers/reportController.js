@@ -943,14 +943,43 @@ const exportReport = async (req, res) => {
       await wb.xlsx.write(res);
       return res.end();
     } else {
-      headers = ['Followup Title', 'Farmer', 'Technical Executive', 'Date', 'Status'];
+      headers = [
+        'S. No',
+        'Due Date',
+        'Farmer Name',
+        'Phone',
+        'Village',
+        'District',
+        'Followup Title',
+        'Technical Executive',
+        'Priority',
+        'Status',
+        'Remarks / Notes'
+      ];
       filename = 'followup-report.xlsx';
+      if (targetFarmerId) {
+        const [cNameRow] = await sequelize.query('SELECT company_name FROM clients WHERE id = ?', { replacements: [targetFarmerId] });
+        if (cNameRow && cNameRow[0]?.company_name) {
+          filename = `${cNameRow[0].company_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_followup_report.xlsx`;
+        }
+      } else if (targetTechId) {
+        const [techRow] = await sequelize.query('SELECT full_name FROM users WHERE id = ?', { replacements: [targetTechId] });
+        if (techRow && techRow[0]?.full_name) {
+          filename = `${techRow[0].full_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_tech_followup_report.xlsx`;
+        }
+      } else if (asm_id) {
+        const [asmRow] = await sequelize.query('SELECT full_name FROM users WHERE id = ?', { replacements: [asm_id] });
+        if (asmRow && asmRow[0]?.full_name) {
+          filename = `${asmRow[0].full_name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_asm_followup_report.xlsx`;
+        }
+      }
+
       let where = 'f.deleted_at IS NULL';
       const fuReplacements = [];
       if (from_date) { where += ' AND f.followup_date >= ?'; fuReplacements.push(from_date); }
       if (to_date) { where += ' AND f.followup_date <= ?'; fuReplacements.push(to_date); }
       if (targetFarmerId) { where += ' AND f.client_id = ?'; fuReplacements.push(targetFarmerId); }
-      if (targetTechId) { where += ' AND f.assigned_salesperson_id = ?'; fuReplacements.push(targetTechId); }
+      if (targetTechId) { where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))'; fuReplacements.push(targetTechId, targetTechId); }
       if (asm_id) {
         where += ` AND (
           sp.manager_id = ?
@@ -977,8 +1006,8 @@ const exportReport = async (req, res) => {
         fuReplacements.push(req.user.id, req.user.id);
       } else if (req.user.role === 'sales_manager') {
         if (targetTechId) {
-          where += ' AND f.assigned_salesperson_id = ?';
-          fuReplacements.push(targetTechId);
+          where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
+          fuReplacements.push(targetTechId, targetTechId);
         } else {
           where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
           fuReplacements.push(req.user.id, req.user.id);
@@ -986,24 +1015,44 @@ const exportReport = async (req, res) => {
       }
 
       const [rows] = await sequelize.query(
-        `SELECT f.title, c.company_name, sp.full_name, f.followup_date, f.status
-         FROM followups f JOIN clients c ON f.client_id=c.id JOIN users sp ON f.assigned_salesperson_id=sp.id
-         WHERE ${where} ORDER BY f.followup_date DESC`,
+        `SELECT f.id, f.title, f.followup_date, f.priority, f.status, f.remarks, f.completion_notes,
+                COALESCE(c.company_name, c.contact_person, '—') as company_name,
+                c.mobile as farmer_mobile, c.village, c.district,
+                COALESCE(sp.full_name, '—') as salesperson_name
+         FROM followups f
+         LEFT JOIN clients c ON f.client_id = c.id
+         LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
+         LEFT JOIN users m ON sp.manager_id = m.id
+         WHERE ${where}
+         ORDER BY f.followup_date DESC, f.id DESC`,
         { replacements: fuReplacements }
       );
-      data = rows.map(r => [
-        r.title,
+      data = rows.map((r, idx) => [
+        idx + 1,
+        r.followup_date ? String(r.followup_date).slice(0, 10) : '—',
         r.company_name,
-        r.full_name,
-        r.followup_date,
-        r.status
+        r.farmer_mobile || '—',
+        r.village || '—',
+        r.district || '—',
+        r.title || '—',
+        r.salesperson_name,
+        (r.priority || 'medium').toUpperCase(),
+        (r.status || 'pending').toUpperCase(),
+        r.completion_notes || r.remarks || '—'
       ]);
     }
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Report');
     ws.addRow(headers);
-    ws.getRow(1).font = { bold: true };
+    const r1 = ws.getRow(1);
+    r1.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    r1.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF1E293B' }
+    };
+    r1.height = 24;
     data.forEach(row => ws.addRow(row));
 
     // Auto-fit column widths
@@ -1019,7 +1068,7 @@ const exportReport = async (req, res) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     await wb.xlsx.write(res);
-    res.end();
+    return res.end();
   } catch (err) {
     return sendError(res, err.message, 500);
   }

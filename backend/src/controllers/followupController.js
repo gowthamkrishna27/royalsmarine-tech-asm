@@ -119,8 +119,8 @@ const listFollowups = async (req, res) => {
               admin_user.full_name as completed_by_name,
               DATEDIFF(CURDATE(), f.followup_date) as days_overdue
        FROM followups f
-       JOIN clients c ON f.client_id = c.id
-       JOIN users sp ON f.assigned_salesperson_id = sp.id
+       LEFT JOIN clients c ON f.client_id = c.id
+       LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
        LEFT JOIN roles r ON sp.role_id = r.id
        LEFT JOIN users admin_user ON f.completed_by = admin_user.id
        WHERE ${where}
@@ -217,8 +217,8 @@ const completeFollowup = async (req, res) => {
         r.name as sp_role, r.display_name as sp_role_name,
         mgr.id as mgr_id, mgr.full_name as mgr_name, mgr.mobile as mgr_mobile
       FROM followups f
-      JOIN clients c ON f.client_id = c.id
-      JOIN users sp ON f.assigned_salesperson_id = sp.id
+      LEFT JOIN clients c ON f.client_id = c.id
+      LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
       LEFT JOIN roles r ON sp.role_id = r.id
       LEFT JOIN users mgr ON sp.manager_id = mgr.id
       WHERE f.id = ? AND f.deleted_at IS NULL LIMIT 1
@@ -328,8 +328,8 @@ const getTodayFollowups = async (req, res) => {
               sp.full_name as salesperson_name, sp.mobile as salesperson_mobile,
               r.display_name as salesperson_role_name
        FROM followups f
-       JOIN clients c ON f.client_id = c.id
-       JOIN users sp ON f.assigned_salesperson_id = sp.id
+       LEFT JOIN clients c ON f.client_id = c.id
+       LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
        LEFT JOIN roles r ON sp.role_id = r.id
        WHERE ${where} ORDER BY f.followup_time ASC`,
       { replacements }
@@ -361,8 +361,8 @@ const getDuesFollowups = async (req, res) => {
               r.display_name as salesperson_role_name,
               DATEDIFF(CURDATE(), f.followup_date) as days_due
        FROM followups f
-       JOIN clients c ON f.client_id = c.id
-       JOIN users sp ON f.assigned_salesperson_id = sp.id
+       LEFT JOIN clients c ON f.client_id = c.id
+       LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
        LEFT JOIN roles r ON sp.role_id = r.id
        WHERE ${where} ORDER BY f.followup_date DESC`,
       { replacements }
@@ -394,8 +394,8 @@ const getOverdueFollowups = async (req, res) => {
               r.display_name as salesperson_role_name,
               DATEDIFF(CURDATE(), f.followup_date) as days_overdue
        FROM followups f
-       JOIN clients c ON f.client_id = c.id
-       JOIN users sp ON f.assigned_salesperson_id = sp.id
+       LEFT JOIN clients c ON f.client_id = c.id
+       LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
        LEFT JOIN roles r ON sp.role_id = r.id
        WHERE ${where} ORDER BY f.followup_date ASC`,
       { replacements }
