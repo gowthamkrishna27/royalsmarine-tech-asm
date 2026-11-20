@@ -3,6 +3,13 @@ const logger = require('../utils/logger');
 const errorHandler = (err, req, res, next) => {
   logger.error(err.message, { stack: err.stack, url: req.url, method: req.method });
 
+  // Ensure CORS headers are preserved on error responses when origin is present
+  if (!res.headersSent && req.headers && req.headers.origin) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Vary', 'Origin');
+  }
+
   if (err.name === 'SequelizeValidationError') {
     return res.status(400).json({
       success: false,

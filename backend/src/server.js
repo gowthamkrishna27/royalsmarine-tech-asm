@@ -15,38 +15,88 @@ const API = process.env.API_PREFIX || '/api/v1';
 
 // Security & middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-const allowedOrigins = [
+
+// Parse all configured origins from environment variables (handles comma-separated lists)
+const parseOrigins = (val) => {
+  if (!val) return [];
+  return String(val)
+    .split(',')
+    .map(url => url.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+};
+
+const configuredOrigins = [
+  ...parseOrigins(process.env.FRONTEND_URL),
+  ...parseOrigins(process.env.ADMIN_URL),
+  ...parseOrigins(process.env.CLIENT_URL),
+  ...parseOrigins(process.env.ALLOWED_ORIGINS),
+  ...parseOrigins(process.env.CORS_ORIGIN),
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
   'http://localhost:3002',
   'http://127.0.0.1:3002',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
   'https://royalsmarine.vercel.app',
   'https://royalsmarine.pages.dev',
-  process.env.FRONTEND_URL,
-  process.env.ADMIN_URL,
-]
-  .filter(Boolean)
-  .map(url => url.replace(/\/+$/, ''));
+];
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true; // allow mobile apps, curl, server-to-server
+  const cleanOrigin = origin.trim().replace(/\/+$/, '');
+
+  // Wildcard configured in environment
+  if (configuredOrigins.includes('*')) return true;
+
+  // Exact match in configured origins
+  if (configuredOrigins.includes(cleanOrigin)) return true;
+
+  // Localhost / 127.0.0.1 with any port
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleanOrigin)) return true;
+
+  // Vercel deployments (*.vercel.app)
+  if (/^https?:\/\/([a-z0-9-]+\.)*vercel\.app(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+
+  // Cloudflare Pages (*.pages.dev)
+  if (/^https?:\/\/([a-z0-9-]+\.)*pages\.dev(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+
+  // Netlify deployments (*.netlify.app)
+  if (/^https?:\/\/([a-z0-9-]+\.)*netlify\.app(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+
+  // Render & Railway deployments
+  if (/^https?:\/\/([a-z0-9-]+\.)*onrender\.com(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+  if (/^https?:\/\/([a-z0-9-]+\.)*up\.railway\.app(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+
+  // Custom domains for Royals Marine & Rupa Enterprises
+  if (/^https?:\/\/([a-z0-9-]+\.)*royalsmarine\.(com|in|org|net)(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+  if (/^https?:\/\/([a-z0-9-]+\.)*rupaenterprises\.com(:[0-9]+)?$/i.test(cleanOrigin)) return true;
+
+  // Allow in development / test environments
+  if (process.env.NODE_ENV !== 'production') return true;
+
+  return false;
+};
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const cleanOrigin = origin.replace(/\/+$/, '');
-    if (
-      allowedOrigins.includes(cleanOrigin) ||
-      /\.vercel\.app$/.test(cleanOrigin) ||
-      /\.pages\.dev$/.test(cleanOrigin) ||
-      (process.env.NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin))
-    ) {
+    if (isOriginAllowed(origin)) {
       return callback(null, true);
     }
-    return callback(new Error(`Blocked by CORS policy: ${origin}`));
+    // Return false without throwing Error so Express does not crash into a 500
+    return callback(null, false);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'],
+  // Omitting hardcoded allowedHeaders lets cors dynamically reflect Access-Control-Request-Headers,
+  // preventing preflight rejections from Cache-Control, Pragma, or custom headers.
+  exposedHeaders: ['Content-Disposition', 'Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
