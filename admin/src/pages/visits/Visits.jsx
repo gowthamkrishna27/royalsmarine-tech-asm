@@ -11,6 +11,9 @@ import { MEETING_TYPES } from '../../constants';
 import { downloadBlob } from '../../hooks/useApi';
 import toast from 'react-hot-toast';
 
+const EXCLUDED_MEETING_TYPES = new Set(['cold_call', 'order_discussion']);
+const VISIT_MEETING_TYPES = MEETING_TYPES.filter((m) => !EXCLUDED_MEETING_TYPES.has(m.value));
+
 export default function Visits() {
   const [page, setPage] = useState(1);
   const [region, setRegion] = useState('');
@@ -355,7 +358,7 @@ export default function Visits() {
               }`}
           >
             <option value="">Meeting Type</option>
-            {MEETING_TYPES.map((opt) => (
+            {VISIT_MEETING_TYPES.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>

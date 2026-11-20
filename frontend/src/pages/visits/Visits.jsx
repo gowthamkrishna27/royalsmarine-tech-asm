@@ -12,6 +12,9 @@ import { MEETING_TYPES } from '../../constants';
 import { downloadBlob } from '../../hooks/useApi';
 import toast from 'react-hot-toast';
 
+const EXCLUDED_MEETING_TYPES = new Set(['cold_call', 'order_discussion']);
+const VISIT_MEETING_TYPES = MEETING_TYPES.filter((m) => !EXCLUDED_MEETING_TYPES.has(m.value));
+
 export default function Visits() {
   const [page, setPage] = useState(1);
   const [meetingType, setMeetingType] = useState('');
@@ -44,7 +47,7 @@ export default function Visits() {
       </div>
 
       <FilterBar onReset={() => { setMeetingType(''); setFromDate(''); setToDate(''); }}>
-        <SelectFilter label="Meeting Type" value={meetingType} onChange={setMeetingType} options={MEETING_TYPES} />
+        <SelectFilter label="Meeting Type" value={meetingType} onChange={setMeetingType} options={VISIT_MEETING_TYPES} />
         <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="input flex-shrink-0" placeholder="From" />
         <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="input flex-shrink-0" placeholder="To" />
       </FilterBar>
