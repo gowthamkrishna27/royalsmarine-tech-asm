@@ -2235,10 +2235,340 @@ const exportCountTanks = async (req, res) => {
   }
 };
 
+const getSeedTanksData = async (query = {}, user = {}) => {
+  const { search, region, status, farmer_id } = query;
+
+  let scopingClause = '';
+  const replacements = [];
+
+  if (user.role === 'sales_executive') {
+    scopingClause = 'AND (c.assigned_salesperson_id = ? OR (c.assigned_salesperson_id IS NULL AND c.created_by = ?))';
+    replacements.push(user.id, user.id);
+  } else if (user.role === 'sales_manager') {
+    scopingClause = 'AND (c.assigned_manager_id = ? OR c.assigned_salesperson_id = ? OR c.created_by = ? OR p.created_by = ? OR c.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    replacements.push(user.id, user.id, user.id, user.id, user.id);
+  }
+
+  let filterClause = '';
+  if (search) {
+    filterClause += ` AND (
+      p.pond_name LIKE ? OR 
+      p.tank_number LIKE ? OR 
+      c.company_name LIKE ? OR 
+      c.contact_person LIKE ? OR 
+      c.mobile LIKE ? OR 
+      c.village LIKE ? OR 
+      c.district LIKE ?
+    )`;
+    const s = `%${search.trim()}%`;
+    replacements.push(s, s, s, s, s, s, s);
+  }
+
+  if (farmer_id) {
+    filterClause += ' AND c.id = ?';
+    replacements.push(farmer_id);
+  }
+
+  const docCols = await getPondDocCols();
+  const [tanks] = await sequelize.query(`
+    SELECT
+      p.*,
+      ${pondAreaExpr(docCols, 'p')},
+      c.id as client_id,
+      c.company_name,
+      c.contact_person,
+      c.mobile as farmer_phone,
+      c.status as farmer_status,
+      c.close_reason,
+      c.village,
+      c.mandal,
+      c.district,
+      c.city,
+      c.state,
+      c.pincode,
+      c.address as farmer_address,
+      c.area,
+      u.full_name as salesperson_name,
+      u.mobile as salesperson_phone,
+      u.region as salesperson_region,
+      m.region as manager_region,
+      ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
+    FROM ponds p
+    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
+    LEFT JOIN users m ON u.manager_id = m.id
+    WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
+    ${scopingClause}
+    ${filterClause}
+    ORDER BY p.updated_at DESC
+  `, { replacements });
+
+  const processedTanks = [];
+  const allRegionsSet = new Set();
+
+  for (const tank of tanks) {
+    const rowRegion = (tank.salesperson_region || tank.manager_region || tank.district || tank.city || '').trim();
+    if (rowRegion) allRegionsSet.add(rowRegion);
+
+    // 1. Initial Stocked Seed (from stocking_quantity_lakhs)
+    let initialSeed = 0;
+    if (tank.stocking_quantity_lakhs !== undefined && tank.stocking_quantity_lakhs !== null && tank.stocking_quantity_lakhs !== '') {
+      const raw = parseFloat(tank.stocking_quantity_lakhs);
+      if (!isNaN(raw) && raw > 0) {
+        initialSeed = raw < 1000 ? Math.round(raw * 100000) : Math.round(raw);
+      }
+    }
+
+    // 2. Query visits for harvest details
+    const [visits] = await sequelize.query(`
+      SELECT 
+        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+        v.harvest_details, sp.full_name as salesperson_name
+      FROM visits v
+      LEFT JOIN users sp ON v.salesperson_id = sp.id
+      WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
+        AND v.deleted_at IS NULL
+      ORDER BY v.visit_date DESC, v.created_at DESC
+    `, {
+      replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
+    });
+
+    let finalHarvest = null;
+    const partialHarvests = [];
+    let totalPartialSeedHarvested = 0;
+
+    for (const v of visits) {
+      let hd = v.harvest_details;
+      try { if (typeof hd === 'string') hd = JSON.parse(hd); } catch(e){}
+      if (!hd || typeof hd !== 'object') continue;
+
+      if (!finalHarvest && hd.final_harvest && typeof hd.final_harvest === 'object') {
+        const hasFinal = Object.values(hd.final_harvest).some(val => val !== null && val !== undefined && String(val).trim() !== '');
+        if (hasFinal) {
+          finalHarvest = {
+            ...hd.final_harvest,
+            date: hd.final_harvest.date || v.visit_date,
+            visit_id: v.id,
+          };
+        }
+      }
+
+      const partials = Array.isArray(hd.partial_harvests)
+        ? hd.partial_harvests
+        : (hd.partial_harvest && typeof hd.partial_harvest === 'object' ? [hd.partial_harvest] : []);
+
+      for (const ph of partials) {
+        if (!ph) continue;
+        const qty = parseFloat(ph.harvested_quantity || ph.harvested_biomass || ph.biomass || 0) || 0;
+        const count = parseFloat(ph.count || 0) || 0;
+        const abw = parseFloat(ph.abw || 0) || 0;
+        let seedReduced = 0;
+        if (qty > 0 && count > 0) {
+          seedReduced = Math.round(qty * count);
+        } else if (qty > 0 && abw > 0) {
+          seedReduced = Math.round((qty * 1000) / abw);
+        } else if (ph.seed_harvested) {
+          seedReduced = Math.round(parseFloat(ph.seed_harvested) || 0);
+        }
+
+        totalPartialSeedHarvested += seedReduced;
+        partialHarvests.push({
+          ...ph,
+          seed_reduced: seedReduced,
+          date: ph.date || v.visit_date,
+          visit_id: v.id,
+        });
+      }
+    }
+
+    // 3. Status checks:
+    // After completion of any partial harvest, final harvest, or if farmer is closed, seed is reduced
+    const isFarmerClosed = ['forcely_closed', 'forced_closed', 'closed', 'inactive'].includes(tank.farmer_status);
+    const isTankMarkedHarvested = tank.status === 'harvested' || tank.status === 'inactive';
+    const hasFinalHarvest = !!finalHarvest || isTankMarkedHarvested;
+
+    let currentSeed = initialSeed;
+    let seedStatus = 'Active'; // 'Active' | 'Partially Harvested' | 'Fully Harvested' | 'Farmer Closed' | 'No Stocking'
+    let reductionReason = 'None';
+    let reducedSeed = 0;
+
+    if (isFarmerClosed) {
+      currentSeed = 0;
+      reducedSeed = initialSeed;
+      seedStatus = 'Farmer Closed';
+      reductionReason = `Farmer closed (${(tank.farmer_status || '').replace('_', ' ')})`;
+    } else if (hasFinalHarvest) {
+      currentSeed = 0;
+      reducedSeed = initialSeed;
+      seedStatus = 'Fully Harvested';
+      reductionReason = finalHarvest ? `Final harvest completed on ${finalHarvest.date || 'N/A'}` : 'Tank marked harvested';
+    } else if (totalPartialSeedHarvested > 0) {
+      currentSeed = Math.max(0, initialSeed - totalPartialSeedHarvested);
+      reducedSeed = Math.min(initialSeed, totalPartialSeedHarvested);
+      if (currentSeed === 0 && initialSeed > 0) {
+        seedStatus = 'Fully Harvested';
+        reductionReason = `Harvested ${totalPartialSeedHarvested.toLocaleString()} seed across ${partialHarvests.length} partial harvest(s)`;
+      } else {
+        seedStatus = 'Partially Harvested';
+        reductionReason = `Harvested ${totalPartialSeedHarvested.toLocaleString()} seed across ${partialHarvests.length} partial harvest(s)`;
+      }
+    } else if (initialSeed === 0) {
+      seedStatus = 'No Stocking';
+      reductionReason = 'No initial seed recorded';
+    }
+
+    processedTanks.push({
+      id: tank.id,
+      client_id: tank.client_id,
+      company_name: tank.company_name,
+      contact_person: tank.contact_person,
+      farmer_phone: tank.farmer_phone,
+      farmer_status: tank.farmer_status,
+      close_reason: tank.close_reason,
+      region: rowRegion,
+      village: tank.village,
+      mandal: tank.mandal,
+      district: tank.district,
+      city: tank.city,
+      salesperson_name: tank.salesperson_name,
+      tank_number: tank.tank_number || tank.pond_name || `Tank #${tank.id}`,
+      pond_name: tank.pond_name,
+      area_acres: parseFloat(tank.area_acres || 0) || 0,
+      culture_type: tank.culture_type || 'Shrimp',
+      seed_date: tank.seed_date ? String(tank.seed_date).slice(0, 10) : null,
+      doc: tank.current_doc || tank.doc || null,
+      stocking_quantity_lakhs: tank.stocking_quantity_lakhs,
+      initial_seed: initialSeed,
+      reduced_seed: reducedSeed,
+      current_seed: currentSeed,
+      seed_status: seedStatus,
+      reduction_reason: reductionReason,
+      partial_harvests_count: partialHarvests.length,
+      partial_harvests: partialHarvests,
+      final_harvest: finalHarvest,
+      status: tank.status,
+      updated_at: tank.updated_at,
+    });
+  }
+
+  let filtered = processedTanks;
+
+  if (region && String(region).trim()) {
+    const rLower = String(region).trim().toLowerCase();
+    filtered = filtered.filter(t => (t.region || '').toLowerCase() === rLower);
+  }
+
+  if (status && String(status).trim()) {
+    const sLower = String(status).trim().toLowerCase();
+    if (sLower === 'active') {
+      filtered = filtered.filter(t => t.current_seed > 0);
+    } else if (sLower === 'partial') {
+      filtered = filtered.filter(t => t.seed_status === 'Partially Harvested');
+    } else if (sLower === 'harvested') {
+      filtered = filtered.filter(t => t.seed_status === 'Fully Harvested');
+    } else if (sLower === 'closed') {
+      filtered = filtered.filter(t => t.seed_status === 'Farmer Closed');
+    } else if (sLower === 'zero') {
+      filtered = filtered.filter(t => t.current_seed === 0);
+    }
+  }
+
+  const summary = {
+    total_tanks: processedTanks.length,
+    active_tanks: processedTanks.filter(t => t.current_seed > 0).length,
+    harvested_tanks: processedTanks.filter(t => t.seed_status === 'Fully Harvested').length,
+    closed_farmer_tanks: processedTanks.filter(t => t.seed_status === 'Farmer Closed').length,
+    total_initial_seed: processedTanks.reduce((sum, t) => sum + (t.initial_seed || 0), 0),
+    total_current_seed: processedTanks.reduce((sum, t) => sum + (t.current_seed || 0), 0),
+    total_reduced_seed: processedTanks.reduce((sum, t) => sum + (t.reduced_seed || 0), 0),
+  };
+
+  return {
+    tanks: filtered,
+    available_regions: Array.from(allRegionsSet).filter(Boolean).sort(),
+    summary,
+  };
+};
+
+const listSeedTanks = async (req, res) => {
+  try {
+    const data = await getSeedTanksData(req.query, req.user);
+    return sendSuccess(res, 'Seed tanks fetched successfully', data);
+  } catch (err) {
+    console.error('Error fetching Seed tanks:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
+const exportSeedTanks = async (req, res) => {
+  try {
+    const data = await getSeedTanksData(req.query, req.user);
+    const tanks = data.tanks || [];
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Tank Seed Report');
+
+    ws.columns = [
+      { header: 'Farmer / Company', key: 'company_name', width: 25 },
+      { header: 'Contact Person', key: 'contact_person', width: 20 },
+      { header: 'Mobile', key: 'farmer_phone', width: 16 },
+      { header: 'Region', key: 'region', width: 18 },
+      { header: 'Village / Town', key: 'village', width: 18 },
+      { header: 'Technical Executive', key: 'salesperson_name', width: 22 },
+      { header: 'Tank Name / No.', key: 'tank_number', width: 20 },
+      { header: 'Area (Acres)', key: 'area_acres', width: 14 },
+      { header: 'Seed Date', key: 'seed_date', width: 14 },
+      { header: 'DOC', key: 'doc', width: 10 },
+      { header: 'Initial Stocked Seed', key: 'initial_seed', width: 20 },
+      { header: 'Reduced Seed', key: 'reduced_seed', width: 18 },
+      { header: 'Current Active Seed', key: 'current_seed', width: 20 },
+      { header: 'Seed Status', key: 'seed_status', width: 18 },
+      { header: 'Reduction Reason', key: 'reduction_reason', width: 35 },
+    ];
+
+    ws.getRow(1).font = { bold: true };
+    ws.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFD1FAE5' }
+    };
+
+    tanks.forEach(t => {
+      ws.addRow({
+        company_name: t.company_name || '',
+        contact_person: t.contact_person || '',
+        farmer_phone: t.farmer_phone || '',
+        region: t.region || '',
+        village: t.village || '',
+        salesperson_name: t.salesperson_name || '',
+        tank_number: t.tank_number,
+        area_acres: Number(t.area_acres || 0).toFixed(2),
+        seed_date: t.seed_date || '—',
+        doc: t.doc || '—',
+        initial_seed: Number(t.initial_seed || 0).toLocaleString(),
+        reduced_seed: Number(t.reduced_seed || 0).toLocaleString(),
+        current_seed: Number(t.current_seed || 0).toLocaleString(),
+        seed_status: t.seed_status,
+        reduction_reason: t.reduction_reason || '',
+      });
+    });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=tank-seed-report.xlsx');
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('Error exporting Seed report:', err);
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
   listDealers,
   listCountTanks,
   exportCountTanks,
+  listSeedTanks,
+  exportSeedTanks,
 
   listFcrTanks,
   exportFcrTanks,

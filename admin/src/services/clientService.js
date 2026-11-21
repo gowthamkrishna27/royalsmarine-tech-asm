@@ -17,9 +17,11 @@ export const clientService = {
   getFcrTanks: (params) => api.get('/clients/fcr-tanks', { params }),
   getCountTanks: (params) => api.get('/clients/count-tanks', { params }),
   getHarvestedTanks: (params) => api.get('/clients/harvested-tanks', { params }),
+  getSeedTanks: (params) => api.get('/clients/seed-tanks', { params }),
   getDealers: (params) => api.get('/clients/dealers', { params }),
   exportFcr: (params) => api.get('/clients/fcr-export', { params, responseType: 'blob' }),
   exportCount: (params) => api.get('/clients/count-export', { params, responseType: 'blob' }),
+  exportSeed: (params) => api.get('/clients/seed-export', { params, responseType: 'blob' }),
 };
 
 export default clientService;

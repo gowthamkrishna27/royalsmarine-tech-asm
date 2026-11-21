@@ -26,6 +26,7 @@ import Reports from './pages/reports/Reports';
 import HarvestedTanks from './pages/tanks/HarvestedTanks';
 import FcrTracker from './pages/fcr/FcrTracker';
 import CountTracker from './pages/count/CountTracker';
+import SeedTracker from './pages/seed/SeedTracker';
 import Dealers from './pages/dealers/Dealers';
 import ProfilePage from './pages/profile/Profile';
 
@@ -94,6 +95,7 @@ function AppRouter() {
         <Route path="harvested-tanks" element={<HarvestedTanks />} />
         <Route path="fcr" element={<FcrTracker />} />
         <Route path="count" element={<CountTracker />} />
+        <Route path="seed-tracker" element={<SeedTracker />} />
         <Route path="dealers" element={<Dealers />} />
         <Route path="brands" element={<Brands />} />
         <Route path="billing" element={<BillingImport />} />

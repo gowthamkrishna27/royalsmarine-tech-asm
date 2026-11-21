@@ -1059,7 +1059,24 @@ function ManagementDashboard({ data }) {
   const dealersList = data.dealers_list || [];
 
   return (
-    <div className="fade-in space-y-6">
+    <div className="fade-in space-y-4">
+      {/* Top right corner action above KPI cards */}
+      <div className="flex items-center justify-end">
+        <Link
+          to="/seed-tracker"
+          title="Total Seed Tracker"
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/90 shadow-xs transition active:scale-95 shrink-0"
+        >
+          {/* Subtle blinking / pulsing dot */}
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+          </span>
+          <CircleStackIcon className="w-3.5 h-3.5 text-emerald-600 transition-transform group-hover:scale-110" />
+          <span>Seed Tracker</span>
+        </Link>
+      </div>
+
       {/* Minimal Stat Cards Grid (Clean 3-column rows) */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Row 1: Area Managers, Field Executives, Dealers (Light Blue) */}
