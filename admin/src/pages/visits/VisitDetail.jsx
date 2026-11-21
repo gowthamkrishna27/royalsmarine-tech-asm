@@ -38,12 +38,24 @@ export default function VisitDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const { data: visit, isLoading } = useQuery({
+  const { data: visit, isLoading, isError, error } = useQuery({
     queryKey: ['visit', id],
     queryFn: () => visitApi.get(id).then((r) => r.data.data),
   });
 
   if (isLoading) return <PageSpinner />;
+  if (isError) {
+    return (
+      <div className="card p-8 text-center space-y-3">
+        <ExclamationTriangleIcon className="w-12 h-12 text-red-500 mx-auto" />
+        <h2 className="text-base font-semibold text-gray-900">Failed to Load Visit Log</h2>
+        <p className="text-sm text-gray-500">{error?.response?.data?.message || error?.message || 'An error occurred while loading visit details.'}</p>
+        <button type="button" onClick={() => navigate('/visits')} className="btn-secondary btn-sm inline-flex items-center gap-1.5">
+          <ArrowLeftIcon className="w-4 h-4" /> Back to Visit Logs
+        </button>
+      </div>
+    );
+  }
   if (!visit) {
     return (
       <div className="card p-8 text-center space-y-3">
@@ -57,12 +69,13 @@ export default function VisitDetail() {
     );
   }
 
-  const wq = visit.water_quality || {};
-  const fd = visit.feeding_details || {};
-  const meds = Array.isArray(visit.medication_details) ? visit.medication_details : [];
-  const hd = visit.harvest_details || {};
+  const wq = visit?.water_quality || {};
+  const fd = visit?.feeding_details || {};
+  const meds = Array.isArray(visit?.medication_details) ? visit.medication_details : [];
+  const hd = visit?.harvest_details || {};
   const partialHarvests = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
   const finalHarvest = hd.final_harvest || null;
+  const derived = hd.derived || null;
 
   const meetingTypeLabel = MEETING_TYPES.find((t) => t.value === visit.meeting_type)?.label || visit.meeting_type;
 
@@ -453,38 +466,40 @@ export default function VisitDetail() {
             {finalHarvest && Object.keys(finalHarvest).some((k) => finalHarvest[k]) && (
               <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl text-xs">
                 <p className="font-bold text-amber-900 mb-2">Final Harvest</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-gray-700">
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2 text-gray-700">
                   <div>Date: <strong className="text-gray-900">{finalHarvest.date || '—'}</strong></div>
                   <div>DOC: <strong className="text-gray-900">{finalHarvest.doc || '—'}</strong></div>
                   <div>Count: <strong className="text-gray-900 font-mono font-bold">{finalHarvest.count || '—'}</strong></div>
                   <div>ABW: <strong className="text-gray-900">{finalHarvest.abw || '—'} g</strong></div>
                   <div>Quantity: <strong className="text-gray-900">{finalHarvest.harvested_quantity ? `${finalHarvest.harvested_quantity} kg` : '—'}</strong></div>
                   <div>Biomass: <strong className="text-gray-900 font-bold">{finalHarvest.harvested_biomass || '—'} kg</strong></div>
+                  <div>Total Feed: <strong className="text-gray-900">{finalHarvest.total_feed ? `${finalHarvest.total_feed} kg` : '—'}</strong></div>
+                  <div>FCR: <strong className="text-emerald-700 font-bold font-mono">{finalHarvest.fcr || '—'}</strong></div>
                 </div>
               </div>
             )}
 
-            {harvest.derived && (
+            {derived && (
               <div className="p-3 bg-white border border-gray-200 rounded-xl text-xs grid grid-cols-2 sm:grid-cols-5 gap-3 shadow-xs">
                 <div>
                   <span className="text-gray-400 text-[10px] block">Total Biomass</span>
-                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.avgBiomass || harvest.derived.total_biomass || '—'} kg</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{derived.avgBiomass || derived.total_biomass || '—'} kg</span>
                 </div>
                 <div>
                   <span className="text-gray-400 text-[10px] block">Total Feed</span>
-                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.totalFeed || (harvest.derived.total_feed ? `${harvest.derived.total_feed} kg` : '—')}</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{derived.totalFeed || (derived.total_feed ? `${derived.total_feed} kg` : '—')}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 text-[10px] block">FCR</span>
-                  <span className="font-bold text-emerald-700 font-mono text-sm">{harvest.derived.fcr || '—'}</span>
+                  <span className="font-bold text-emerald-700 font-mono text-sm">{derived.fcr || '—'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 text-[10px] block">Total Count</span>
-                  <span className="font-bold text-blue-700 font-mono text-sm">{harvest.derived.totalCount || finalHarvest.count || '—'}</span>
+                  <span className="font-bold text-blue-700 font-mono text-sm">{derived.totalCount || finalHarvest?.count || '—'}</span>
                 </div>
                 <div>
                   <span className="text-gray-400 text-[10px] block">Survival</span>
-                  <span className="font-bold text-gray-900 font-mono text-sm">{harvest.derived.survival || harvest.derived.survival_percentage || '—'}</span>
+                  <span className="font-bold text-gray-900 font-mono text-sm">{derived.survival || derived.survival_percentage || '—'}</span>
                 </div>
               </div>
             )}

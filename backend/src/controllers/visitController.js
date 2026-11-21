@@ -107,8 +107,8 @@ const listVisits = async (req, res) => {
               c.company_name, c.contact_person, c.city,
               sp.full_name as salesperson_name
        FROM visits v
-       JOIN clients c ON v.client_id = c.id
-       JOIN users sp ON v.salesperson_id = sp.id
+       LEFT JOIN clients c ON v.client_id = c.id
+       LEFT JOIN users sp ON v.salesperson_id = sp.id
        WHERE ${where}
        ORDER BY v.visit_date DESC, v.visit_time DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
@@ -316,8 +316,8 @@ const getVisit = async (req, res) => {
               TIMESTAMPDIFF(SECOND, v.created_at, NOW()) as seconds_since_creation,
               sp.full_name as salesperson_name, ab.full_name as approved_by_name
        FROM visits v
-       JOIN clients c ON v.client_id = c.id
-       JOIN users sp ON v.salesperson_id = sp.id
+       LEFT JOIN clients c ON v.client_id = c.id
+       LEFT JOIN users sp ON v.salesperson_id = sp.id
        LEFT JOIN users ab ON v.approved_by = ab.id
        WHERE v.id = ? AND v.deleted_at IS NULL LIMIT 1`,
       { replacements: [req.params.id] }
@@ -353,15 +353,28 @@ const getVisit = async (req, res) => {
       }
     }
 
-    const [attachments] = await sequelize.query(
-      'SELECT id, original_name, file_type, file_size, created_at FROM visit_attachments WHERE visit_id = ?',
-      { replacements: [req.params.id] }
-    );
+    let attachments = [];
+    try {
+      const [att] = await sequelize.query(
+        'SELECT id, original_name, file_type, file_size, created_at FROM visit_attachments WHERE visit_id = ?',
+        { replacements: [req.params.id] }
+      );
+      attachments = att || [];
+    } catch (e) {
+      // Table might be absent or empty, don't crash
+      attachments = [];
+    }
 
     const safeParse = (val) => {
       if (!val) return null;
-      if (typeof val === 'object') return val;
-      try { return JSON.parse(val); } catch { return val; }
+      let parsed = val;
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch { return parsed; }
+      }
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch {}
+      }
+      return parsed;
     };
     visit.water_quality = safeParse(visit.water_quality);
     visit.feeding_details = safeParse(visit.feeding_details);
@@ -631,8 +644,8 @@ const exportVisits = async (req, res) => {
       `SELECT v.visit_date, v.visit_time, sp.full_name as salesperson, c.company_name, c.city,
               v.meeting_type, v.person_met, v.visit_outcome, v.approval_status, v.next_followup_date
        FROM visits v
-       JOIN clients c ON v.client_id = c.id
-       JOIN users sp ON v.salesperson_id = sp.id
+       LEFT JOIN clients c ON v.client_id = c.id
+       LEFT JOIN users sp ON v.salesperson_id = sp.id
        WHERE ${where} ORDER BY v.visit_date DESC`,
       { replacements }
     );
