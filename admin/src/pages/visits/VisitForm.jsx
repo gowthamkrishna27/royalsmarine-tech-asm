@@ -383,9 +383,9 @@ export default function VisitForm() {
     prevClientIdRef.current = clientId;
   }, [clientId, isEdit, setValue]);
 
-  // Auto-seed first new partial harvest when partial harvest is active and empty
+  // Auto-seed first new partial harvest ONLY when meeting_type is specifically 'partial_harvest'
   useEffect(() => {
-    if (showPartialHarvest && !isEdit && partialHarvests.length === 0) {
+    if (meetingType === 'partial_harvest' && !isEdit && partialHarvests.length === 0) {
       setPartialHarvests([
         {
           harvest_no: previousPartialHarvests.length + 1,
@@ -399,7 +399,7 @@ export default function VisitForm() {
         }
       ]);
     }
-  }, [showPartialHarvest, isEdit, previousPartialHarvests.length, visitDate, waterQuality.doc]);
+  }, [meetingType, isEdit, previousPartialHarvests.length, visitDate, waterQuality.doc]);
 
   // Keep harvest_no aligned when previous harvests change
   useEffect(() => {
@@ -684,15 +684,32 @@ export default function VisitForm() {
       }
     }
 
+    // Filter active partial harvests that actually have input entered
+    const activePartialHarvests = partialHarvests.filter(ph => {
+      return ph && (
+        String(ph.count || '').trim() !== '' ||
+        String(ph.harvested_quantity || '').trim() !== '' ||
+        String(ph.harvested_biomass || '').trim() !== '' ||
+        String(ph.abw || '').trim() !== '' ||
+        String(ph.remarks || '').trim() !== ''
+      );
+    });
+
+    const hasFinalInput = Boolean(
+      finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
+      finalHarvest.harvested_quantity || finalHarvest.harvested_biomass ||
+      finalHarvest.total_feed || finalHarvest.fcr
+    );
+
     // Harvest details validations (separated for partial_harvest, final_harvest, and harvest_details)
     if (meetingType === 'partial_harvest') {
-      if (partialHarvests.length === 0) {
-        toast.error('Please add at least one partial harvest entry');
+      if (activePartialHarvests.length === 0) {
+        toast.error('Please add at least one partial harvest entry with Count');
         setLoading(false);
         return;
       }
-      for (let i = 0; i < partialHarvests.length; i++) {
-        const ph = partialHarvests[i];
+      for (let i = 0; i < activePartialHarvests.length; i++) {
+        const ph = activePartialHarvests[i];
         if (!ph.count || String(ph.count).trim() === '') {
           toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
           setLoading(false);
@@ -705,48 +722,26 @@ export default function VisitForm() {
         setLoading(false);
         return;
       }
-    } else if (meetingType === 'harvest_details') {
-      const hasFinalInput = Boolean(
-        finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
-        finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
-      );
-      if (partialHarvests.length === 0 && !hasFinalInput) {
+    } else if (showHarvest) {
+      if (activePartialHarvests.length === 0 && !hasFinalInput) {
         toast.error('Please enter harvest details with a mandatory Count');
         setLoading(false);
         return;
       }
-      for (let i = 0; i < partialHarvests.length; i++) {
-        const ph = partialHarvests[i];
+      for (let i = 0; i < activePartialHarvests.length; i++) {
+        const ph = activePartialHarvests[i];
         if (!ph.count || String(ph.count).trim() === '') {
           toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
           setLoading(false);
           return;
         }
       }
-      if (hasFinalInput || partialHarvests.length === 0) {
+      if (hasFinalInput || activePartialHarvests.length === 0) {
         if (!finalHarvest.count || String(finalHarvest.count).trim() === '') {
           toast.error('Count is mandatory for Final Harvest');
           setLoading(false);
           return;
         }
-      }
-    } else if (showHarvest) {
-      for (let i = 0; i < partialHarvests.length; i++) {
-        const ph = partialHarvests[i];
-        if (!ph.count || String(ph.count).trim() === '') {
-          toast.error(`Count is mandatory for Partial Harvest #${ph.harvest_no || (previousPartialHarvests.length + i + 1)}`);
-          setLoading(false);
-          return;
-        }
-      }
-      const hasFinalInput = Boolean(
-        finalHarvest.count || finalHarvest.date || finalHarvest.abw ||
-        finalHarvest.harvested_quantity || finalHarvest.harvested_biomass
-      );
-      if (hasFinalInput && (!finalHarvest.count || String(finalHarvest.count).trim() === '')) {
-        toast.error('Count is mandatory for Final Harvest');
-        setLoading(false);
-        return;
       }
     }
 
@@ -777,11 +772,13 @@ export default function VisitForm() {
       medication_details: showMedication ? medications : null,
       disease_details: showDisease ? diseaseDetails : null,
       harvest_details: showHarvest ? {
-        partial_harvests: showPartialHarvest ? partialHarvests.map((ph, idx) => ({
-          ...ph,
-          harvest_no: ph.harvest_no || (previousPartialHarvests.length + idx + 1),
-        })) : [],
-        final_harvest: showFinalHarvest ? {
+        partial_harvests: (meetingType !== 'final_harvest' && activePartialHarvests.length > 0)
+          ? activePartialHarvests.map((ph, idx) => ({
+              ...ph,
+              harvest_no: ph.harvest_no || (previousPartialHarvests.length + idx + 1),
+            }))
+          : [],
+        final_harvest: (meetingType !== 'partial_harvest' && (hasFinalInput || finalHarvest.count)) ? {
           ...finalHarvest,
           total_feed: finalHarvest.total_feed || (harvestDerived.totalFeed !== '—' ? String(harvestDerived.totalFeed).replace(/kg/i, '').trim() : '') || feedingDetails.cumulative_feed || '',
           fcr: finalHarvest.fcr || (harvestDerived.fcr !== '—' ? harvestDerived.fcr : '') || feedingDetails.fcr || '',
@@ -878,6 +875,8 @@ export default function VisitForm() {
                   <option value="feeding_details">Feeding Details</option>
                   <option value="medication_details">Medication & Treatments</option>
                   <option value="disease">Disease</option>
+                  <option value="partial_harvest">Partial Harvest</option>
+                  <option value="final_harvest">Final Harvest</option>
                   <option value="harvest_details">Harvest Details</option>
                   <option value="all">All Details (Full Inspection)</option>
                 </select>

@@ -186,7 +186,8 @@ const createVisit = async (req, res) => {
     // Harvest details validations (separated for partial_harvest, final_harvest, and harvest_details)
     if (meeting_type === 'partial_harvest') {
       const hd = harvest_details || {};
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       if (partials.length === 0) {
         return sendError(res, 'Please provide at least one partial harvest entry with Count.', 400);
       }
@@ -203,7 +204,8 @@ const createVisit = async (req, res) => {
       }
     } else if (meeting_type === 'harvest_details') {
       const hd = harvest_details || {};
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       const finalH = hd.final_harvest || {};
       const hasFinalData = Object.values(finalH).some(val => val !== null && val !== undefined && String(val).trim() !== '');
 
@@ -224,7 +226,8 @@ const createVisit = async (req, res) => {
       }
     } else if (harvest_details) {
       const hd = harvest_details;
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       const finalH = hd.final_harvest || {};
       const hasFinalData = Object.values(finalH).some(val => val !== null && val !== undefined && String(val).trim() !== '');
 
@@ -438,7 +441,8 @@ const updateVisit = async (req, res) => {
 
     if (meeting_type === 'partial_harvest' && harvest_details !== undefined) {
       const hd = harvest_details || {};
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       if (partials.length === 0) {
         return sendError(res, 'Please provide at least one partial harvest entry with Count.', 400);
       }
@@ -455,7 +459,8 @@ const updateVisit = async (req, res) => {
       }
     } else if (meeting_type === 'harvest_details' && harvest_details !== undefined) {
       const hd = harvest_details || {};
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       const finalH = hd.final_harvest || {};
       const hasFinalData = Object.values(finalH).some(val => val !== null && val !== undefined && String(val).trim() !== '');
       if (partials.length === 0 && !hasFinalData) {
@@ -473,7 +478,8 @@ const updateVisit = async (req, res) => {
       }
     } else if (harvest_details) {
       const hd = harvest_details;
-      const partials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const rawPartials = Array.isArray(hd.partial_harvests) ? hd.partial_harvests : [];
+      const partials = rawPartials.filter(p => p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks));
       const finalH = hd.final_harvest || {};
       const hasFinalData = Object.values(finalH).some(val => val !== null && val !== undefined && String(val).trim() !== '');
       for (let i = 0; i < partials.length; i++) {
