@@ -141,7 +141,7 @@ const billingReport = async (req, res) => {
 };
 
 const exportReport = async (req, res) => {
-  const { type, from_date, to_date, region, asm_id, technician_id, farmer_id, client_id, meeting_type } = req.query;
+  const { type, from_date, to_date, region, asm_id, technician_id, farmer_id, client_id, meeting_type, district } = req.query;
   const targetFarmerId = farmer_id || client_id;
 
   try {
@@ -155,6 +155,11 @@ const exportReport = async (req, res) => {
     if (meeting_type) { baseWhere += ' AND v.meeting_type = ?'; replacements.push(meeting_type); }
 
     const targetTechId = technician_id || req.query.salesperson_id;
+    const targetDistrict = district || req.query.district;
+    if (targetDistrict && String(targetDistrict).trim()) {
+      baseWhere += ' AND LOWER(TRIM(COALESCE(c.district, \'\'))) = LOWER(TRIM(?))';
+      replacements.push(String(targetDistrict).trim());
+    }
 
     if (region && String(region).trim()) {
       const reg = String(region).trim();
