@@ -5,8 +5,6 @@ import Spinner, { PageSpinner } from '../../components/common/Spinner';
 import {
   MagnifyingGlassIcon,
   XMarkIcon,
-  FunnelIcon,
-  Square3Stack3DIcon,
   MapPinIcon,
   CalendarDaysIcon,
   UserGroupIcon,
@@ -33,7 +31,6 @@ export default function MapPage() {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersLayerRef = useRef(null);
-  const filterDropdownRef = useRef(null);
   const searchContainerRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const markerMapRef = useRef({});
@@ -46,9 +43,7 @@ export default function MapPage() {
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [farmerId, setFarmerId] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
-  const [mapMode, setMapMode] = useState('satellite'); // Satellite view by default
-  const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [mapMode] = useState('satellite'); // Satellite view by default
   const [isLeafletReady, setIsLeafletReady] = useState(Boolean(typeof window !== 'undefined' && window.L));
 
   // Real-time geocoding & place search state
@@ -56,23 +51,6 @@ export default function MapPage() {
   const [isGeoSearching, setIsGeoSearching] = useState(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
-
-  // Close filter dropdown on click outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target)) {
-        setShowFilterMenu(false);
-      }
-    }
-    if (showFilterMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('touchstart', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('touchstart', handleClickOutside);
-    };
-  }, [showFilterMenu]);
 
   // Close search dropdown on click outside
   useEffect(() => {
@@ -475,7 +453,6 @@ export default function MapPage() {
         if (item.type === 'farmer' && String(item.rawId) !== String(farmerId)) return false;
         if (item.type === 'pond' && String(item.clientId) !== String(farmerId)) return false;
       }
-      if (typeFilter && item.type !== typeFilter) return false;
       if (search.trim() && !directCoords) {
         const q = search.toLowerCase();
         const matchesName = item.name?.toLowerCase().includes(q);
@@ -486,7 +463,7 @@ export default function MapPage() {
       }
       return true;
     });
-  }, [items, farmerId, typeFilter, search, directCoords]);
+  }, [items, farmerId, search, directCoords]);
 
   // Init map
   useEffect(() => {
@@ -1079,81 +1056,6 @@ export default function MapPage() {
               </button>
             )}
           </div>
-
-          {/* Collapsed Filter Dropdown */}
-          <div className="relative" ref={filterDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setShowFilterMenu((prev) => !prev)}
-              className={`h-10 px-3 flex-shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
-                typeFilter
-                  ? 'border-blue-500 text-blue-600 bg-blue-50/90'
-                  : 'border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
-              }`}
-              title="Filter locations"
-            >
-              <FunnelIcon className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {typeFilter ? (typeFilter === 'farmer' ? 'Farmers' : 'Ponds') : 'Filter'}
-              </span>
-              {typeFilter && (
-                <span className="w-2 h-2 rounded-full bg-blue-600" />
-              )}
-            </button>
-
-            {/* Filter Menu Popover */}
-            {showFilterMenu && (
-              <div className="absolute top-full mt-2 right-0 w-48 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-xl rounded-xl p-1.5 z-20 space-y-1 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2.5 py-1 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                  Filter By Type
-                </div>
-                {[
-                  { id: '', label: 'All Locations', count: items.length },
-                  { id: 'farmer', label: 'Farmers', count: items.filter((i) => i.type === 'farmer').length },
-                  { id: 'pond', label: 'Ponds', count: items.filter((i) => i.type === 'pond').length },
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => {
-                      setTypeFilter(opt.id);
-                      setShowFilterMenu(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-lg font-medium transition ${
-                      typeFilter === opt.id
-                        ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    <span
-                      className={`text-[11px] px-1.5 py-0.5 rounded-full ${
-                        typeFilter === opt.id
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {opt.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Map Layer Switcher (Satellite & Roads) */}
-          <button
-            type="button"
-            title={mapMode === 'satellite' ? 'Map Layer: Satellite (Click to switch to Roads)' : 'Map Layer: Roads (Click to switch to Satellite)'}
-            onClick={() => setMapMode((prev) => (prev === 'street' ? 'satellite' : 'street'))}
-            className={`w-10 h-10 flex-shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
-              mapMode === 'satellite'
-                ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/20'
-                : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
-            }`}
-          >
-            <Square3Stack3DIcon className="w-5 h-5" />
-          </button>
 
           {/* My Location GPS Button */}
           <button
