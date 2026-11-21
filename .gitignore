@@ -9,6 +9,8 @@ node_modules/
 !**/.env.example
 
 # Build output
+dist/
+build/
 frontend/dist/
 frontend/build/
 admin/dist/
