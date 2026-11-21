@@ -224,45 +224,16 @@ export default function TechnicianReports() {
 
   return (
     <div className="space-y-3 max-w-5xl mx-auto pb-6">
-      {/* Header with Title (Tabs & count visible for ASM) */}
+      {/* Header with Title */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 border-b border-gray-200 pb-2">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Reports</h1>
-          {isASM && (
-            <p className="text-xs text-gray-500">
-              {activeTab === 'visits'
-                ? `${visitsResponse?.pagination?.total ?? visits.length} visit records`
-                : `${followupsResponse?.pagination?.total ?? followups.length} follow-up records`}
+          {!farmerId && (
+            <p className="text-xs text-gray-500 mt-0.5">
+              {visitsResponse?.pagination?.total ?? visits.length} visit records
             </p>
           )}
         </div>
-
-        {isASM && (
-          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg w-full sm:w-fit">
-            <button
-              type="button"
-              onClick={() => handleTabChange('visits')}
-              className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-semibold rounded-md transition ${
-                activeTab === 'visits'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Visits
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('followups')}
-              className={`flex-1 sm:flex-initial px-4 py-1.5 text-xs font-semibold rounded-md transition ${
-                activeTab === 'followups'
-                  ? 'bg-white text-gray-900 shadow-xs'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Follow-ups
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Filters */}
@@ -400,17 +371,6 @@ export default function TechnicianReports() {
             >
               Visits
             </button>
-
-            {isASM && (
-              <button
-                type="button"
-                onClick={() => handleDownload('followups')}
-                disabled={downloading}
-                className="px-3 py-1.5 text-xs font-medium border border-gray-300 rounded bg-white text-gray-900 hover:bg-gray-50 disabled:opacity-50 transition"
-              >
-                Follow-ups
-              </button>
-            )}
           </div>
 
           {hasActiveFilters && (
