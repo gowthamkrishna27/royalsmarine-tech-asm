@@ -405,21 +405,42 @@ const getClient = async (req, res) => {
 
   try {
     const docCols = await getPondDocCols();
+    const pondWhere = docCols.hasFarmerId ? '(client_id = ? OR farmer_id = ?)' : 'client_id = ?';
+    const pondReplacements = docCols.hasFarmerId ? [req.params.id, req.params.id] : [req.params.id];
     const [ponds] = await sequelize.query(
       `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
-       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
-      { replacements: [req.params.id, req.params.id] }
+       FROM ponds WHERE ${pondWhere} AND deleted_at IS NULL ORDER BY id ASC`,
+      { replacements: pondReplacements }
     );
 
-        if (ponds && ponds.length > 0) {
+    if (ponds && ponds.length > 0) {
       for (const pond of ponds) {
+        const pondTank = pond.tank_number ? String(pond.tank_number).trim() : '';
+        const pondName = pond.pond_name ? String(pond.pond_name).trim() : '';
+        const pondIdStr = String(pond.id);
+        const tankVariants = [pondTank, pondName, pondIdStr];
+        if (pondTank) {
+          tankVariants.push(`Tank ${pondTank}`);
+          tankVariants.push(`Tank-${pondTank}`);
+        }
+        const cleanVariants = Array.from(new Set(tankVariants.filter(Boolean)));
+
         const [visits] = await sequelize.query(
           `SELECT id, visit_date, visit_time, meeting_type, feeding_details, harvest_details, water_quality
            FROM visits
-           WHERE (tank_id = ? OR (client_id = ? AND tank_number = ?))
-             AND deleted_at IS NULL
+           WHERE deleted_at IS NULL
+             AND (
+               tank_id = ?
+               OR (
+                 client_id = ?
+                 AND (
+                   tank_id = ?
+                   ${cleanVariants.length ? `OR tank_number IN (${cleanVariants.map(() => '?').join(', ')})` : ''}
+                 )
+               )
+             )
            ORDER BY visit_date ASC, id ASC`,
-          { replacements: [pond.id, req.params.id, pond.tank_number || pond.pond_name] }
+          { replacements: [pond.id, req.params.id, pond.id, ...cleanVariants] }
         );
 
         const allPartials = [];
@@ -433,32 +454,45 @@ const getClient = async (req, res) => {
           if (typeof fd === 'string') { try { fd = JSON.parse(fd); } catch(e){} }
 
           if (fd && typeof fd === 'object') {
-            const cum = parseFloat(fd.cumulative_feed);
+            const rawCum = String(fd.cumulative_feed ?? fd.total_feed ?? '').replace(/,/g, '');
+            const cum = parseFloat(rawCum);
             if (!isNaN(cum) && cum > 0) {
               maxCumulativeFeed = Math.max(maxCumulativeFeed, cum);
             }
-            const daily = parseFloat(fd.daily_feed_quantity);
+            const rawDaily = String(fd.daily_feed_quantity ?? fd.daily_feed ?? '').replace(/,/g, '');
+            const daily = parseFloat(rawDaily);
             if (!isNaN(daily) && daily > 0) {
               sumDailyFeed += daily;
             }
           }
 
           if (hd && typeof hd === 'object') {
-            if (Array.isArray(hd.partial_harvests)) {
-              for (const p of hd.partial_harvests) {
-                if (p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw)) {
-                  allPartials.push({
-                    ...p,
-                    date: p.date || v.visit_date,
-                    visit_id: v.id,
-                  });
-                }
-              }
-            } else if (hd.partial_harvest && typeof hd.partial_harvest === 'object') {
-              const p = hd.partial_harvest;
-              if (p && (p.count || p.harvested_quantity || p.harvested_biomass || p.abw)) {
+            const rawHdFeed = String(hd.final_harvest?.total_feed ?? hd.derived?.total_feed ?? hd.derived?.totalFeed ?? '').replace(/,/g, '').replace(/kg/i, '');
+            const hdFeed = parseFloat(rawHdFeed);
+            if (!isNaN(hdFeed) && hdFeed > 0) {
+              maxCumulativeFeed = Math.max(maxCumulativeFeed, hdFeed);
+            }
+          }
+
+          if (hd && typeof hd === 'object') {
+            const partialList = Array.isArray(hd.partial_harvests)
+              ? hd.partial_harvests
+              : (Array.isArray(hd)
+                  ? hd
+                  : (hd.partial_harvest && typeof hd.partial_harvest === 'object'
+                      ? [hd.partial_harvest]
+                      : (v.meeting_type === 'partial_harvest' ? [hd] : [])));
+
+            for (let pIdx = 0; pIdx < partialList.length; pIdx++) {
+              const p = partialList[pIdx];
+              if (!p || typeof p !== 'object') continue;
+              const hasData = Boolean(
+                p.count || p.harvested_quantity || p.harvested_biomass || p.abw || p.doc || p.remarks || p.harvest_no
+              );
+              if (hasData || v.meeting_type === 'partial_harvest') {
                 allPartials.push({
                   ...p,
+                  harvest_no: p.harvest_no || (allPartials.length + 1),
                   date: p.date || v.visit_date,
                   visit_id: v.id,
                 });
@@ -469,8 +503,11 @@ const getClient = async (req, res) => {
 
         const uniquePartials = [];
         const seen = new Set();
-        for (const p of allPartials) {
-          const key = `${p.date}_${p.count}_${p.harvested_quantity || p.harvested_biomass || ''}`;
+        for (let i = 0; i < allPartials.length; i++) {
+          const p = allPartials[i];
+          const key = p.id
+            ? `id_${p.id}`
+            : `${p.visit_id || ''}_${p.harvest_no || i}_${p.date || ''}_${p.count || ''}_${p.harvested_quantity || p.harvested_biomass || ''}`;
           if (!seen.has(key)) {
             seen.add(key);
             uniquePartials.push(p);
@@ -787,10 +824,12 @@ const getClientProfile = async (req, res) => {
     let ponds = [];
     try {
       const docCols = await getPondDocCols();
+      const pondWhere = docCols.hasFarmerId ? '(client_id = ? OR farmer_id = ?)' : 'client_id = ?';
+      const pondReplacements = docCols.hasFarmerId ? [req.params.id, req.params.id] : [req.params.id];
       [ponds] = await sequelize.query(
         `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
-         FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
-        { replacements: [req.params.id, req.params.id] }
+         FROM ponds WHERE ${pondWhere} AND deleted_at IS NULL ORDER BY id ASC`,
+        { replacements: pondReplacements }
       );
     } catch (pondErr) {
       console.error('getClientProfile ponds lookup failed:', pondErr);
@@ -906,10 +945,12 @@ const listPonds = async (req, res) => {
       }
     }
     const docCols = await getPondDocCols();
+    const pondWhere = docCols.hasFarmerId ? '(client_id = ? OR farmer_id = ?)' : 'client_id = ?';
+    const pondReplacements = docCols.hasFarmerId ? [req.params.id, req.params.id] : [req.params.id];
     const [ponds] = await sequelize.query(
       `SELECT *, ${pondAreaExpr(docCols)}, ${pondCurrentDocExpr(docCols, 'ponds', 'current_doc').replace(/\bponds\./g, '')}
-       FROM ponds WHERE (client_id = ? OR farmer_id = ?) AND deleted_at IS NULL ORDER BY id ASC`,
-      { replacements: [req.params.id, req.params.id] }
+       FROM ponds WHERE ${pondWhere} AND deleted_at IS NULL ORDER BY id ASC`,
+      { replacements: pondReplacements }
     );
     return sendSuccess(res, 'Ponds fetched', ponds);
   } catch (err) {

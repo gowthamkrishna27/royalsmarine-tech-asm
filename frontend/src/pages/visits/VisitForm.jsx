@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -106,6 +106,8 @@ export default function VisitForm() {
     abw: '',
     harvested_quantity: '',
     harvested_biomass: '',
+    total_feed: '',
+    fcr: '',
   });
 
   // 7. Disease Details state
@@ -176,7 +178,14 @@ export default function VisitForm() {
           setPartialHarvests(existingVisit.harvest_details.partial_harvests);
         }
         if (existingVisit.harvest_details.final_harvest) {
-          setFinalHarvest(prev => ({ ...prev, ...existingVisit.harvest_details.final_harvest }));
+          const fh = existingVisit.harvest_details.final_harvest;
+          const der = existingVisit.harvest_details.derived || {};
+          setFinalHarvest(prev => ({
+            ...prev,
+            ...fh,
+            total_feed: fh.total_feed ?? der.total_feed ?? (der.totalFeed ? String(der.totalFeed).replace(/kg/i, '').trim() : '') ?? existingVisit.feeding_details?.cumulative_feed ?? '',
+            fcr: fh.fcr ?? der.fcr ?? existingVisit.feeding_details?.fcr ?? '',
+          }));
         }
       }
       if (existingVisit.disease_details) {
@@ -235,51 +244,82 @@ export default function VisitForm() {
     }
   }, [paramClientId, isEdit, setValue]);
 
-  // Pre-fill tank from URL query parameter when client ponds load
+  const findTankInPonds = (ponds, tankIdentifier, tankId) => {
+    if (!ponds || !ponds.length) return null;
+    const sIdent = tankIdentifier !== undefined && tankIdentifier !== null ? String(tankIdentifier).trim().toLowerCase() : '';
+    const sId = tankId !== undefined && tankId !== null ? String(tankId).trim() : '';
+
+    return ponds.find(p => {
+      if (sId && String(p.id) === sId) return true;
+      if (!sIdent) return false;
+      const pTank = String(p.tank_number || '').trim().toLowerCase();
+      const pName = String(p.pond_name || '').trim().toLowerCase();
+      const pId = String(p.id || '').trim().toLowerCase();
+      return pTank === sIdent || pName === sIdent || pId === sIdent ||
+        (pTank && sIdent === `tank ${pTank}`) ||
+        (pTank && `tank ${pTank}` === sIdent);
+    });
+  };
+
+  const watchedTankNumber = watch('tank_number');
+  const watchedTankId = watch('tank_id');
+
+  // Sync previous partial harvests & tank details when selectedClient or tank changes
   useEffect(() => {
-    if (!isEdit && paramTank && selectedClient?.ponds?.length) {
-      const found = selectedClient.ponds.find(
-        p => String(p.id) === String(paramTank) || p.tank_number === paramTank || p.pond_name === paramTank
+    if (!selectedClient?.ponds?.length) return;
+    const targetTank = watchedTankNumber || watchedTankId || paramTank;
+    if (!targetTank) return;
+
+    const foundTank = findTankInPonds(selectedClient.ponds, targetTank, watchedTankId);
+    if (foundTank) {
+      if (!watchedTankId && foundTank.id) {
+        setValue('tank_id', foundTank.id);
+      }
+      if (!watchedTankNumber) {
+        setValue('tank_number', foundTank.tank_number || foundTank.pond_name);
+      }
+
+      if (foundTank.seed_date && visitDate) {
+        const seedDate = new Date(foundTank.seed_date);
+        const vDate = new Date(visitDate);
+        const diffDays = Math.max(0, Math.floor((vDate - seedDate) / (1000 * 60 * 60 * 24)));
+        setWaterQuality(prev => prev.doc === '' || prev.doc === undefined ? { ...prev, doc: diffDays } : prev);
+        setFeedingDetails(prev => prev.doc === '' || prev.doc === undefined ? { ...prev, doc: diffDays } : prev);
+      }
+
+      if (foundTank.stocking_quantity_lakhs) {
+        setFeedingDetails(prev => prev.seed_quantity ? prev : { ...prev, seed_quantity: foundTank.stocking_quantity_lakhs });
+      }
+
+      const prevPartials = (foundTank.partial_harvests || []).filter(
+        ph => !isEdit || String(ph.visit_id) !== String(id)
       );
-      if (found) {
-        const tankIdentifier = found.tank_number || found.pond_name;
-        setValue('tank_number', tankIdentifier);
-        setValue('tank_id', found.id);
+      setPreviousPartialHarvests(prevPartials);
 
-        if (found.seed_date && visitDate) {
-          const seedDate = new Date(found.seed_date);
-          const vDate = new Date(visitDate);
-          const diffDays = Math.max(0, Math.floor((vDate - seedDate) / (1000 * 60 * 60 * 24)));
-          setWaterQuality(prev => ({ ...prev, doc: diffDays }));
-          setFeedingDetails(prev => ({ ...prev, doc: diffDays }));
-        }
-
-        if (found.stocking_quantity_lakhs) {
-          setFeedingDetails(prev => ({ ...prev, seed_quantity: found.stocking_quantity_lakhs }));
-        }
-
-        const prevPartials = (found.partial_harvests || []).filter(
-          ph => !isEdit || String(ph.visit_id) !== String(id)
-        );
-        setPreviousPartialHarvests(prevPartials);
-
-        if (found.total_feed !== undefined && found.total_feed !== null) {
-          setFeedingDetails(prev => ({
-            ...prev,
-            cumulative_feed: prev.cumulative_feed || (found.total_feed > 0 ? String(found.total_feed) : '')
-          }));
-        }
+      if (foundTank.total_feed !== undefined && foundTank.total_feed !== null && foundTank.total_feed > 0) {
+        const feedStr = String(foundTank.total_feed);
+        setFeedingDetails(prev => ({
+          ...prev,
+          cumulative_feed: prev.cumulative_feed || feedStr
+        }));
+        setFinalHarvest(prev => ({
+          ...prev,
+          total_feed: prev.total_feed || feedStr
+        }));
+      }
+      if (foundTank.fcr) {
+        const fcrStr = String(foundTank.fcr);
+        setFeedingDetails(prev => ({ ...prev, fcr: prev.fcr || fcrStr }));
+        setFinalHarvest(prev => ({ ...prev, fcr: prev.fcr || fcrStr }));
       }
     }
-  }, [paramTank, selectedClient, isEdit, setValue, visitDate]);
+  }, [selectedClient, watchedTankNumber, watchedTankId, paramTank, isEdit, id, setValue, visitDate]);
 
   // Handle Tank selection and auto-calculate DOC & Seed Qty
   const handleTankSelection = (chosenTankNum) => {
     setValue('tank_number', chosenTankNum, { shouldDirty: true, shouldValidate: true });
 
-    const foundTank = selectedClient?.ponds?.find(
-      p => (p.tank_number || p.pond_name) === chosenTankNum
-    );
+    const foundTank = findTankInPonds(selectedClient?.ponds, chosenTankNum);
 
     if (foundTank) {
       setValue('tank_id', foundTank.id, { shouldDirty: true });
@@ -303,11 +343,21 @@ export default function VisitForm() {
       setPreviousPartialHarvests(prevPartials);
 
       // Auto-populate cumulative feed from tank history if available
-      if (foundTank.total_feed !== undefined && foundTank.total_feed !== null) {
+      if (foundTank.total_feed !== undefined && foundTank.total_feed !== null && foundTank.total_feed > 0) {
+        const feedStr = String(foundTank.total_feed);
         setFeedingDetails(prev => ({
           ...prev,
-          cumulative_feed: prev.cumulative_feed || (foundTank.total_feed > 0 ? String(foundTank.total_feed) : '')
+          cumulative_feed: prev.cumulative_feed || feedStr
         }));
+        setFinalHarvest(prev => ({
+          ...prev,
+          total_feed: prev.total_feed || feedStr
+        }));
+      }
+      if (foundTank.fcr) {
+        const fcrStr = String(foundTank.fcr);
+        setFeedingDetails(prev => ({ ...prev, fcr: prev.fcr || fcrStr }));
+        setFinalHarvest(prev => ({ ...prev, fcr: prev.fcr || fcrStr }));
       }
     } else {
       setValue('tank_id', null, { shouldDirty: true });
@@ -316,18 +366,17 @@ export default function VisitForm() {
   };
 
   // Reset tank when farmer changes (skip initial/edit hydration)
+  const prevClientIdRef = useRef(clientId);
   useEffect(() => {
-    if (!clientId) {
-      setValue('tank_number', '');
-      setValue('tank_id', null);
-      return;
+    if (prevClientIdRef.current && String(prevClientIdRef.current) !== String(clientId)) {
+      if (!isEdit) {
+        setValue('tank_number', '');
+        setValue('tank_id', null);
+        setPreviousPartialHarvests([]);
+      }
     }
-    if (isEdit && !existingVisit) return;
-    if (isEdit && existingVisit && String(existingVisit.client_id) === String(clientId)) return;
-    setValue('tank_number', '');
-    setValue('tank_id', null);
-    setPreviousPartialHarvests([]);
-  }, [clientId, isEdit, existingVisit, setValue]);
+    prevClientIdRef.current = clientId;
+  }, [clientId, isEdit, setValue]);
 
   // Auto-seed first new partial harvest when partial harvest is active and empty
   useEffect(() => {
@@ -357,17 +406,34 @@ export default function VisitForm() {
     }
   }, [previousPartialHarvests.length, isEdit]);
 
-  // Auto calculate FCR
+  // Auto calculate FCR and sync biomass & feed
   useEffect(() => {
-    const cumFeed = parseFloat(feedingDetails.cumulative_feed);
-    const biomass = parseFloat(feedingDetails.total_biomass);
-    if (!isNaN(cumFeed) && !isNaN(biomass) && biomass > 0) {
-      const calculatedFcr = (cumFeed / biomass).toFixed(2);
+    const allHarvests = [...previousPartialHarvests, ...partialHarvests];
+    const finalBiomass = parseFloat(finalHarvest.harvested_biomass || finalHarvest.harvested_quantity) || 0;
+    let totalHarvestBiomass = 0;
+    allHarvests.forEach(p => {
+      const b = parseFloat(p.harvested_biomass || p.harvested_quantity);
+      if (!isNaN(b) && b > 0) totalHarvestBiomass += b;
+    });
+    totalHarvestBiomass += finalBiomass;
+
+    const effectiveBiomass = totalHarvestBiomass > 0 ? totalHarvestBiomass : (parseFloat(feedingDetails.total_biomass) || 0);
+    const effectiveFeed = parseFloat(finalHarvest.total_feed || feedingDetails.cumulative_feed) || 0;
+
+    if (effectiveBiomass > 0 && String(feedingDetails.total_biomass) !== String(effectiveBiomass)) {
+      setFeedingDetails(prev => ({ ...prev, total_biomass: String(effectiveBiomass) }));
+    }
+
+    if (effectiveFeed > 0 && effectiveBiomass > 0) {
+      const calculatedFcr = (effectiveFeed / effectiveBiomass).toFixed(2);
       if (calculatedFcr !== feedingDetails.fcr) {
         setFeedingDetails(prev => ({ ...prev, fcr: calculatedFcr }));
       }
+      if (calculatedFcr !== finalHarvest.fcr) {
+        setFinalHarvest(prev => prev.fcr === calculatedFcr ? prev : { ...prev, fcr: calculatedFcr });
+      }
     }
-  }, [feedingDetails.cumulative_feed, feedingDetails.total_biomass]);
+  }, [previousPartialHarvests, partialHarvests, finalHarvest.harvested_biomass, finalHarvest.harvested_quantity, finalHarvest.total_feed, feedingDetails.cumulative_feed]);
 
   // Medication handlers
   const addMedication = () => {
@@ -480,6 +546,34 @@ export default function VisitForm() {
       } else if (field === 'harvested_biomass') {
         updated.harvested_quantity = value;
       }
+
+      if (field === 'total_feed') {
+        setFeedingDetails(fd => ({ ...fd, cumulative_feed: value }));
+        const feedVal = parseFloat(value);
+        const biomassVal = parseFloat(updated.harvested_biomass || updated.harvested_quantity);
+        if (!isNaN(feedVal) && !isNaN(biomassVal) && biomassVal > 0) {
+          updated.fcr = (feedVal / biomassVal).toFixed(2);
+        }
+      }
+
+      if (field === 'fcr') {
+        const fcrVal = parseFloat(value);
+        const biomassVal = parseFloat(updated.harvested_biomass || updated.harvested_quantity);
+        if (!isNaN(fcrVal) && !isNaN(biomassVal) && biomassVal > 0) {
+          const calcFeed = (fcrVal * biomassVal).toFixed(1);
+          updated.total_feed = calcFeed;
+          setFeedingDetails(fd => ({ ...fd, cumulative_feed: calcFeed }));
+        }
+      }
+
+      if ((field === 'harvested_quantity' || field === 'harvested_biomass') && value) {
+        const biomassVal = parseFloat(value);
+        const feedVal = parseFloat(updated.total_feed || feedingDetails.cumulative_feed);
+        if (!isNaN(biomassVal) && biomassVal > 0 && !isNaN(feedVal) && feedVal > 0) {
+          updated.fcr = (feedVal / biomassVal).toFixed(2);
+        }
+      }
+
       return updated;
     });
   };
@@ -487,30 +581,26 @@ export default function VisitForm() {
   // Harvest summary derived
   const harvestDerived = useMemo(() => {
     const allHarvests = [...previousPartialHarvests, ...partialHarvests];
-    const finalBiomass = parseFloat(finalHarvest.harvested_biomass) || 0;
-    const totalFeedVal = parseFloat(feedingDetails.cumulative_feed) || 0;
+    const finalBiomass = parseFloat(finalHarvest.harvested_biomass || finalHarvest.harvested_quantity) || 0;
 
-    // FCR: strictly final harvest FCR = Total Feed / Final Harvest Biomass
-    const finalFcr = (totalFeedVal > 0 && finalBiomass > 0)
-      ? (totalFeedVal / finalBiomass).toFixed(2)
-      : '—';
+    let totalBiomassVal = 0;
+    allHarvests.forEach(p => {
+      const b = parseFloat(p.harvested_biomass || p.harvested_quantity);
+      if (!isNaN(b) && b > 0) totalBiomassVal += b;
+    });
+    totalBiomassVal += finalBiomass;
+
+    const totalFeedVal = parseFloat(finalHarvest.total_feed || feedingDetails.cumulative_feed) || 0;
+
+    // FCR: strictly Total Feed / Total Harvest Biomass (or Final Biomass)
+    const effectiveBiomass = totalBiomassVal > 0 ? totalBiomassVal : finalBiomass;
+    const finalFcr = (totalFeedVal > 0 && effectiveBiomass > 0)
+      ? (totalFeedVal / effectiveBiomass).toFixed(2)
+      : (finalHarvest.fcr && !isNaN(parseFloat(finalHarvest.fcr)) ? parseFloat(finalHarvest.fcr).toFixed(2) : '—');
 
     // Total Count: strictly count of the final harvest
     const finalCount = (finalHarvest.count !== undefined && finalHarvest.count !== null && String(finalHarvest.count).trim() !== '')
       ? String(finalHarvest.count)
-      : '—';
-
-    // Total Biomass: average of all harvests (previous partials + current partials + final)
-    const biomassValues = [];
-    allHarvests.forEach(p => {
-      const b = parseFloat(p.harvested_biomass);
-      if (!isNaN(b) && b > 0) biomassValues.push(b);
-    });
-    if (finalBiomass > 0) {
-      biomassValues.push(finalBiomass);
-    }
-    const avgBiomass = biomassValues.length > 0
-      ? (biomassValues.reduce((acc, curr) => acc + curr, 0) / biomassValues.length).toFixed(1)
       : '—';
 
     // Survival rate
@@ -528,9 +618,13 @@ export default function VisitForm() {
     return {
       fcr: finalFcr,
       totalCount: finalCount,
-      avgBiomass: avgBiomass,
+      avgBiomass: totalBiomassVal > 0 ? totalBiomassVal.toFixed(1) : '—',
+      totalBiomass: totalBiomassVal > 0 ? totalBiomassVal.toFixed(1) : '—',
+      total_biomass: totalBiomassVal > 0 ? totalBiomassVal.toFixed(1) : '—',
       totalFeed: totalFeedVal > 0 ? `${totalFeedVal.toFixed(1)} kg` : '—',
+      total_feed: totalFeedVal > 0 ? totalFeedVal.toFixed(1) : '—',
       survival: survivalPct,
+      survival_percentage: survivalPct,
     };
   }, [previousPartialHarvests, partialHarvests, finalHarvest, feedingDetails.cumulative_feed, feedingDetails.seed_quantity]);
 
@@ -656,12 +750,27 @@ export default function VisitForm() {
       gps_captured_at: data.gps_captured_at || (activeCoords ? new Date().toISOString() : null),
       gps_denied_reason: activeCoords ? null : (data.gps_denied_reason || 'Location unavailable'),
       water_quality: showWaterQuality ? waterQuality : null,
-      feeding_details: showFeeding ? feedingDetails : null,
+      feeding_details: showFeeding ? feedingDetails : (showFinalHarvest && (finalHarvest.total_feed || finalHarvest.fcr || feedingDetails.cumulative_feed) ? {
+        ...feedingDetails,
+        cumulative_feed: finalHarvest.total_feed || feedingDetails.cumulative_feed || '',
+        total_feed: finalHarvest.total_feed || feedingDetails.cumulative_feed || '',
+        fcr: finalHarvest.fcr || feedingDetails.fcr || (harvestDerived.fcr !== '—' ? harvestDerived.fcr : ''),
+        total_biomass: harvestDerived.totalBiomass !== '—' ? harvestDerived.totalBiomass : (finalHarvest.harvested_biomass || ''),
+      } : null),
       medication_details: showMedication ? medications : null,
       disease_details: showDisease ? diseaseDetails : null,
       harvest_details: showHarvest ? {
-        partial_harvests: showPartialHarvest ? partialHarvests : [],
-        final_harvest: showFinalHarvest ? finalHarvest : null,
+        partial_harvests: showPartialHarvest ? partialHarvests.map((ph, idx) => ({
+          ...ph,
+          harvest_no: ph.harvest_no || (previousPartialHarvests.length + idx + 1),
+        })) : [],
+        final_harvest: showFinalHarvest ? {
+          ...finalHarvest,
+          total_feed: finalHarvest.total_feed || (harvestDerived.totalFeed !== '—' ? String(harvestDerived.totalFeed).replace(/kg/i, '').trim() : '') || feedingDetails.cumulative_feed || '',
+          fcr: finalHarvest.fcr || (harvestDerived.fcr !== '—' ? harvestDerived.fcr : '') || feedingDetails.fcr || '',
+          total_biomass: harvestDerived.totalBiomass !== '—' ? harvestDerived.totalBiomass : (finalHarvest.harvested_biomass || ''),
+          survival_rate: harvestDerived.survival !== '—' ? String(harvestDerived.survival).replace('%', '').trim() : '',
+        } : null,
         derived: harvestDerived,
       } : null,
     };
@@ -1326,7 +1435,7 @@ export default function VisitForm() {
                   <div className="flex items-center justify-between text-xs text-gray-600 font-medium">
                     <span>Final Harvest</span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2">
                     <div>
                       <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Date</label>
                       <input
@@ -1393,14 +1502,36 @@ export default function VisitForm() {
                         className="input text-xs py-1 font-mono w-full"
                       />
                     </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">Total Feed (kg)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={finalHarvest.total_feed ?? feedingDetails.cumulative_feed ?? ''}
+                        onChange={e => updateFinalHarvest('total_feed', e.target.value)}
+                        placeholder="Feed (kg)"
+                        className="input text-xs py-1 font-mono w-full"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-gray-500 font-medium block mb-0.5">FCR (Auto)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={finalHarvest.fcr || (harvestDerived.fcr !== '—' ? harvestDerived.fcr : '') || feedingDetails.fcr || ''}
+                        onChange={e => updateFinalHarvest('fcr', e.target.value)}
+                        placeholder="FCR"
+                        className="input text-xs py-1 font-mono w-full bg-emerald-50/50 text-emerald-800 font-semibold"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Production Summary Strip */}
                 <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-600">
-                  <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.avgBiomass} kg</span></div>
+                  <div>Total Biomass: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.totalBiomass} kg</span></div>
                   <div>Total Feed: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.totalFeed}</span></div>
-                  <div>FCR: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.fcr}</span></div>
+                  <div>FCR: <span className="font-semibold text-emerald-700 font-mono font-bold">{harvestDerived.fcr}</span></div>
                   <div>Total Count: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.totalCount}</span></div>
                   <div>Survival: <span className="font-semibold text-gray-900 font-mono">{harvestDerived.survival}</span></div>
                 </div>

@@ -423,6 +423,7 @@ export default function VisitDetail() {
                   <table className="table text-xs">
                     <thead>
                       <tr>
+                        <th>Harvest #</th>
                         <th>Date</th>
                         <th>DOC</th>
                         <th>Count</th>
@@ -434,6 +435,7 @@ export default function VisitDetail() {
                     <tbody>
                       {partialHarvests.map((ph, idx) => (
                         <tr key={idx}>
+                          <td className="font-bold text-gray-900">#{ph.harvest_no || (idx + 1)}</td>
                           <td>{ph.date || '—'}</td>
                           <td>{ph.doc || '—'}</td>
                           <td className="font-bold font-mono text-gray-900">{ph.count || '—'}</td>
