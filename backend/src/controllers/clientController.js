@@ -27,9 +27,11 @@ const getPondDocCols = async () => {
       hasDocDate: set.has('doc_date'),
       hasArea: set.has('area'),
       hasAreaAcres: set.has('area_acres'),
+      hasFarmerId: set.has('farmer_id'),
+      hasTankNumber: set.has('tank_number'),
     };
   } catch {
-    pondDocCols = { hasDoc: false, hasDocDate: false, hasArea: false, hasAreaAcres: false };
+    pondDocCols = { hasDoc: false, hasDocDate: false, hasArea: false, hasAreaAcres: false, hasFarmerId: false, hasTankNumber: false };
   }
   return pondDocCols;
 };
@@ -2249,19 +2251,43 @@ const getSeedTanksData = async (query = {}, user = {}) => {
     replacements.push(user.id, user.id, user.id, user.id, user.id);
   }
 
+  const docCols = await getPondDocCols();
+  const cCols = await getClientCols();
+
+  const closeReasonExpr = cCols.has('close_reason') ? 'c.close_reason' : 'NULL as close_reason';
+  const statusExpr = cCols.has('status') ? 'c.status as farmer_status' : "'active' as farmer_status";
+  const villageExpr = cCols.has('village') ? 'c.village' : 'NULL as village';
+  const mandalExpr = cCols.has('mandal') ? 'c.mandal' : 'NULL as mandal';
+  const districtExpr = cCols.has('district') ? 'c.district' : 'NULL as district';
+  const areaExpr = cCols.has('area') ? 'c.area as farmer_area' : 'NULL as farmer_area';
+  const clientJoinOn = docCols.hasFarmerId
+    ? '(p.client_id = c.id OR p.farmer_id = c.id)'
+    : 'p.client_id = c.id';
+
   let filterClause = '';
-  if (search) {
-    filterClause += ` AND (
-      p.pond_name LIKE ? OR 
-      p.tank_number LIKE ? OR 
-      c.company_name LIKE ? OR 
-      c.contact_person LIKE ? OR 
-      c.mobile LIKE ? OR 
-      c.village LIKE ? OR 
-      c.district LIKE ?
-    )`;
+  if (search && search.trim()) {
     const s = `%${search.trim()}%`;
-    replacements.push(s, s, s, s, s, s, s);
+    const searchConditions = [
+      'p.pond_name LIKE ?',
+      'c.company_name LIKE ?',
+      'c.contact_person LIKE ?',
+      'c.mobile LIKE ?',
+    ];
+    replacements.push(s, s, s, s);
+
+    if (docCols.hasTankNumber) {
+      searchConditions.push('p.tank_number LIKE ?');
+      replacements.push(s);
+    }
+    if (cCols.has('village')) {
+      searchConditions.push('c.village LIKE ?');
+      replacements.push(s);
+    }
+    if (cCols.has('district')) {
+      searchConditions.push('c.district LIKE ?');
+      replacements.push(s);
+    }
+    filterClause = ` AND (${searchConditions.join(' OR ')})`;
   }
 
   if (farmer_id) {
@@ -2269,7 +2295,6 @@ const getSeedTanksData = async (query = {}, user = {}) => {
     replacements.push(farmer_id);
   }
 
-  const docCols = await getPondDocCols();
   const [tanks] = await sequelize.query(`
     SELECT
       p.*,
@@ -2278,30 +2303,67 @@ const getSeedTanksData = async (query = {}, user = {}) => {
       c.company_name,
       c.contact_person,
       c.mobile as farmer_phone,
-      c.status as farmer_status,
-      c.close_reason,
-      c.village,
-      c.mandal,
-      c.district,
+      ${statusExpr},
+      ${closeReasonExpr},
+      ${villageExpr},
+      ${mandalExpr},
+      ${districtExpr},
       c.city,
       c.state,
       c.pincode,
       c.address as farmer_address,
-      c.area,
+      ${areaExpr},
       u.full_name as salesperson_name,
       u.mobile as salesperson_phone,
       u.region as salesperson_region,
       m.region as manager_region,
       ${pondCurrentDocExpr(docCols, 'p', 'current_doc')}
     FROM ponds p
-    JOIN clients c ON (p.client_id = c.id OR p.farmer_id = c.id)
+    JOIN clients c ON ${clientJoinOn}
     LEFT JOIN users u ON (c.assigned_salesperson_id = u.id OR p.created_by = u.id)
     LEFT JOIN users m ON u.manager_id = m.id
     WHERE p.deleted_at IS NULL AND c.deleted_at IS NULL
     ${scopingClause}
     ${filterClause}
-    ORDER BY p.updated_at DESC
+    ORDER BY p.id DESC
   `, { replacements });
+
+  // Single fast query for all visits with harvest details
+  let allHarvestVisits = [];
+  try {
+    const [hVisits] = await sequelize.query(`
+      SELECT 
+        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
+        v.harvest_details, v.tank_id, v.tank_number, v.client_id,
+        sp.full_name as salesperson_name
+      FROM visits v
+      LEFT JOIN users sp ON v.salesperson_id = sp.id
+      WHERE v.deleted_at IS NULL
+        AND v.harvest_details IS NOT NULL
+        AND v.harvest_details != ''
+        AND v.harvest_details != '{}'
+        AND v.harvest_details != 'null'
+      ORDER BY v.visit_date DESC, v.id DESC
+    `);
+    allHarvestVisits = hVisits || [];
+  } catch (hErr) {
+    console.warn('Harvest visits query warning:', hErr.message);
+  }
+
+  const visitsByTankId = new Map();
+  const visitsByClientTank = new Map();
+
+  for (const v of allHarvestVisits) {
+    if (v.tank_id) {
+      if (!visitsByTankId.has(Number(v.tank_id))) visitsByTankId.set(Number(v.tank_id), []);
+      visitsByTankId.get(Number(v.tank_id)).push(v);
+    }
+    if (v.client_id && v.tank_number) {
+      const key = `${v.client_id}_${String(v.tank_number).trim().toLowerCase()}`;
+      if (!visitsByClientTank.has(key)) visitsByClientTank.set(key, []);
+      visitsByClientTank.get(key).push(v);
+    }
+  }
 
   const processedTanks = [];
   const allRegionsSet = new Set();
@@ -2319,19 +2381,14 @@ const getSeedTanksData = async (query = {}, user = {}) => {
       }
     }
 
-    // 2. Query visits for harvest details
-    const [visits] = await sequelize.query(`
-      SELECT 
-        v.id, v.visit_date, v.visit_time, v.meeting_highlights, v.remarks,
-        v.harvest_details, sp.full_name as salesperson_name
-      FROM visits v
-      LEFT JOIN users sp ON v.salesperson_id = sp.id
-      WHERE (v.tank_id = ? OR (v.client_id = ? AND v.tank_number = ?))
-        AND v.deleted_at IS NULL
-      ORDER BY v.visit_date DESC, v.created_at DESC
-    `, {
-      replacements: [tank.id, tank.client_id, tank.tank_number || tank.pond_name]
-    });
+    // 2. Lookup visits for this tank in-memory
+    const tankVisits = [
+      ...(visitsByTankId.get(Number(tank.id)) || []),
+      ...(tank.client_id && (tank.tank_number || tank.pond_name)
+        ? (visitsByClientTank.get(`${tank.client_id}_${String(tank.tank_number || tank.pond_name).trim().toLowerCase()}`) || [])
+        : [])
+    ];
+    const visits = Array.from(new Map(tankVisits.map(v => [v.id, v])).values());
 
     let finalHarvest = null;
     const partialHarvests = [];
@@ -2383,7 +2440,7 @@ const getSeedTanksData = async (query = {}, user = {}) => {
 
     // 3. Status checks:
     // After completion of any partial harvest, final harvest, or if farmer is closed, seed is reduced
-    const isFarmerClosed = ['forcely_closed', 'forced_closed', 'closed', 'inactive'].includes(tank.farmer_status);
+    const isFarmerClosed = ['forcely_closed', 'forced_closed', 'closed'].includes(tank.farmer_status);
     const isTankMarkedHarvested = tank.status === 'harvested' || tank.status === 'inactive';
     const hasFinalHarvest = !!finalHarvest || isTankMarkedHarvested;
 

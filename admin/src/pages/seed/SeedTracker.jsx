@@ -34,21 +34,47 @@ export default function SeedTracker() {
   const [exporting, setExporting] = useState(false);
 
   // Fetch seed tanks data
-  const { data = {}, isLoading } = useQuery({
-    queryKey: ['seed-tanks-data', search, regionFilter, statusFilter],
+  const { data = {}, isLoading, error, refetch } = useQuery({
+    queryKey: ['seed-tanks-data', search],
     queryFn: () =>
       clientService
         .getSeedTanks({
           search: search || undefined,
-          region: regionFilter || undefined,
-          status: statusFilter || undefined,
         })
         .then((r) => r.data.data || {}),
   });
 
-  const rawTanks = useMemo(() => data.tanks || [], [data.tanks]);
+  const allTanks = useMemo(() => data.tanks || [], [data.tanks]);
   const summary = useMemo(() => data.summary || {}, [data.summary]);
-  const availableRegions = useMemo(() => data.available_regions || [], [data.available_regions]);
+  const availableRegions = useMemo(() => {
+    if (data.available_regions?.length) return data.available_regions;
+    const set = new Set();
+    allTanks.forEach((t) => {
+      if (t.region) set.add(t.region);
+    });
+    return Array.from(set).sort();
+  }, [data.available_regions, allTanks]);
+
+  const rawTanks = useMemo(() => {
+    let list = allTanks;
+    if (regionFilter) {
+      const rLower = regionFilter.trim().toLowerCase();
+      list = list.filter((t) => (t.region || '').toLowerCase() === rLower);
+    }
+    if (statusFilter) {
+      const sLower = statusFilter.trim().toLowerCase();
+      if (sLower === 'active') {
+        list = list.filter((t) => t.current_seed > 0);
+      } else if (sLower === 'partial') {
+        list = list.filter((t) => t.seed_status === 'Partially Harvested');
+      } else if (sLower === 'harvested') {
+        list = list.filter((t) => t.seed_status === 'Fully Harvested');
+      } else if (sLower === 'closed') {
+        list = list.filter((t) => t.seed_status === 'Farmer Closed');
+      }
+    }
+    return list;
+  }, [allTanks, regionFilter, statusFilter]);
 
   const handleExport = async () => {
     try {
@@ -76,6 +102,18 @@ export default function SeedTracker() {
   const hasActiveFilters = Boolean(search || regionFilter || statusFilter);
 
   if (isLoading) return <PageSpinner />;
+
+  if (error) {
+    return (
+      <div className="card p-8 text-center space-y-3">
+        <p className="text-sm font-semibold text-red-600">Failed to load seed tracker data</p>
+        <p className="text-xs text-gray-500">{error.response?.data?.message || error.message || 'Server error'}</p>
+        <button type="button" onClick={() => refetch()} className="btn-primary btn-sm mx-auto">
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 fade-in">
