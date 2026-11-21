@@ -27,11 +27,10 @@ export default function Followups() {
   const { user: currentUser, hasRole } = useAuth();
   const canCreate = hasRole('super_admin', 'admin', 'sales_manager');
   const canAssignUsers = hasRole('super_admin', 'admin', 'sales_manager');
+  const isASM = currentUser?.role === 'sales_manager';
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('dues'); // Default to dues & overdues
-  const [region, setRegion] = useState('');
-  const [asmId, setAsmId] = useState('');
   const [techId, setTechId] = useState('');
   const [date, setDate] = useState('');
   const [addModal, setAddModal] = useState(false);
@@ -39,147 +38,70 @@ export default function Followups() {
   const [completeNotes, setCompleteNotes] = useState('');
   const [completing, setCompleting] = useState(false);
 
-  // Fetch filter metadata (regions, ASMs, techs)
+  // Fetch filter metadata (techs)
   const { data: filterMeta } = useQuery({
     queryKey: ['visit-filters'],
     queryFn: () => visitApi.getFilters().then((r) => r.data.data),
     staleTime: 60000,
   });
 
-  // 1. Region dropdown options
-  const regionOptions = useMemo(() => {
-    return (filterMeta?.regions || []).map((r) => ({
-      value: r,
-      label: r,
-    }));
-  }, [filterMeta?.regions]);
-
-  // 2. ASM dropdown options (filtered by selected Region)
-  const asmOptions = useMemo(() => {
-    const list = (filterMeta?.asms || []).filter((a) => (a.status ? a.status === 'active' : true));
-    const filtered = region
-      ? list.filter((a) => (a.region || '').toLowerCase() === region.toLowerCase())
-      : list;
-    return filtered.map((a) => ({
-      value: String(a.id),
-      label: a.name + (!region && a.region ? ` (${a.region})` : ''),
-    }));
-  }, [filterMeta?.asms, region]);
-
-  // 3. Tech dropdown options (filtered by selected ASM, or by selected Region)
+  // Tech dropdown options (scoped to this ASM's reporting technicians if ASM)
   const techOptions = useMemo(() => {
     let list = (filterMeta?.techs || []).filter((t) => (t.status ? t.status === 'active' : true));
-    if (asmId) {
-      list = list.filter((t) => String(t.manager_id) === String(asmId));
-    } else if (region) {
-      list = list.filter((t) => (t.region || '').toLowerCase() === region.toLowerCase());
+    if (isASM && currentUser?.id) {
+      const reporting = list.filter((t) => String(t.manager_id) === String(currentUser.id));
+      if (reporting.length > 0) {
+        list = reporting;
+      }
     }
     return list.map((t) => ({
       value: String(t.id),
       label: t.name,
     }));
-  }, [filterMeta?.techs, asmId, region]);
-
-  // Cascading change handlers
-  const handleRegionChange = (newRegion) => {
-    setRegion(newRegion);
-    setPage(1);
-
-    if (asmId && newRegion) {
-      const currentAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(asmId));
-      if (currentAsm && (currentAsm.region || '').toLowerCase() !== newRegion.toLowerCase()) {
-        setAsmId('');
-        setTechId('');
-      }
-    }
-    if (techId && newRegion) {
-      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
-      if (currentTech && (currentTech.region || '').toLowerCase() !== newRegion.toLowerCase()) {
-        setTechId('');
-      }
-    }
-  };
-
-  const handleAsmChange = (newAsmId) => {
-    setAsmId(newAsmId);
-    setPage(1);
-
-    if (newAsmId) {
-      const chosenAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(newAsmId));
-      if (chosenAsm?.region && !region) {
-        setRegion(chosenAsm.region);
-      }
-    }
-    if (techId && newAsmId) {
-      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
-      if (currentTech && String(currentTech.manager_id) !== String(newAsmId)) {
-        setTechId('');
-      }
-    }
-  };
+  }, [filterMeta?.techs, isASM, currentUser?.id]);
 
   const handleTechChange = (newTechId) => {
     setTechId(newTechId);
     setPage(1);
-
-    if (newTechId) {
-      const chosenTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(newTechId));
-      if (chosenTech) {
-        if (chosenTech.manager_id && !asmId) {
-          setAsmId(String(chosenTech.manager_id));
-        }
-        if (chosenTech.region && !region) {
-          setRegion(chosenTech.region);
-        }
-      }
-    }
   };
 
   const handleResetFilters = () => {
-    setRegion('');
-    setAsmId('');
     setTechId('');
     setDate('');
     setStatus('dues');
     setPage(1);
   };
 
-  const hasActiveFilters = Boolean(region || asmId || techId || date || (status && status !== 'dues'));
+  const hasActiveFilters = Boolean(techId || date || (status && status !== 'dues'));
 
   // Queries
   const { data, isLoading } = useQuery({
-    queryKey: ['followups', page, status, region, asmId, techId, date],
+    queryKey: ['followups', page, status, techId, date],
     queryFn: () =>
       followupApi
         .list({
           page,
           limit: 20,
           status: status || undefined,
-          region: region || undefined,
-          asm_id: asmId || undefined,
           tech_id: techId || undefined,
           date: date || undefined,
         })
         .then((r) => r.data),
   });
   const { data: todayData } = useQuery({
-    queryKey: ['followups-today', region, asmId, techId],
+    queryKey: ['followups-today', techId],
     queryFn: () =>
       followupApi
         .today({
-          region: region || undefined,
-          asm_id: asmId || undefined,
           tech_id: techId || undefined,
         })
         .then((r) => r.data.data),
   });
   const { data: overdueData } = useQuery({
-    queryKey: ['followups-overdue', region, asmId, techId],
+    queryKey: ['followups-overdue', techId],
     queryFn: () =>
       followupApi
         .overdue({
-          region: region || undefined,
-          asm_id: asmId || undefined,
           tech_id: techId || undefined,
         })
         .then((r) => r.data.data),
@@ -278,53 +200,15 @@ export default function Followups() {
         </div>
       </div>
 
-      {/* Filter Toolbar: regions, asm's, techs, single date, and status */}
+      {/* Filter Toolbar: techs, single date, and status */}
       <div className="fade-in space-y-4">
         <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-2.5">
           <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 w-full">
-            {/* 1. Regions */}
-            <select
-              value={region}
-              onChange={(e) => handleRegionChange(e.target.value)}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-                region
-                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
-              title="Filter by Region"
-            >
-              <option value="">All Regions</option>
-              {regionOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {/* 2. ASM's */}
-            <select
-              value={asmId}
-              onChange={(e) => handleAsmChange(e.target.value)}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
-                asmId
-                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-              }`}
-              title="Filter by ASM"
-            >
-              <option value="">All ASM's</option>
-              {asmOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-
-            {/* 3. Techs */}
+            {/* Techs */}
             <select
               value={techId}
               onChange={(e) => handleTechChange(e.target.value)}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[120px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
                 techId
                   ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
                   : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
