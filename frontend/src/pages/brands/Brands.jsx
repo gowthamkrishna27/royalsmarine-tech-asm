@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { masterApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import { TagIcon, PlusIcon, CubeIcon } from '@heroicons/react/24/outline';
@@ -71,7 +72,7 @@ export default function Brands() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
           <div className="card-header"><h3 className="font-semibold text-gray-900 flex items-center gap-2"><TagIcon className="w-5 h-5 text-blue-500" /> Brands ({brands?.length || 0})</h3></div>
-          {brandsLoading ? <PageSpinner /> : (
+          {brandsLoading ? <TableSkeleton rows={4} cols={3} className="border-0 shadow-none rounded-none" /> : (
             <div className="divide-y divide-gray-50">
               {brands?.map(b => (
                 <div key={b.id} className="px-6 py-3 flex items-center justify-between">
@@ -89,7 +90,7 @@ export default function Brands() {
 
         <div className="card">
           <div className="card-header"><h3 className="font-semibold text-gray-900 flex items-center gap-2"><CubeIcon className="w-5 h-5 text-purple-500" /> Categories ({categories?.length || 0})</h3></div>
-          {catsLoading ? <PageSpinner /> : (
+          {catsLoading ? <TableSkeleton rows={4} cols={3} className="border-0 shadow-none rounded-none" /> : (
             <div className="divide-y divide-gray-50">
               {categories?.map(c => (
                 <div key={c.id} className="px-6 py-3 flex items-center justify-between">

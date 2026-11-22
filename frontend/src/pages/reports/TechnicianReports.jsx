@@ -5,6 +5,7 @@ import { visitApi, clientApi, reportApi, followupApi } from '../../services/api'
 import { useAuth } from '../../context/AuthContext';
 import { downloadBlob } from '../../hooks/useApi';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Pagination from '../../components/common/Pagination';
 import toast from 'react-hot-toast';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
@@ -388,9 +389,7 @@ export default function TechnicianReports() {
       {/* Data List */}
       <div className="border border-gray-200 rounded bg-white overflow-hidden">
         {isLoading ? (
-          <div className="py-8">
-            <PageSpinner />
-          </div>
+          <TableSkeleton rows={6} cols={5} className="border-0 shadow-none rounded-none" />
         ) : currentCount === 0 ? (
           <div className="py-8 text-center text-xs text-gray-400">
             No {activeTab === 'visits' ? 'visit' : 'follow-up'} records found.

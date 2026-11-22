@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { billingApi, clientApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import { CloudArrowUpIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
@@ -118,7 +119,7 @@ export default function BillingImport() {
       {/* Import History */}
       <div className="card">
         <div className="card-header"><h3 className="font-semibold text-gray-900">Import History</h3></div>
-        {isLoading ? <PageSpinner /> : (
+        {isLoading ? <TableSkeleton rows={4} cols={4} className="border-0 shadow-none" /> : (
           <div className="divide-y divide-gray-50">
             {imports?.map(imp => (
               <div key={imp.id} className="px-6 py-4 flex items-center justify-between gap-4">

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
 import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
@@ -52,7 +53,7 @@ export default function Visits() {
         <input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="input flex-shrink-0" placeholder="To" />
       </FilterBar>
 
-      {isLoading ? <PageSpinner /> : (
+      {isLoading ? <TableSkeleton rows={6} cols={6} /> : (
         <div className="card">
           {data?.data?.length === 0 ? (
             <EmptyState title="No visits found" icon={MapPinIcon}

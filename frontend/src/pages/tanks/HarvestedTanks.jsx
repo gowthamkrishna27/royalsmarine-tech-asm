@@ -5,6 +5,7 @@ import { clientService } from '../../services/clientService';
 import { reportApi } from '../../services/api';
 import { downloadBlob } from '../../hooks/useApi';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import toast from 'react-hot-toast';
 import {
   ArchiveBoxArrowDownIcon,
@@ -232,10 +233,7 @@ export default function HarvestedTanks() {
 
       {/* Content Area */}
       {isLoading ? (
-        <div className="py-16 text-center">
-          <PageSpinner />
-          <p className="text-sm text-gray-500 mt-3">Loading harvested tanks...</p>
-        </div>
+        <TableSkeleton rows={5} cols={6} />
       ) : error ? (
         <div className="card p-8 text-center text-red-600 bg-red-50 border-red-200">
           <p className="font-semibold">Failed to load harvested tanks</p>

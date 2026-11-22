@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
 import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
@@ -584,7 +585,7 @@ export default function Users() {
 
       {/* Main Content Area */}
       {isLoading ? (
-        <PageSpinner />
+        <TableSkeleton rows={6} cols={6} />
       ) : (
         <div className="card overflow-hidden">
           {data?.data?.length === 0 ? (

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { reportApi, userApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import { downloadBlob } from '../../hooks/useApi';
 import { ArrowDownTrayIcon, UserIcon } from '@heroicons/react/24/outline';
 import Badge from '../../components/common/Badge';
@@ -228,7 +229,7 @@ function AdminReports({ user }) {
 
       {/* 1. VISITS TAB */}
       {tab === 'visits' && (
-        visitLoading ? <PageSpinner /> : (
+        visitLoading ? <TableSkeleton rows={5} cols={6} /> : (
           <div className="space-y-4">
             {/* Minimal KPI Highlights */}
             {visitSummary && (
@@ -409,7 +410,7 @@ function AdminReports({ user }) {
 
       {/* 2. FOLLOW-UPS TAB */}
       {tab === 'followups' && !isSalesExec && (
-        fuLoading ? <PageSpinner /> : (
+        fuLoading ? <TableSkeleton rows={5} cols={6} /> : (
           <div className="space-y-4">
             {/* Minimal KPI Highlights */}
             {followupSummary && (

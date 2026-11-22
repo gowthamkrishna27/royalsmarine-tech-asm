@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { followupApi, clientApi, userApi, visitApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
+import { FollowupListSkeleton } from '../../components/common/Skeleton';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
@@ -417,7 +418,7 @@ export default function Followups() {
         </div>
 
         {isLoading ? (
-          <PageSpinner />
+          <FollowupListSkeleton count={5} />
         ) : (
           <div className="bg-white rounded-xl border border-gray-200/90 shadow-2xs overflow-hidden">
             {(!data?.data || data?.data?.length === 0) ? (

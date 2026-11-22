@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
 import { clientApi, visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { DetailSkeleton } from '../../components/common/Skeleton';
 import Badge from '../../components/common/Badge';
 import Modal from '../../components/common/Modal';
 import { CLIENT_TYPES } from '../../constants';
@@ -87,7 +88,7 @@ export default function ClientDetail() {
     closeFarmer.mutate(reason);
   };
 
-  if (isLoading) return <PageSpinner />;
+  if (isLoading) return <DetailSkeleton />;
   if (isError || !profile) {
     const msg = error?.response?.data?.message || error?.message || 'Farmer not found';
     return (

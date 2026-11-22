@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { dashboardApi, userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { DashboardSkeleton } from '../../components/common/Skeleton';
 import StatCard from '../../components/common/StatCard';
 import {
   ClockIcon,
@@ -897,7 +898,7 @@ export default function Dashboard() {
     queryFn: () => dashboardApi.get().then((r) => r.data.data),
   });
 
-  if (isLoading) return <PageSpinner />;
+  if (isLoading) return <DashboardSkeleton />;
 
   if (isError || !data) {
     return (

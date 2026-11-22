@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { visitApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
+import { DetailSkeleton } from '../../components/common/Skeleton';
 import Badge from '../../components/common/Badge';
 import { MEETING_TYPES } from '../../constants';
 import {
@@ -43,7 +44,7 @@ export default function VisitDetail() {
     queryFn: () => visitApi.get(id).then((r) => r.data.data),
   });
 
-  if (isLoading) return <PageSpinner />;
+  if (isLoading) return <DetailSkeleton />;
   if (isError) {
     return (
       <div className="card p-8 text-center space-y-3">

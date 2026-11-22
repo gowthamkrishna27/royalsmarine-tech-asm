@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { clientApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
+import { TableSkeleton } from '../../components/common/Skeleton';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
 import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
@@ -206,7 +207,7 @@ export default function Clients() {
         />
       </FilterBar>
 
-      {isLoading ? <PageSpinner /> : (
+      {isLoading ? <TableSkeleton rows={7} cols={8} /> : (
         <div className="card">
           {(!data?.data || data?.data?.length === 0) ? (
             <EmptyState title="No farmers found" description="Add your first farmer to get started" icon={BuildingOfficeIcon}
