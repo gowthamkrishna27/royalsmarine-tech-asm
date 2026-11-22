@@ -5,6 +5,7 @@ import { followupApi, clientApi, userApi, visitApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
+import Badge from '../../components/common/Badge';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import {
@@ -24,12 +25,36 @@ import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 
 function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCreate }) {
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
   const [selectedExecId, setSelectedExecId] = useState('');
   const [showAllFarmers, setShowAllFarmers] = useState(false);
+  const [testRequired, setTestRequired] = useState(false);
+  const [tankId, setTankId] = useState('');
+  const [ponds, setPonds] = useState([]);
+  const [loadingPonds, setLoadingPonds] = useState(false);
 
   const isASM = currentUser?.role === 'sales_manager';
+  const selectedClientId = watch('client_id');
+
+  // Load ponds when a farmer is selected
+  useEffect(() => {
+    if (selectedClientId) {
+      setLoadingPonds(true);
+      clientApi
+        .listPonds(selectedClientId)
+        .then((res) => {
+          setPonds(res.data?.data || []);
+        })
+        .catch(() => {
+          setPonds([]);
+        })
+        .finally(() => setLoadingPonds(false));
+    } else {
+      setPonds([]);
+      setTankId('');
+    }
+  }, [selectedClientId]);
 
   // Filter farmers assigned to the selected technical executive / ASM
   const filteredClients = (clients || []).filter((c) => {
@@ -47,6 +72,8 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
     setValue('assigned_salesperson_id', val);
     setValue('client_id', '');
     setShowAllFarmers(false);
+    setPonds([]);
+    setTankId('');
   };
 
   const onSubmit = async (formData) => {
@@ -55,10 +82,15 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
       await followupApi.create({
         ...formData,
         assigned_salesperson_id: selectedExecId || currentUser?.id,
+        test_required: testRequired ? 1 : 0,
+        tank_id: testRequired && tankId ? Number(tankId) : null,
       });
       toast.success('Follow-up scheduled successfully');
       reset();
       setSelectedExecId('');
+      setTestRequired(false);
+      setTankId('');
+      setPonds([]);
       onClose();
       onCreate();
     } catch (err) {
@@ -72,6 +104,9 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
     reset();
     setSelectedExecId('');
     setShowAllFarmers(false);
+    setTestRequired(false);
+    setTankId('');
+    setPonds([]);
     onClose();
   };
 
@@ -163,6 +198,49 @@ function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCre
           )}
         </div>
 
+        {/* Minimal Water Test Requirement */}
+        <div className="space-y-2 pt-1">
+          <label className="inline-flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-gray-700 hover:text-gray-900">
+            <input
+              type="checkbox"
+              checked={testRequired}
+              onChange={(e) => setTestRequired(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+            />
+            <span>Water test required on completion</span>
+          </label>
+
+          {testRequired && (
+            <div className="pl-6">
+              <select
+                value={tankId}
+                onChange={(e) => setTankId(e.target.value)}
+                className="input text-xs py-1.5"
+                disabled={!selectedClientId || loadingPonds}
+              >
+                <option value="">
+                  {!selectedClientId
+                    ? 'Select Farmer first'
+                    : loadingPonds
+                      ? 'Loading ponds...'
+                      : 'Target Pond / Tank (Optional)'}
+                </option>
+                {ponds.map((p) => {
+                  const label =
+                    p.pond_name && p.tank_number && String(p.pond_name).trim() !== String(p.tank_number).trim() && !String(p.pond_name).includes(String(p.tank_number))
+                      ? `${p.pond_name} (#${p.tank_number})`
+                      : (p.pond_name || `Tank #${p.tank_number || p.id}`);
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+        </div>
+
         {/* Date & Time */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -223,6 +301,8 @@ export default function Followups() {
   const [completeTarget, setCompleteTarget] = useState(null);
   const [completeNotes, setCompleteNotes] = useState('');
   const [completing, setCompleting] = useState(false);
+  const [adminEnterTest, setAdminEnterTest] = useState(false);
+  const [adminTestData, setAdminTestData] = useState({ ph: '', salinity: '', ammonia: '', nitrite: '', alkalinity: '', dissolved_oxygen: '' });
 
   useEffect(() => {
     const s = searchParams.get('status');
@@ -369,16 +449,20 @@ export default function Followups() {
     if (!completeTarget) return;
     setCompleting(true);
     try {
-      const res = await followupApi.complete(completeTarget.id, completeNotes);
+      const payload = {
+        completion_notes: completeNotes,
+        ...(adminEnterTest && adminTestData.ph ? {
+          test_data: adminTestData,
+          tank_id: completeTarget.tank_id || null,
+        } : {}),
+      };
+      await followupApi.complete(completeTarget.id, payload);
       toast.success('Follow-up marked completed');
-
-      const whatsappUrl = res.data?.data?.whatsapp_url;
-      if (whatsappUrl) {
-        window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-      }
 
       setCompleteTarget(null);
       setCompleteNotes('');
+      setAdminEnterTest(false);
+      setAdminTestData({ ph: '', salinity: '', ammonia: '', nitrite: '', alkalinity: '', dissolved_oxygen: '' });
       qc.invalidateQueries({ queryKey: ['followups'] });
       qc.invalidateQueries({ queryKey: ['followups-stats'] });
       qc.invalidateQueries({ queryKey: ['followups-dues'] });
@@ -391,129 +475,150 @@ export default function Followups() {
     }
   };
 
-  const totalDuesCount = statsData?.non_completed ?? ((duesData?.length || 0) + (overdueData?.length || 0));
+  const duesCount = statsData?.dues ?? (duesData?.length || 0);
+  const overdueCount = statsData?.overdue ?? (overdueData?.length || 0);
   const completedCount = statsData?.completed || 0;
 
   return (
     <div className="space-y-4">
       {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Follow-ups</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {data?.pagination?.total || 0} follow-up records found
-          </p>
-        </div>
+      <div>
+        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Follow-ups & Tank Tests</h1>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {data?.pagination?.total || 0} follow-up and weekly test records
+        </p>
+      </div>
+
+      {/* Top 4 Static Cards: Dues (Orange), Overdue (Red), Completed (Green) & Create (Blue) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden">
+        {/* 1. Dues (Orange / Amber) */}
+        <button
+          type="button"
+          onClick={() => handleStatusTabChange(status === 'dues' ? '' : 'dues')}
+          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'dues'
+              ? 'bg-amber-50/80 ring-2 ring-inset ring-amber-500'
+              : 'hover:bg-amber-50/40'
+            }`}
+          title="Filter by dues"
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'dues'
+                ? 'text-amber-700 font-bold'
+                : 'text-gray-500'
+              }`}>
+              Dues (This Week)
+            </span>
+            <Clock className={`w-4 h-4 ${status === 'dues' ? 'text-amber-600' : 'text-gray-400'}`} />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5 h-8">
+            <span className={`text-2xl font-bold tracking-tight ${status === 'dues'
+                ? 'text-amber-900'
+                : 'text-gray-900'
+              }`}>
+              {duesCount}
+            </span>
+            <span className={`text-xs font-medium ${status === 'dues'
+                ? 'text-amber-600'
+                : 'text-gray-400'
+              }`}>
+              due tests & follow-ups
+            </span>
+          </div>
+        </button>
+
+        {/* 2. Overdue (Red / Rose) */}
+        <button
+          type="button"
+          onClick={() => handleStatusTabChange(status === 'overdue' ? '' : 'overdue')}
+          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'overdue'
+              ? 'bg-rose-50/80 ring-2 ring-inset ring-rose-500'
+              : 'hover:bg-rose-50/40'
+            }`}
+          title="Filter by overdue (skipped week tests)"
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'overdue'
+                ? 'text-rose-700 font-bold'
+                : 'text-gray-500'
+              }`}>
+              Overdue (Skipped Week)
+            </span>
+            <AlertTriangle className={`w-4 h-4 ${status === 'overdue' ? 'text-rose-600' : 'text-gray-400'}`} />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5 h-8">
+            <span className={`text-2xl font-bold tracking-tight ${status === 'overdue'
+                ? 'text-rose-900'
+                : 'text-gray-900'
+              }`}>
+              {overdueCount}
+            </span>
+            <span className={`text-xs font-medium ${status === 'overdue'
+                ? 'text-rose-600'
+                : 'text-gray-400'
+              }`}>
+              skipped week tests
+            </span>
+          </div>
+        </button>
+
+        {/* 3. Completed (Green / Emerald) */}
+        <button
+          type="button"
+          onClick={() => handleStatusTabChange(status === 'completed' ? '' : 'completed')}
+          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'completed'
+              ? 'bg-emerald-50/80 ring-2 ring-inset ring-emerald-500'
+              : 'hover:bg-emerald-50/40'
+            }`}
+          title="Filter by completed follow-ups"
+        >
+          <div className="flex items-center justify-between">
+            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'completed'
+                ? 'text-emerald-700 font-bold'
+                : 'text-gray-500'
+              }`}>
+              Completed
+            </span>
+            <CheckCircle2 className={`w-4 h-4 ${status === 'completed' ? 'text-emerald-600' : 'text-gray-400'}`} />
+          </div>
+          <div className="mt-2 flex items-baseline gap-1.5 h-8">
+            <span className={`text-2xl font-bold tracking-tight ${status === 'completed'
+                ? 'text-emerald-900'
+                : 'text-gray-900'
+              }`}>
+              {completedCount}
+            </span>
+            <span className={`text-xs font-medium ${status === 'completed'
+                ? 'text-emerald-600'
+                : 'text-gray-400'
+              }`}>
+              completed tests
+            </span>
+          </div>
+        </button>
+
+        {/* 4. Create Follow-up Button (Clean blue with simple white plus) */}
         {canCreate && (
           <button
+            type="button"
             onClick={() => setAddModal(true)}
-            className="btn-primary btn-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
+            className="p-4 sm:p-5 flex items-center justify-center gap-2 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm sm:text-base transition-colors"
+            title="Create Follow-up"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-5 h-5 text-white" />
             <span>Create Follow-up</span>
           </button>
         )}
       </div>
 
-      {/* Top Static Cards: Dues (Orange) & Completed (Green) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden">
-        {/* 1. Dues (Orange / Amber) */}
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange(status === 'dues' || status === 'pending' ? '' : 'dues')}
-          className={`group p-4 sm:p-5 flex flex-col justify-between text-left transition-all duration-200 cursor-pointer ${
-            status === 'dues' || status === 'pending'
-              ? 'bg-amber-50/80 ring-2 ring-inset ring-amber-500'
-              : 'hover:bg-amber-50/40 hover:shadow-inner'
-          }`}
-          title="Filter by dues"
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ${
-              status === 'dues' || status === 'pending'
-                ? 'text-amber-700 font-bold'
-                : 'text-gray-500 group-hover:text-amber-600'
-            }`}>
-              Dues
-            </span>
-            <Clock className={`w-4 h-4 transition-all duration-200 ${
-              status === 'dues' || status === 'pending'
-                ? 'text-amber-600 scale-110'
-                : 'text-gray-400 group-hover:text-amber-500 group-hover:scale-115 group-hover:rotate-6'
-            }`} />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5 h-8">
-            <span className={`text-2xl font-bold tracking-tight transition-colors duration-150 ${
-              status === 'dues' || status === 'pending'
-                ? 'text-amber-900'
-                : 'text-gray-900 group-hover:text-amber-900'
-            }`}>
-              {totalDuesCount}
-            </span>
-            <span className={`text-xs font-medium transition-colors duration-150 ${
-              status === 'dues' || status === 'pending'
-                ? 'text-amber-600'
-                : 'text-gray-400 group-hover:text-amber-600'
-            }`}>
-              pending follow-ups
-            </span>
-          </div>
-        </button>
-
-        {/* 2. Completed (Green / Emerald) */}
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange(status === 'completed' ? '' : 'completed')}
-          className={`group p-4 sm:p-5 flex flex-col justify-between text-left transition-all duration-200 cursor-pointer ${
-            status === 'completed'
-              ? 'bg-emerald-50/80 ring-2 ring-inset ring-emerald-500'
-              : 'hover:bg-emerald-50/40 hover:shadow-inner'
-          }`}
-          title="Filter by completed follow-ups"
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider transition-colors duration-150 ${
-              status === 'completed'
-                ? 'text-emerald-700 font-bold'
-                : 'text-gray-500 group-hover:text-emerald-600'
-            }`}>
-              Completed
-            </span>
-            <CheckCircle2 className={`w-4 h-4 transition-all duration-200 ${
-              status === 'completed'
-                ? 'text-emerald-600 scale-110'
-                : 'text-gray-400 group-hover:text-emerald-500 group-hover:scale-115 group-hover:rotate-6'
-            }`} />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5 h-8">
-            <span className={`text-2xl font-bold tracking-tight transition-colors duration-150 ${
-              status === 'completed'
-                ? 'text-emerald-900'
-                : 'text-gray-900 group-hover:text-emerald-900'
-            }`}>
-              {completedCount}
-            </span>
-            <span className={`text-xs font-medium transition-colors duration-150 ${
-              status === 'completed'
-                ? 'text-emerald-600'
-                : 'text-gray-400 group-hover:text-emerald-600'
-            }`}>
-              completed follow-ups
-            </span>
-          </div>
-        </button>
-      </div>
-
-      {/* Minimal Status Tabs: All, Dues (Orange hover), Completed (Green hover) */}
+      {/* Minimal Status Tabs: All, Dues, Overdue, Completed */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
         <button
           type="button"
           onClick={() => handleStatusTabChange('')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
-            status === '' || status === 'all'
+          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === '' || status === 'all'
               ? 'bg-blue-600 text-white shadow-xs hover:bg-blue-700 hover:shadow-sm'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-blue-50/60 hover:text-blue-700 hover:border-blue-300'
-          }`}
+              : 'bg-white text-gray-700 border border-gray-200 hover:bg-blue-50/60 hover:text-blue-700 hover:border-blue-300'
+            }`}
         >
           All ({data?.pagination?.total || 0})
         </button>
@@ -521,20 +626,37 @@ export default function Followups() {
         <button
           type="button"
           onClick={() => handleStatusTabChange('dues')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
-            status === 'dues' || status === 'pending'
+          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'dues'
               ? 'bg-amber-600 text-white shadow-xs hover:bg-amber-700 hover:shadow-sm'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-amber-50/70 hover:text-amber-700 hover:border-amber-300'
-          }`}
+              : 'bg-amber-50/60 text-amber-800 border border-amber-300 hover:bg-amber-100/70 hover:border-amber-400 hover:text-amber-900 shadow-2xs'
+            }`}
         >
           <span>Dues</span>
-          {totalDuesCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${
-              status === 'dues' || status === 'pending'
+          {duesCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'dues'
                 ? 'bg-amber-700 text-white'
-                : 'bg-gray-100 text-gray-700 group-hover:bg-amber-100 group-hover:text-amber-800'
-            }`}>
-              {totalDuesCount}
+                : 'bg-amber-100 text-amber-800 group-hover:bg-amber-200 group-hover:text-amber-900'
+              }`}>
+              {duesCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleStatusTabChange('overdue')}
+          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'overdue'
+              ? 'bg-rose-600 text-white shadow-xs hover:bg-rose-700 hover:shadow-sm'
+              : 'bg-rose-50/60 text-rose-800 border border-rose-300 hover:bg-rose-100/70 hover:border-rose-400 hover:text-rose-900 shadow-2xs'
+            }`}
+        >
+          <span>Overdue</span>
+          {overdueCount > 0 && (
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'overdue'
+                ? 'bg-rose-700 text-white'
+                : 'bg-rose-100 text-rose-800 group-hover:bg-rose-200 group-hover:text-rose-900'
+              }`}>
+              {overdueCount}
             </span>
           )}
         </button>
@@ -542,19 +664,17 @@ export default function Followups() {
         <button
           type="button"
           onClick={() => handleStatusTabChange('completed')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
-            status === 'completed'
+          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'completed'
               ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 hover:shadow-sm'
-              : 'bg-white text-gray-600 border border-gray-200 hover:bg-emerald-50/70 hover:text-emerald-700 hover:border-emerald-300'
-          }`}
+              : 'bg-emerald-50/60 text-emerald-800 border border-emerald-300 hover:bg-emerald-100/70 hover:border-emerald-400 hover:text-emerald-900 shadow-2xs'
+            }`}
         >
           <span>Completed</span>
           {completedCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${
-              status === 'completed'
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'completed'
                 ? 'bg-emerald-700 text-white'
-                : 'bg-gray-100 text-gray-700 group-hover:bg-emerald-100 group-hover:text-emerald-800'
-            }`}>
+                : 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200 group-hover:text-emerald-900'
+              }`}>
               {completedCount}
             </span>
           )}
@@ -677,8 +797,8 @@ export default function Followups() {
                         (f.salesperson_role === 'sales_manager'
                           ? 'ASM'
                           : f.salesperson_role === 'sales_executive'
-                          ? 'Technical Executive'
-                          : 'Staff');
+                            ? 'Technical Executive'
+                            : 'Staff');
 
                       const locationText = [f.client_village, f.client_city || f.city, f.client_district || f.district]
                         .filter(Boolean)
@@ -688,12 +808,27 @@ export default function Followups() {
                         <tr key={f.id} className="hover:bg-gray-50/70 transition-colors">
                           {/* Title & Remarks */}
                           <td className="min-w-[200px] max-w-sm">
-                            <span className="font-medium text-gray-900 text-sm block">
-                              {f.title}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-medium text-gray-900 text-sm block">
+                                {f.title}
+                              </span>
+                              {Boolean(f.test_required) && (
+                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${f.test_week
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                  }`}>
+                                  🧪 {f.test_week ? 'Weekly Tank Test' : 'Test Required'}
+                                </span>
+                              )}
+                            </div>
                             {f.remarks && (
                               <span className="text-xs text-gray-500 truncate block mt-0.5">
                                 {f.remarks}
+                              </span>
+                            )}
+                            {f.tank_name && (
+                              <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
+                                Pond / Tank: {f.tank_name} {f.tank_number ? `(#${f.tank_number})` : ''}
                               </span>
                             )}
                           </td>
@@ -742,8 +877,9 @@ export default function Followups() {
                             {f.status !== 'completed' && f.status !== 'cancelled' && (
                               <div className="mt-0.5 font-sans">
                                 {isOverdue ? (
-                                  <span className="text-[11px] text-red-600 font-medium">
-                                    {f.days_overdue ? `${f.days_overdue}d overdue` : 'Overdue'}
+                                  <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                                    {f.test_week ? 'Skipped Week (Overdue)' : (f.days_overdue ? `${f.days_overdue}d overdue` : 'Overdue')}
                                   </span>
                                 ) : Number(f.days_overdue) === 0 ? (
                                   <span className="text-[11px] text-amber-700 font-medium">
@@ -751,7 +887,7 @@ export default function Followups() {
                                   </span>
                                 ) : Number(f.days_overdue) > 0 ? (
                                   <span className="text-[11px] text-amber-700 font-medium">
-                                    {f.days_overdue}d due
+                                    {f.test_week ? 'Due this week' : `${f.days_overdue}d due`}
                                   </span>
                                 ) : (
                                   <span className="text-[11px] text-gray-400">
@@ -769,23 +905,15 @@ export default function Followups() {
 
                           {/* Status */}
                           <td className="whitespace-nowrap text-xs font-medium">
-                            <span className={
-                              f.status === 'completed'
-                                ? 'text-gray-900'
-                                : f.status === 'cancelled'
-                                ? 'text-gray-400'
-                                : isOverdue
-                                ? 'text-red-700'
-                                : 'text-gray-700'
-                            }>
-                              {f.status === 'completed'
-                                ? 'Completed'
-                                : f.status === 'cancelled'
-                                ? 'Cancelled'
-                                : isOverdue
-                                ? 'Overdue'
-                                : 'Pending'}
-                            </span>
+                            {f.status === 'completed' ? (
+                              <Badge variant="success">Completed</Badge>
+                            ) : f.status === 'cancelled' ? (
+                              <Badge variant="gray">Cancelled</Badge>
+                            ) : isOverdue ? (
+                              <Badge variant="danger">{f.test_week ? 'Skipped Week' : 'Overdue'}</Badge>
+                            ) : (
+                              <Badge variant="warning">{f.test_week ? 'Due' : 'Pending'}</Badge>
+                            )}
                           </td>
 
                           {/* Actions */}
@@ -847,38 +975,108 @@ export default function Followups() {
       >
         {completeTarget && (
           <div className="space-y-4">
-            {/* Target details */}
-            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-xs space-y-1.5 text-gray-700">
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Executive:</span>
-                <span className="font-semibold text-gray-900">
-                  {completeTarget.salesperson_name} ({completeTarget.salesperson_role_name || 'Technical Executive'})
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Farmer:</span>
+            {/* Target Farmer & Executive - Minimal */}
+            <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs flex items-center justify-between flex-wrap gap-1 text-gray-700">
+              <div>
                 <span className="font-semibold text-gray-900">{completeTarget.company_name}</span>
+                <span className="text-gray-400 mx-1.5">·</span>
+                <span>{completeTarget.salesperson_name}</span>
+                {completeTarget.tank_name && (
+                  <>
+                    <span className="text-gray-400 mx-1.5">·</span>
+                    <span className="text-gray-500">Pond: {completeTarget.tank_name}</span>
+                  </>
+                )}
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-500">Scheduled Date:</span>
-                <span className="font-mono text-gray-800">
-                  {completeTarget.followup_date}
-                  {completeTarget.followup_time ? ` at ${completeTarget.followup_time}` : ''}
-                </span>
+              <div className="text-gray-500 font-mono text-[11px]">
+                Due: {completeTarget.followup_date}
               </div>
             </div>
 
+            {/* Admin Direct Completion Banner */}
+            {Boolean(completeTarget.test_required) && (
+              <p className="text-xs text-blue-700 bg-blue-50/70 border border-blue-200/80 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span>Field test required · Admin direct completion enabled</span>
+              </p>
+            )}
+
+            {/* Optional Test Parameters Entry */}
+            <div className="pt-1">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={adminEnterTest}
+                  onChange={(e) => setAdminEnterTest(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                />
+                <span>Record Field Water Test Parameters (Optional)</span>
+              </label>
+            </div>
+
+            {adminEnterTest && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl space-y-3 text-xs">
+                <p className="text-[11px] font-semibold text-gray-700">Water Quality Test Results (Optional for Admin):</p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="label text-[11px]">pH</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 7.8"
+                      value={adminTestData.ph}
+                      onChange={(e) => setAdminTestData({ ...adminTestData, ph: e.target.value })}
+                      className="input text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-[11px]">Salinity (ppt)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder="e.g. 15"
+                      value={adminTestData.salinity}
+                      onChange={(e) => setAdminTestData({ ...adminTestData, salinity: e.target.value })}
+                      className="input text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-[11px]">Ammonia (ppm)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 0.1"
+                      value={adminTestData.ammonia}
+                      onChange={(e) => setAdminTestData({ ...adminTestData, ammonia: e.target.value })}
+                      className="input text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-[11px]">Nitrite (ppm)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="e.g. 0.05"
+                      value={adminTestData.nitrite}
+                      onChange={(e) => setAdminTestData({ ...adminTestData, nitrite: e.target.value })}
+                      className="input text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Completion Notes */}
             <div>
-              <label className="label">
-                Completion Notes <span className="text-gray-400 font-normal">(Optional)</span>
+              <label className="label text-xs">
+                Remarks <span className="text-gray-400 font-normal">(Optional)</span>
               </label>
               <textarea
                 value={completeNotes}
                 onChange={(e) => setCompleteNotes(e.target.value)}
-                className="input"
-                rows={3}
-                placeholder="Enter completion remarks or recommendations..."
+                className="input text-xs"
+                rows={2}
+                placeholder="Optional remarks..."
               />
             </div>
 
@@ -899,7 +1097,7 @@ export default function Followups() {
                 className="group btn-primary flex-1 sm:flex-initial py-2 sm:py-1.5 inline-flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
               >
                 <Check className="w-4 h-4 text-white group-hover:scale-115 transition-transform duration-150" />
-                <span>{completing ? 'Completing...' : 'Mark Completed'}</span>
+                <span>{completing ? 'Completing...' : 'Complete Follow-up'}</span>
               </button>
             </div>
           </div>

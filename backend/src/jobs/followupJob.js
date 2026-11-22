@@ -1,12 +1,16 @@
 const cron = require('node-cron');
 const sequelize = require('../config/database');
 const logger = require('../utils/logger');
+const { syncWeeklyTankTests } = require('../controllers/followupController');
 
-// Run at midnight daily - mark overdue, escalate
+// Run at midnight daily - sync weekly tests, mark overdue, escalate
 cron.schedule('0 0 * * *', async () => {
   logger.info('Running daily followup job...');
   try {
-    // Mark followups incomplete for > 1 week as overdue
+    // 1. Sync mandatory weekly tank water tests (current week -> dues, skipped week -> overdues)
+    await syncWeeklyTankTests(true);
+
+    // 2. Mark followups incomplete for > 1 week as overdue
     const [updated] = await sequelize.query(
       "UPDATE followups SET status='overdue', updated_at=NOW() WHERE status='pending' AND DATEDIFF(CURDATE(), followup_date) > 7 AND deleted_at IS NULL"
     );

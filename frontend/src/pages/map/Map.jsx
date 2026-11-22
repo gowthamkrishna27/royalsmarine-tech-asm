@@ -6,9 +6,9 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   MapPinIcon,
-  CalendarDaysIcon,
-  UserGroupIcon,
   ChevronDownIcon,
+  Square3Stack3DIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 
 const getL = () => (typeof window !== 'undefined' ? window.L : null);
@@ -36,14 +36,14 @@ export default function MapPage() {
   const markerMapRef = useRef({});
   const suppressFitBoundsRef = useRef(false);
 
-  const osmLayerRef = useRef(null);
-  const satelliteLayerRef = useRef(null);
+  const baseLayersRef = useRef({});
+  const layerMenuRef = useRef(null);
   const activeRangeLayersRef = useRef([]);
 
   const [search, setSearch] = useState('');
-  const [selectedDate, setSelectedDate] = useState('');
   const [farmerId, setFarmerId] = useState('');
-  const [mapMode] = useState('satellite'); // Satellite view by default
+  const [activeLayer, setActiveLayer] = useState('hybrid');
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(Boolean(typeof window !== 'undefined' && window.L));
 
   // Real-time geocoding & place search state
@@ -52,18 +52,21 @@ export default function MapPage() {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
 
-  // Close search dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
-    function handleSearchClickOutside(event) {
+    function handleClickOutside(event) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         setShowSearchDropdown(false);
       }
+      if (layerMenuRef.current && !layerMenuRef.current.contains(event.target)) {
+        setShowLayerMenu(false);
+      }
     }
-    document.addEventListener('mousedown', handleSearchClickOutside);
-    document.addEventListener('touchstart', handleSearchClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleSearchClickOutside);
-      document.removeEventListener('touchstart', handleSearchClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
   }, []);
 
@@ -83,8 +86,8 @@ export default function MapPage() {
   }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['map-locations', selectedDate],
-    queryFn: () => clientService.getMapLocations(selectedDate ? { date: selectedDate } : {}).then(res => res.data.data),
+    queryKey: ['map-locations'],
+    queryFn: () => clientService.getMapLocations().then(res => res.data.data),
   });
 
   const clients = data?.clients || [];
@@ -528,22 +531,15 @@ export default function MapPage() {
       }
     );
 
-    osmLayerRef.current = osmLayer;
-    satelliteLayerRef.current = satelliteLayer;
-
-    if (mapMode === 'satellite') {
-      satelliteLayer.addTo(map);
-    } else {
-      osmLayer.addTo(map);
-    }
-
-    const baseMaps = {
-      '🛰️ Google Hybrid HD': satelliteLayer,
-      '🌍 Pure Satellite HD': pureSatLayer,
-      '🌾 Esri Clarity HD': esriLayer,
-      '🏙️ Google Streets HD': osmLayer,
+    baseLayersRef.current = {
+      hybrid: satelliteLayer,
+      satellite: pureSatLayer,
+      esri: esriLayer,
+      street: osmLayer,
     };
-    L.control.layers(baseMaps, null, { position: 'bottomright' }).addTo(map);
+
+    // Add default initial layer
+    satelliteLayer.addTo(map);
 
     const markersLayer = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
@@ -579,21 +575,20 @@ export default function MapPage() {
     };
   }, [isLeafletReady]);
 
-  // Handle map mode switch (Roads vs Satellite)
+  // Handle map layer change (Hybrid, Satellite, Esri, Street)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    const osm = osmLayerRef.current;
-    const sat = satelliteLayerRef.current;
-    if (!map || !osm || !sat) return;
+    const layers = baseLayersRef.current;
+    if (!map || !layers) return;
 
-    if (mapMode === 'satellite') {
-      if (map.hasLayer(osm)) map.removeLayer(osm);
-      if (!map.hasLayer(sat)) map.addLayer(sat);
-    } else {
-      if (map.hasLayer(sat)) map.removeLayer(sat);
-      if (!map.hasLayer(osm)) map.addLayer(osm);
-    }
-  }, [mapMode]);
+    Object.entries(layers).forEach(([key, layer]) => {
+      if (key === activeLayer) {
+        if (!map.hasLayer(layer)) map.addLayer(layer);
+      } else {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+      }
+    });
+  }, [activeLayer]);
 
   // Handle window resize or container size updates
   useEffect(() => {
@@ -743,45 +738,6 @@ export default function MapPage() {
       marker.bindPopup(popup);
 
       if (!isFarmer && item.has_test && item.test_distance_meters != null) {
-        // When filtered by date, show range circles directly on the map
-        if (selectedDate) {
-          const circleRadius = Math.max(Number(item.test_distance_meters), 6);
-          const rangeCircle = L.circle([item.latitude, item.longitude], {
-            radius: circleRadius,
-            color: '#059669',
-            fillColor: '#10b981',
-            fillOpacity: 0.22,
-            weight: 2,
-            dashArray: '5, 5',
-          }).addTo(map);
-          activeRangeLayersRef.current.push(rangeCircle);
-
-          if (item.test_latitude && item.test_longitude) {
-            const line = L.polyline([
-              [item.latitude, item.longitude],
-              [item.test_latitude, item.test_longitude],
-            ], {
-              color: '#047857',
-              weight: 2,
-              dashArray: '3, 4',
-            }).addTo(map);
-            activeRangeLayersRef.current.push(line);
-
-            const testDot = L.circleMarker([item.test_latitude, item.test_longitude], {
-              radius: 6,
-              color: '#065f46',
-              fillColor: '#34d399',
-              fillOpacity: 1,
-              weight: 2,
-            }).addTo(map);
-
-            testDot.bindTooltip(
-              `<b>Test Location:</b> ${item.test_distance_meters}m from tank<br/>${item.tested_by_name || 'Executive'} (${item.tested_by_role_name || 'ASM / Tech'})`,
-              { permanent: false, direction: 'top' }
-            );
-            activeRangeLayersRef.current.push(testDot);
-          }
-        }
         marker.on('popupopen', () => {
           activeRangeLayersRef.current.forEach(layer => {
             try { map.removeLayer(layer); } catch {}
@@ -863,19 +819,19 @@ export default function MapPage() {
         </div>
       )}
 
-      {/* Floating Top Controls (Search + Farmers + Date + Filter + Layer + My Location) */}
+      {/* Floating Top Controls (Search + Farmers + My Location) */}
       <div className="absolute top-3 sm:top-4 left-3 right-3 z-10 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto w-full overflow-x-auto pb-1 scrollbar-none">
+        <div className="flex items-center gap-2 pointer-events-auto max-w-xl mx-auto sm:mx-0">
           {/* Search Box with Real-Time Suggestions */}
-          <div ref={searchContainerRef} className="relative min-w-[180px] sm:min-w-[220px] flex-1 max-w-xs shrink-0">
+          <div ref={searchContainerRef} className="relative flex-1 min-w-0">
             <form
               onSubmit={handleSearchSubmit}
-              className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center px-3 py-2"
+              className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-md rounded-xl flex items-center px-3 py-2"
             >
               <MagnifyingGlassIcon className="w-5 h-5 text-gray-400 flex-shrink-0" />
               <input
                 type="text"
-                placeholder="Search farmer, pond, village, town, or paste GPS..."
+                placeholder="Search farmer, pond, place, or GPS..."
                 value={search}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 onFocus={() => {
@@ -883,7 +839,7 @@ export default function MapPage() {
                     setShowSearchDropdown(true);
                   }
                 }}
-                className="w-full bg-transparent border-0 p-0 pl-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
+                className="w-full bg-transparent border-0 p-0 pl-2 text-xs sm:text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-0"
               />
               {isGeoSearching ? (
                 <div className="ml-1">
@@ -1005,14 +961,14 @@ export default function MapPage() {
             <select
               value={farmerId}
               onChange={(e) => setFarmerId(e.target.value)}
-              className={`h-10 pl-3 pr-8 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-lg transition cursor-pointer min-w-[130px] max-w-[200px] shrink-0 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 truncate appearance-none ${
+              className={`h-9 sm:h-10 pl-2.5 sm:pl-3 pr-7 py-1 text-xs font-semibold rounded-xl bg-white/95 backdrop-blur-md border shadow-md transition cursor-pointer max-w-[125px] sm:max-w-[160px] truncate appearance-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
                 farmerId
-                  ? 'border-blue-500 bg-blue-50/90 text-blue-900 font-bold ring-1 ring-blue-200'
+                  ? 'border-blue-500 bg-blue-50 text-blue-900 font-bold'
                   : 'border-gray-200/90 text-gray-700 hover:border-gray-400'
               }`}
               title="Filter by Farmer"
             >
-              <option value="">Farmers (All)</option>
+              <option value="">All Farmers</option>
               {farmerOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}{opt.city ? ` (${opt.city})` : ''}
@@ -1023,37 +979,70 @@ export default function MapPage() {
               <button
                 type="button"
                 onClick={() => setFarmerId('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 bg-white/80 rounded"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
                 title="Clear farmer filter"
               >
                 <XMarkIcon className="w-3.5 h-3.5" />
               </button>
             ) : (
-              <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <ChevronDownIcon className="w-3.5 h-3.5 text-gray-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             )}
           </div>
 
-          {/* Date Filter Control */}
-          <div className={`h-10 px-2.5 flex-shrink-0 bg-white/95 backdrop-blur-md border shadow-lg rounded-xl flex items-center gap-1.5 text-xs font-semibold transition active:scale-95 ${
-            selectedDate ? 'border-emerald-500 bg-emerald-50/90 text-emerald-800' : 'border-gray-200/90 text-gray-700 hover:bg-white'
-          }`}>
-            <CalendarDaysIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent border-none text-xs font-semibold text-gray-800 focus:outline-none focus:ring-0 cursor-pointer p-0 w-28 sm:w-32"
-              title="Select date to view tests submitted on that date"
-            />
-            {selectedDate && (
-              <button
-                type="button"
-                onClick={() => setSelectedDate('')}
-                className="text-gray-400 hover:text-red-600 p-0.5 ml-0.5"
-                title="Clear date filter"
-              >
-                <XMarkIcon className="w-4 h-4" />
-              </button>
+          {/* Layer Changer Dropdown Button */}
+          <div ref={layerMenuRef} className="relative shrink-0">
+            <button
+              type="button"
+              title="Change Map Layer (Satellite, Pure Satellite, Esri, Roads)"
+              onClick={() => setShowLayerMenu((prev) => !prev)}
+              className={`w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 backdrop-blur-md border shadow-md rounded-xl flex items-center justify-center transition active:scale-95 ${
+                showLayerMenu
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/30'
+                  : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
+              }`}
+            >
+              <Square3Stack3DIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            {showLayerMenu && (
+              <div className="absolute right-0 top-full mt-2 w-56 sm:w-60 bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200/90 p-1.5 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  Map Layers
+                </div>
+                <div className="py-1 space-y-0.5">
+                  {[
+                    { id: 'hybrid', label: 'Google Hybrid HD', desc: 'Satellite with Roads & Names', icon: '🛰️' },
+                    { id: 'satellite', label: 'Pure Satellite HD', desc: 'Clean ponds without labels', icon: '🌍' },
+                    { id: 'esri', label: 'Esri Clarity HD', desc: 'High-contrast agriculture', icon: '🌾' },
+                    { id: 'street', label: 'Google Streets HD', desc: 'Road map & town boundaries', icon: '🏙️' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveLayer(opt.id);
+                        setShowLayerMenu(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 text-left rounded-lg text-xs flex items-center justify-between transition ${
+                        activeLayer === opt.id
+                          ? 'bg-blue-50 text-blue-900 font-bold'
+                          : 'text-gray-700 hover:bg-gray-100/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-sm shrink-0">{opt.icon}</span>
+                        <div className="truncate">
+                          <p className="font-semibold leading-tight truncate">{opt.label}</p>
+                          <p className="text-[10px] text-gray-500 font-normal leading-tight truncate">{opt.desc}</p>
+                        </div>
+                      </div>
+                      {activeLayer === opt.id && (
+                        <CheckIcon className="w-4 h-4 text-blue-600 shrink-0 ml-1.5" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
 
@@ -1063,62 +1052,11 @@ export default function MapPage() {
             title="Locate my position on map"
             onClick={handleLocateMe}
             disabled={locating}
-            className="w-10 h-10 flex-shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50"
+            className="w-9 h-9 sm:w-10 sm:h-10 flex-shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-md rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50"
           >
-            {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-5 h-5 text-gray-700" />}
+            {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />}
           </button>
         </div>
-
-        {/* Date Filter Active Status Banner */}
-        {selectedDate && (
-          <div className="mt-2.5 flex items-center gap-2 pointer-events-auto">
-            <div className={`px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border animate-in fade-in slide-in-from-top-2 ${
-              filtered.filter((i) => i.type === 'pond').length > 0
-                ? 'bg-emerald-600/95 border-emerald-500 text-white'
-                : 'bg-amber-600/95 border-amber-500 text-white'
-            }`}>
-              <CalendarDaysIcon className="w-4 h-4 shrink-0" />
-              <span>
-                {filtered.filter((i) => i.type === 'pond').length > 0 ? (
-                  <>
-                    Tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>: <b>{filtered.filter((i) => i.type === 'pond').length}</b> {filtered.filter((i) => i.type === 'pond').length === 1 ? 'tank test' : 'tank tests'}
-                  </>
-                ) : (
-                  <>
-                    No tests submitted on <b>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</b>
-                  </>
-                )}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedDate('')}
-                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Farmer Filter Active Status Banner */}
-        {farmerId && (
-          <div className="mt-2 flex items-center gap-2 pointer-events-auto">
-            <div className="px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border bg-blue-600/95 border-blue-500 text-white animate-in fade-in slide-in-from-top-2">
-              <UserGroupIcon className="w-4 h-4 shrink-0" />
-              <span>
-                Farmer: <b>{farmerOptions.find(f => String(f.value) === String(farmerId))?.label || 'Selected Farmer'}</b>
-                {filtered.length > 0 && ` (${filtered.length} ${filtered.length === 1 ? 'location' : 'locations'} on map)`}
-              </span>
-              <button
-                type="button"
-                onClick={() => setFarmerId('')}
-                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

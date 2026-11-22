@@ -21,5 +21,6 @@ router.get('/', authenticate, listFollowups);
 router.post('/', authenticate, authorize(...createRoles), createFollowup);
 router.put('/:id', authenticate, updateFollowup);
 router.patch('/:id/complete', authenticate, completeFollowup);
+router.put('/:id/complete', authenticate, completeFollowup);
 
 module.exports = router;

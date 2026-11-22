@@ -189,6 +189,26 @@ app.listen(PORT, async () => {
       logger.warn('Ponds column verify note: ' + colErr.message);
     }
 
+    // Ensure followups columns (test_required, test_details, tank_id) exist
+    try {
+      const [fCols] = await sequelize.query('DESCRIBE followups;');
+      const fColNames = fCols.map(c => c.Field);
+      if (!fColNames.includes('test_required')) {
+        await sequelize.query('ALTER TABLE followups ADD COLUMN test_required TINYINT(1) DEFAULT 0;');
+        logger.info('Added test_required column to followups table.');
+      }
+      if (!fColNames.includes('test_details')) {
+        await sequelize.query('ALTER TABLE followups ADD COLUMN test_details JSON NULL;');
+        logger.info('Added test_details column to followups table.');
+      }
+      if (!fColNames.includes('tank_id')) {
+        await sequelize.query('ALTER TABLE followups ADD COLUMN tank_id INT NULL;');
+        logger.info('Added tank_id column to followups table.');
+      }
+    } catch (fColErr) {
+      logger.warn('Followups column verify note: ' + fColErr.message);
+    }
+
   } catch (err) {
     logger.warn('Table cleanup note: ' + err.message);
   }

@@ -1,5 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
+const ExcelJS = require('exceljs');
+const { Readable } = require('stream');
 const sequelize = require('../config/database');
 const { sendSuccess, sendError, sendPaginated } = require('../utils/response');
 const { getPagination, buildMeta } = require('../utils/pagination');
@@ -338,4 +340,337 @@ const getRoles = async (req, res) => {
   }
 };
 
-module.exports = { listUsers, createUser, getUser, updateUser, deleteUser, resetUserPassword, getRoles };
+const downloadUserTemplate = async (req, res) => {
+  try {
+    const format = (req.query.format || 'xlsx').toLowerCase().trim();
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Royals Marine Food CRM';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet('Users Template');
+
+    const headers = [
+      { text: 'Full Name', mandatory: true, width: 22 },
+      { text: 'Email', mandatory: true, width: 28 },
+      { text: 'Mobile', mandatory: true, width: 16 },
+      { text: 'Role', mandatory: true, width: 20 },
+      { text: 'Region', mandatory: false, width: 20 },
+      { text: 'Area', mandatory: false, width: 18 },
+      { text: 'Department', mandatory: false, width: 18 },
+      { text: 'Reporting Manager Email', mandatory: false, width: 28 },
+      { text: 'Joining Date', mandatory: false, width: 16 },
+    ];
+
+    headers.forEach((col, idx) => {
+      const cell = ws.getCell(1, idx + 1);
+      if (col.mandatory) {
+        cell.value = {
+          richText: [
+            { text: col.text + ' ', font: { bold: true, color: { argb: 'FF1F2937' }, size: 11 } },
+            { text: '*', font: { bold: true, color: { argb: 'FFDC2626' }, size: 11 } },
+          ],
+        };
+      } else {
+        cell.value = col.text;
+        cell.font = { bold: true, color: { argb: 'FF1F2937' }, size: 11 };
+      }
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF3F4F6' },
+      };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+        bottom: { style: 'medium', color: { argb: 'FF9CA3AF' } },
+        right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+      ws.getColumn(idx + 1).width = col.width;
+    });
+
+    ws.getRow(1).height = 28;
+
+    // Role dropdown list stored in hidden sheet for 100% reliable Excel data validation
+    const lookupWs = wb.addWorksheet('_Roles');
+    lookupWs.state = 'veryHidden';
+    const roleOptions = ['ASM', 'Technical Executive', 'Admin'];
+    roleOptions.forEach((role, idx) => {
+      lookupWs.getCell(idx + 1, 1).value = role;
+    });
+
+    // In-cell Role Dropdown Validation for Column D (Rows 2 to 1000)
+    ws.dataValidations.add('D2:D1000', {
+      type: 'list',
+      allowBlank: true,
+      formulae: ['_Roles!$A$1:$A$3'],
+      showErrorMessage: true,
+      errorTitle: 'Invalid Role',
+      error: 'Please choose a valid role from the dropdown list.',
+    });
+
+    // Clean template with headers only, no raw data rows!
+
+    if (format === 'csv') {
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="users_template.csv"');
+      await wb.csv.write(res);
+      res.end();
+    } else {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="users_template.xlsx"');
+      await wb.xlsx.write(res);
+      res.end();
+    }
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+const importUsers = async (req, res) => {
+  if (!req.file) return sendError(res, 'No file uploaded', 400);
+
+  const summary = { total: 0, imported: 0, skipped: 0, errors: [] };
+
+  try {
+    const wb = new ExcelJS.Workbook();
+    const originalName = (req.file.originalname || '').toLowerCase();
+    const isCsv = originalName.endsWith('.csv') || req.file.mimetype === 'text/csv' || req.file.mimetype === 'text/plain';
+
+    if (isCsv) {
+      await wb.csv.read(Readable.from([req.file.buffer]));
+    } else {
+      try {
+        await wb.xlsx.load(req.file.buffer);
+      } catch (xlsxErr) {
+        // Fallback to CSV if xlsx load fails
+        await wb.csv.read(Readable.from([req.file.buffer]));
+      }
+    }
+
+    const ws = wb.worksheets[0];
+    if (!ws || ws.rowCount < 2) {
+      return sendError(res, 'The uploaded file is empty or contains no user records', 400);
+    }
+
+    // Map column headers dynamically (case-insensitive & whitespace tolerant)
+    const headerRow = ws.getRow(1);
+    const colMap = {};
+    headerRow.eachCell((cell, colNumber) => {
+      let rawText = '';
+      if (cell.value) {
+        if (typeof cell.value === 'object') {
+          if (Array.isArray(cell.value.richText)) {
+            rawText = cell.value.richText.map(t => t.text).join('');
+          } else if (cell.value.text) {
+            rawText = cell.value.text;
+          } else {
+            rawText = String(cell.value);
+          }
+        } else {
+          rawText = String(cell.value);
+        }
+      }
+      const clean = rawText.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (clean.includes('fullname') || clean === 'name') colMap.full_name = colNumber;
+      else if (clean.includes('email') && !clean.includes('manager')) colMap.email = colNumber;
+      else if (clean.includes('mobile') || clean.includes('phone') || clean.includes('contact')) colMap.mobile = colNumber;
+      else if (clean.includes('role')) colMap.role = colNumber;
+      else if (clean.includes('region')) colMap.region = colNumber;
+      else if (clean.includes('area')) colMap.area = colNumber;
+      else if (clean.includes('department') || clean.includes('dept')) colMap.department = colNumber;
+      else if (clean.includes('manager') || clean.includes('reporting')) colMap.manager_email = colNumber;
+      else if (clean.includes('date') || clean.includes('joining')) colMap.joining_date = colNumber;
+      else if (clean.includes('pass')) colMap.password = colNumber;
+    });
+
+    const colFullName = colMap.full_name || 1;
+    const colEmail = colMap.email || 2;
+    const colMobile = colMap.mobile || 3;
+    const colRole = colMap.role || 4;
+    const colRegion = colMap.region || 5;
+    const colArea = colMap.area || 6;
+    const colDept = colMap.department || 7;
+    const colManager = colMap.manager_email || 8;
+    const colJoining = colMap.joining_date || 9;
+    const colPassword = colMap.password || 10;
+
+    const extractVal = (rowValues, colIndex) => {
+      if (!colIndex || !rowValues || rowValues[colIndex] === undefined || rowValues[colIndex] === null) return '';
+      const val = rowValues[colIndex];
+      if (typeof val === 'object') {
+        if (val instanceof Date) return val.toISOString().split('T')[0];
+        if (Array.isArray(val.richText)) return val.richText.map(t => t.text).join('').trim();
+        if (val.text !== undefined) return String(val.text).trim();
+        if (val.result !== undefined) return String(val.result).trim();
+      }
+      return String(val).trim();
+    };
+
+    // Load available roles from database
+    const [rolesList] = await sequelize.query('SELECT id, name, display_name FROM roles');
+    const roleMap = new Map();
+    rolesList.forEach(r => {
+      roleMap.set(r.name.toLowerCase().trim(), r.id);
+      roleMap.set(r.display_name.toLowerCase().trim(), r.id);
+      roleMap.set(r.name.toLowerCase().replace(/[^a-z0-9]/g, ''), r.id);
+      roleMap.set(r.display_name.toLowerCase().replace(/[^a-z0-9]/g, ''), r.id);
+    });
+
+    const salesManagerId = roleMap.get('sales_manager') || rolesList.find(r => r.name === 'sales_manager')?.id;
+    const salesExecutiveId = roleMap.get('sales_executive') || rolesList.find(r => r.name === 'sales_executive')?.id;
+    const adminId = roleMap.get('admin') || rolesList.find(r => r.name === 'admin')?.id;
+    const superAdminId = roleMap.get('super_admin') || rolesList.find(r => r.name === 'super_admin')?.id;
+
+    const resolveRoleId = (roleStr) => {
+      if (!roleStr) return salesExecutiveId;
+      const clean = roleStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (clean === 'asm' || clean === 'salesmanager' || clean === 'areamanager' || clean === 'areasalesmanager') {
+        return salesManagerId;
+      }
+      if (clean === 'tech' || clean === 'salesexecutive' || clean === 'technicalexecutive' || clean === 'fieldexecutive' || clean === 'executive') {
+        return salesExecutiveId;
+      }
+      if (clean === 'admin' || clean === 'administrator') {
+        return adminId;
+      }
+      if (clean === 'superadmin' || clean === 'superadministrator') {
+        return superAdminId;
+      }
+      return roleMap.get(clean) || roleMap.get(roleStr.toLowerCase().trim()) || null;
+    };
+
+    // Pre-cache existing users by email
+    const [existingUsers] = await sequelize.query('SELECT id, email FROM users WHERE deleted_at IS NULL');
+    const emailToId = new Map();
+    existingUsers.forEach(u => {
+      if (u.email) emailToId.set(u.email.toLowerCase().trim(), u.id);
+    });
+
+    // Default password hash cached to avoid repeated bcrypt work
+    const defaultHash = await bcrypt.hash('Welcome@123', 12);
+
+    const rows = [];
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        rows.push({ rowNumber, values: row.values });
+      }
+    });
+
+    summary.total = rows.length;
+
+    for (const { rowNumber, values } of rows) {
+      const full_name = extractVal(values, colFullName);
+      const email = extractVal(values, colEmail).toLowerCase();
+      const mobile = extractVal(values, colMobile);
+      const roleStr = extractVal(values, colRole);
+      const region = extractVal(values, colRegion) || null;
+      const area = extractVal(values, colArea) || null;
+      const department = extractVal(values, colDept) || null;
+      const manager_email = extractVal(values, colManager).toLowerCase();
+      let joining_date = extractVal(values, colJoining) || null;
+      const rawPassword = extractVal(values, colPassword);
+
+      // Skip empty trailing rows
+      if (!full_name && !email && !mobile) {
+        summary.total--;
+        continue;
+      }
+
+      if (!full_name) {
+        summary.errors.push({ row: rowNumber, error: 'Full Name is required' });
+        summary.skipped++;
+        continue;
+      }
+
+      if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+        summary.errors.push({ row: rowNumber, error: `Invalid or missing email: "${email || ''}"` });
+        summary.skipped++;
+        continue;
+      }
+
+      if (!mobile) {
+        summary.errors.push({ row: rowNumber, error: 'Mobile number is required' });
+        summary.skipped++;
+        continue;
+      }
+
+      if (emailToId.has(email)) {
+        summary.errors.push({ row: rowNumber, error: `Email "${email}" is already registered` });
+        summary.skipped++;
+        continue;
+      }
+
+      const roleId = resolveRoleId(roleStr);
+      if (!roleId) {
+        summary.errors.push({ row: rowNumber, error: `Invalid role "${roleStr}". Allowed: ASM, Technical Executive, Admin, etc.` });
+        summary.skipped++;
+        continue;
+      }
+
+      let managerId = null;
+      if (manager_email) {
+        if (emailToId.has(manager_email)) {
+          managerId = emailToId.get(manager_email);
+        }
+      }
+
+      // Format date if provided
+      if (joining_date) {
+        const d = new Date(joining_date);
+        if (!isNaN(d.getTime())) {
+          joining_date = d.toISOString().split('T')[0];
+        } else {
+          joining_date = null;
+        }
+      }
+
+      try {
+        const passwordHash = rawPassword ? await bcrypt.hash(rawPassword, 12) : defaultHash;
+        const uuid = uuidv4();
+
+        const [insertRes] = await sequelize.query(
+          `INSERT INTO users (uuid, full_name, email, mobile, password_hash, role_id, manager_id, department, region, area, joining_date, status, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`,
+          {
+            replacements: [
+              uuid, full_name, email, mobile, passwordHash, roleId, managerId,
+              department, region, area, joining_date, req.user.id
+            ]
+          }
+        );
+
+        const newId = insertRes.insertId || insertRes;
+        emailToId.set(email, newId);
+        summary.imported++;
+      } catch (rowErr) {
+        summary.errors.push({ row: rowNumber, error: rowErr.message });
+        summary.skipped++;
+      }
+    }
+
+    await log({
+      action: 'BULK_USERS_IMPORTED',
+      module: 'users',
+      newValue: { imported: summary.imported, total: summary.total, skipped: summary.skipped },
+      performedBy: req.user.id,
+      req
+    });
+
+    return sendSuccess(res, `Bulk import finished: ${summary.imported} imported, ${summary.skipped} skipped`, summary);
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
+module.exports = {
+  listUsers,
+  createUser,
+  getUser,
+  updateUser,
+  deleteUser,
+  resetUserPassword,
+  getRoles,
+  downloadUserTemplate,
+  importUsers,
+};

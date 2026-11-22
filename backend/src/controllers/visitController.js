@@ -281,6 +281,27 @@ const createVisit = async (req, res) => {
 
     const visitId = typeof insertResult === 'number' ? insertResult : (insertResult?.insertId || insertResult);
 
+    // Auto-complete any pending or overdue weekly tank test for this tank and week
+    if (tank_id && (meeting_type === 'water_quality' || water_quality)) {
+      try {
+        const [[ywRow]] = await sequelize.query(
+          'SELECT YEARWEEK(?, 1) as yw',
+          { replacements: [visit_date || new Date().toISOString().slice(0, 10)], transaction: t }
+        );
+        if (ywRow?.yw) {
+          await sequelize.query(
+            `UPDATE followups 
+             SET status = 'completed', completed_date = NOW(), updated_at = NOW(),
+                 completion_notes = CONCAT('Completed via water test visit #', ?)
+             WHERE tank_id = ? AND test_week = ? AND status IN ('pending', 'overdue') AND deleted_at IS NULL`,
+            { replacements: [visitId, tank_id, String(ywRow.yw)], transaction: t }
+          );
+        }
+      } catch (ywErr) {
+        console.warn('Auto-completing weekly test followup note:', ywErr.message);
+      }
+    }
+
     // Auto-create follow-up only if admin set a due/overdue follow-up date
     if (next_followup_date && ['super_admin', 'admin'].includes(req.user.role)) {
       const followupDate = new Date(`${String(next_followup_date).slice(0, 10)}T00:00:00`);

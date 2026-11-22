@@ -9,7 +9,7 @@ export const followupService = {
   getFilters: () => api.get('/visits/filters'),
   create: (data) => api.post('/followups', data),
   update: (id, data) => api.put(`/followups/${id}`, data),
-  complete: (id, notes) => api.patch(`/followups/${id}/complete`, { completion_notes: notes }),
+  complete: (id, data) => api.patch(`/followups/${id}/complete`, typeof data === 'object' ? data : { completion_notes: data }),
 };
 
 export default followupService;

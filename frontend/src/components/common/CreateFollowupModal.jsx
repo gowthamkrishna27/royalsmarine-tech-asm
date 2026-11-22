@@ -1,16 +1,40 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 import Modal from './Modal';
-import { followupApi } from '../../services/api';
+import { followupApi, clientApi } from '../../services/api';
 
 export default function CreateFollowupModal({ open, onClose, clients, users, currentUser, onCreate }) {
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm();
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm();
   const [loading, setLoading] = useState(false);
   const [selectedExecId, setSelectedExecId] = useState('');
   const [showAllFarmers, setShowAllFarmers] = useState(false);
+  const [testRequired, setTestRequired] = useState(false);
+  const [tankId, setTankId] = useState('');
+  const [ponds, setPonds] = useState([]);
+  const [loadingPonds, setLoadingPonds] = useState(false);
 
   const isASM = currentUser?.role === 'sales_manager';
+  const selectedClientId = watch('client_id');
+
+  // Load ponds when a farmer is selected
+  useEffect(() => {
+    if (selectedClientId) {
+      setLoadingPonds(true);
+      clientApi
+        .listPonds(selectedClientId)
+        .then((res) => {
+          setPonds(res.data?.data || []);
+        })
+        .catch(() => {
+          setPonds([]);
+        })
+        .finally(() => setLoadingPonds(false));
+    } else {
+      setPonds([]);
+      setTankId('');
+    }
+  }, [selectedClientId]);
 
   // Filter farmers assigned to the selected technical executive / ASM
   const filteredClients = (clients || []).filter((c) => {
@@ -28,6 +52,8 @@ export default function CreateFollowupModal({ open, onClose, clients, users, cur
     setValue('assigned_salesperson_id', val);
     setValue('client_id', '');
     setShowAllFarmers(false);
+    setPonds([]);
+    setTankId('');
   };
 
   const onSubmit = async (formData) => {
@@ -36,10 +62,15 @@ export default function CreateFollowupModal({ open, onClose, clients, users, cur
       await followupApi.create({
         ...formData,
         assigned_salesperson_id: selectedExecId || currentUser?.id,
+        test_required: testRequired ? 1 : 0,
+        tank_id: testRequired && tankId ? Number(tankId) : null,
       });
       toast.success('Follow-up scheduled successfully');
       reset();
       setSelectedExecId('');
+      setTestRequired(false);
+      setTankId('');
+      setPonds([]);
       onClose();
       if (onCreate) onCreate();
     } catch (err) {
@@ -53,6 +84,9 @@ export default function CreateFollowupModal({ open, onClose, clients, users, cur
     reset();
     setSelectedExecId('');
     setShowAllFarmers(false);
+    setTestRequired(false);
+    setTankId('');
+    setPonds([]);
     onClose();
   };
 
@@ -140,6 +174,49 @@ export default function CreateFollowupModal({ open, onClose, clients, users, cur
               >
                 Show all farmers ({clients?.length || 0})
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* Minimal Water Test Requirement */}
+        <div className="space-y-2 pt-1">
+          <label className="inline-flex items-center gap-2 cursor-pointer select-none text-xs font-medium text-gray-700 hover:text-gray-900">
+            <input
+              type="checkbox"
+              checked={testRequired}
+              onChange={(e) => setTestRequired(e.target.checked)}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+            />
+            <span>Water test required on completion</span>
+          </label>
+
+          {testRequired && (
+            <div className="pl-6">
+              <select
+                value={tankId}
+                onChange={(e) => setTankId(e.target.value)}
+                className="input text-xs py-1.5"
+                disabled={!selectedClientId || loadingPonds}
+              >
+                <option value="">
+                  {!selectedClientId
+                    ? 'Select Farmer first'
+                    : loadingPonds
+                    ? 'Loading ponds...'
+                    : 'Target Pond / Tank (Optional)'}
+                </option>
+                {ponds.map((p) => {
+                  const label =
+                    p.pond_name && p.tank_number && String(p.pond_name).trim() !== String(p.tank_number).trim() && !String(p.pond_name).includes(String(p.tank_number))
+                      ? `${p.pond_name} (#${p.tank_number})`
+                      : (p.pond_name || `Tank #${p.tank_number || p.id}`);
+                  return (
+                    <option key={p.id} value={p.id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
           )}
         </div>

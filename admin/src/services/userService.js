@@ -8,6 +8,10 @@ export const userService = {
   delete: (id) => api.delete(`/users/${id}`),
   resetPassword: (id, password) => api.put(`/users/${id}/reset-password`, { password }),
   roles: () => api.get('/users/roles'),
+  downloadTemplate: (format = 'xlsx') => api.get(`/users/template?format=${format}`, { responseType: 'blob' }),
+  import: (formData) => api.post('/users/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 export default userService;

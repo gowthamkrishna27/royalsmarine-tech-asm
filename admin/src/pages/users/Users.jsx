@@ -1,7 +1,10 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs/dist/exceljs.min.js';
 import { userApi } from '../../services/api';
+import { downloadBlob } from '../../hooks/useApi';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
 import Badge from '../../components/common/Badge';
@@ -19,6 +22,11 @@ import {
   MagnifyingGlassIcon as Search,
   XMarkIcon as X,
   ClockIcon as Clock,
+  ArrowUpTrayIcon,
+  ArrowDownTrayIcon,
+  DocumentArrowDownIcon,
+  CheckCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
@@ -439,6 +447,490 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
   );
 }
 
+export function UserImportModal({ open, onClose, onImportSuccess, roles, asms }) {
+  const fileInputRef = useRef(null);
+  const [file, setFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const [downloadingFormat, setDownloadingFormat] = useState(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setFile(null);
+      setResult(null);
+      setImporting(false);
+      setDownloadingFormat(null);
+      setIsDragOver(false);
+    }
+  }, [open]);
+
+  const handleDownloadTemplate = async (format) => {
+    try {
+      setDownloadingFormat(format);
+      const headers = [
+        { text: 'Full Name', mandatory: true, width: 22 },
+        { text: 'Email', mandatory: true, width: 28 },
+        { text: 'Mobile', mandatory: true, width: 16 },
+        { text: 'Role', mandatory: true, width: 20 },
+        { text: 'Region', mandatory: false, width: 20 },
+        { text: 'Area', mandatory: false, width: 18 },
+        { text: 'Department', mandatory: false, width: 18 },
+        { text: 'Reporting Manager Email', mandatory: false, width: 28 },
+        { text: 'Joining Date', mandatory: false, width: 16 },
+      ];
+
+      if (format === 'csv') {
+        const csvContent =
+          '\uFEFF' +
+          headers.map((h) => (h.mandatory ? `"${h.text} *"` : `"${h.text}"`)).join(',') +
+          '\r\n';
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        downloadBlob(blob, 'users_template.csv');
+      } else {
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'Royals Marine Food CRM';
+        wb.created = new Date();
+        const ws = wb.addWorksheet('Users Template');
+
+        headers.forEach((col, idx) => {
+          const cell = ws.getCell(1, idx + 1);
+          if (col.mandatory) {
+            cell.value = {
+              richText: [
+                { text: col.text + ' ', font: { bold: true, color: { argb: 'FF1F2937' }, size: 11 } },
+                { text: '*', font: { bold: true, color: { argb: 'FFDC2626' }, size: 11 } },
+              ],
+            };
+          } else {
+            cell.value = col.text;
+            cell.font = { bold: true, color: { argb: 'FF1F2937' }, size: 11 };
+          }
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF3F4F6' },
+          };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+            bottom: { style: 'medium', color: { argb: 'FF9CA3AF' } },
+            right: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+          };
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          ws.getColumn(idx + 1).width = col.width;
+        });
+
+        ws.getRow(1).height = 28;
+
+        // Role dropdown list stored in hidden sheet for 100% reliable Excel data validation
+        const lookupWs = wb.addWorksheet('_Roles');
+        lookupWs.state = 'veryHidden';
+        const roleOptions = ['ASM', 'Technical Executive', 'Admin'];
+        roleOptions.forEach((role, idx) => {
+          lookupWs.getCell(idx + 1, 1).value = role;
+        });
+
+        // In-cell Role Dropdown Validation for Column D (Rows 2 to 1000)
+        ws.dataValidations.add('D2:D1000', {
+          type: 'list',
+          allowBlank: true,
+          formulae: ['_Roles!$A$1:$A$3'],
+          showErrorMessage: true,
+          errorTitle: 'Invalid Role',
+          error: 'Please choose a valid role from the dropdown list.',
+        });
+
+        // No raw dummy data rows! Template is ready for user input.
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        downloadBlob(blob, 'users_template.xlsx');
+      }
+      toast.success(`Downloaded ${format.toUpperCase()} template`);
+    } catch {
+      toast.error(`Failed to download ${format.toUpperCase()} template`);
+    } finally {
+      setDownloadingFormat(null);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      const name = selected.name.toLowerCase();
+      if (!name.endsWith('.xlsx') && !name.endsWith('.xls') && !name.endsWith('.csv')) {
+        toast.error('Please select an Excel (.xlsx, .xls) or CSV (.csv) file');
+        return;
+      }
+      setFile(selected);
+      setResult(null);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) {
+      const name = dropped.name.toLowerCase();
+      if (!name.endsWith('.xlsx') && !name.endsWith('.xls') && !name.endsWith('.csv')) {
+        toast.error('Please drop an Excel (.xlsx, .xls) or CSV (.csv) file');
+        return;
+      }
+      setFile(dropped);
+      setResult(null);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) {
+      toast.error('Please select a file to import');
+      return;
+    }
+    setImporting(true);
+    try {
+      // 1. Try server-side import first
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await userApi.import(fd);
+        const data = res.data?.data || {};
+        setResult(data);
+        if (data.imported > 0) {
+          toast.success(`Successfully imported ${data.imported} users`);
+          onImportSuccess?.();
+        } else {
+          toast.error('No new users were imported');
+        }
+        return;
+      } catch (serverErr) {
+        // If server returns 404 (e.g. remote backend not yet redeployed), fallback to client-side parsing
+        if (serverErr.response?.status !== 404) {
+          throw serverErr;
+        }
+      }
+
+      // 2. Client-side fallback if server-side route is not yet deployed
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const firstSheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[firstSheetName];
+      const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+      if (!rawRows || rawRows.length < 2) {
+        throw new Error('The uploaded file is empty or contains no data rows');
+      }
+
+      const headerRow = rawRows[0] || [];
+      const colMap = {};
+      headerRow.forEach((cell, idx) => {
+        const clean = String(cell || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (clean.includes('fullname') || clean === 'name') colMap.full_name = idx;
+        else if (clean.includes('email') && !clean.includes('manager')) colMap.email = idx;
+        else if (clean.includes('mobile') || clean.includes('phone')) colMap.mobile = idx;
+        else if (clean.includes('role')) colMap.role = idx;
+        else if (clean.includes('region')) colMap.region = idx;
+        else if (clean.includes('area')) colMap.area = idx;
+        else if (clean.includes('department') || clean.includes('dept')) colMap.department = idx;
+        else if (clean.includes('manager') || clean.includes('reporting')) colMap.manager_email = idx;
+        else if (clean.includes('date') || clean.includes('joining')) colMap.joining_date = idx;
+        else if (clean.includes('pass')) colMap.password = idx;
+      });
+
+      const colFullName = colMap.full_name ?? 0;
+      const colEmail = colMap.email ?? 1;
+      const colMobile = colMap.mobile ?? 2;
+      const colRole = colMap.role ?? 3;
+      const colRegion = colMap.region ?? 4;
+      const colArea = colMap.area ?? 5;
+      const colDept = colMap.department ?? 6;
+      const colManager = colMap.manager_email ?? 7;
+      const colJoining = colMap.joining_date ?? 8;
+      const colPassword = colMap.password ?? 9;
+
+      const salesManagerRole = roles?.find(r => r.name === 'sales_manager');
+      const salesExecutiveRole = roles?.find(r => r.name === 'sales_executive');
+
+      const resolveRoleId = (str) => {
+        if (!str) return salesExecutiveRole?.id;
+        const clean = String(str).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (['asm', 'salesmanager', 'areamanager', 'areasalesmanager'].includes(clean)) return salesManagerRole?.id;
+        if (['tech', 'salesexecutive', 'technicalexecutive', 'fieldexecutive', 'executive'].includes(clean)) return salesExecutiveRole?.id;
+        const matched = roles?.find(r => r.name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean || r.display_name.toLowerCase().replace(/[^a-z0-9]/g, '') === clean);
+        return matched ? matched.id : salesExecutiveRole?.id;
+      };
+
+      const asmEmailToId = new Map();
+      asms?.forEach(a => {
+        if (a.email) asmEmailToId.set(a.email.toLowerCase().trim(), a.id);
+      });
+
+      const summary = { total: rawRows.length - 1, imported: 0, skipped: 0, errors: [] };
+
+      for (let i = 1; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        if (!row || row.length === 0) {
+          summary.total--;
+          continue;
+        }
+
+        const fullName = String(row[colFullName] || '').trim();
+        const email = String(row[colEmail] || '').trim().toLowerCase();
+        const mobile = String(row[colMobile] || '').trim();
+        const roleStr = String(row[colRole] || '').trim();
+        const region = String(row[colRegion] || '').trim() || null;
+        const area = String(row[colArea] || '').trim() || null;
+        const department = String(row[colDept] || '').trim() || null;
+        const managerEmail = String(row[colManager] || '').trim().toLowerCase();
+        let joiningDate = String(row[colJoining] || '').trim() || null;
+        const password = String(row[colPassword] || '').trim() || 'Welcome@123';
+
+        if (!fullName && !email && !mobile) {
+          summary.total--;
+          continue;
+        }
+
+        if (!fullName) {
+          summary.errors.push({ row: i + 1, error: 'Full Name is required' });
+          summary.skipped++;
+          continue;
+        }
+
+        if (!email || !email.includes('@')) {
+          summary.errors.push({ row: i + 1, error: `Valid Email is required: "${email}"` });
+          summary.skipped++;
+          continue;
+        }
+
+        if (!mobile) {
+          summary.errors.push({ row: i + 1, error: 'Mobile number is required' });
+          summary.skipped++;
+          continue;
+        }
+
+        const roleId = resolveRoleId(roleStr);
+        let managerId = null;
+        if (managerEmail && asmEmailToId.has(managerEmail)) {
+          managerId = asmEmailToId.get(managerEmail);
+        }
+
+        if (joiningDate) {
+          const d = new Date(joiningDate);
+          if (!isNaN(d.getTime())) joiningDate = d.toISOString().split('T')[0];
+          else joiningDate = null;
+        }
+
+        try {
+          const res = await userApi.create({
+            full_name: fullName,
+            email,
+            mobile,
+            role_id: roleId,
+            region,
+            area,
+            department,
+            manager_id: managerId,
+            joining_date: joiningDate,
+            password,
+          });
+          const createdUser = res.data?.data;
+          if (createdUser?.id && (roleId === salesManagerRole?.id || roleStr.toLowerCase().includes('asm'))) {
+            asmEmailToId.set(email, createdUser.id);
+          }
+          summary.imported++;
+        } catch (err) {
+          summary.errors.push({ row: i + 1, error: err.response?.data?.message || err.message });
+          summary.skipped++;
+        }
+      }
+
+      setResult(summary);
+      if (summary.imported > 0) {
+        toast.success(`Successfully imported ${summary.imported} users`);
+        onImportSuccess?.();
+      } else {
+        toast.error('No new users were imported');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || err.message || 'Failed to import users');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={importing ? () => {} : onClose}
+      title="Bulk Import Users"
+      size="md"
+    >
+      <div className="space-y-4">
+        {/* Minimal Template Download Row */}
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <span className="text-xs text-gray-500 font-medium">Templates:</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={Boolean(downloadingFormat)}
+              onClick={() => handleDownloadTemplate('xlsx')}
+              className="text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100/80 px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1.5"
+            >
+              <ArrowDownTrayIcon className="w-3.5 h-3.5 text-emerald-600" />
+              {downloadingFormat === 'xlsx' ? 'Downloading...' : 'Excel (.xlsx)'}
+            </button>
+            <button
+              type="button"
+              disabled={Boolean(downloadingFormat)}
+              onClick={() => handleDownloadTemplate('csv')}
+              className="text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100/80 px-2.5 py-1.5 rounded-lg transition inline-flex items-center gap-1.5"
+            >
+              <ArrowDownTrayIcon className="w-3.5 h-3.5 text-blue-600" />
+              {downloadingFormat === 'csv' ? 'Downloading...' : 'CSV (.csv)'}
+            </button>
+          </div>
+        </div>
+
+        {/* Upload Drop Zone */}
+        {!result && (
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition ${
+              isDragOver
+                ? 'border-blue-500 bg-blue-50/50'
+                : file
+                ? 'border-emerald-300 bg-emerald-50/30'
+                : 'border-gray-200 hover:border-gray-300 bg-gray-50/50'
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {file ? (
+              <div className="space-y-1">
+                <CheckCircleIcon className="w-8 h-8 mx-auto text-emerald-600" />
+                <p className="text-xs font-semibold text-gray-800">{file.name}</p>
+                <p className="text-[11px] text-gray-400">{formatFileSize(file.size)}</p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                  }}
+                  className="text-xs text-red-600 hover:underline font-medium pt-1 inline-block"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <ArrowUpTrayIcon className="w-6 h-6 mx-auto text-gray-400" />
+                <p className="text-xs font-medium text-gray-700">
+                  Select or drag & drop Excel / CSV file
+                </p>
+                <p className="text-[11px] text-gray-400">
+                  Default password: <span className="font-mono text-gray-500">Welcome@123</span>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Results View */}
+        {result && (
+          <div className="space-y-3.5">
+            <div className="bg-emerald-50 border border-emerald-200/80 rounded-xl p-4 text-center space-y-1.5">
+              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-0.5">
+                <CheckCircleIcon className="w-6 h-6" />
+              </div>
+              <p className="text-base font-bold text-emerald-900">
+                {result.imported} {result.imported === 1 ? 'User' : 'Users'} Added Successfully
+              </p>
+              <p className="text-xs text-emerald-700">
+                Default password: <span className="font-mono font-semibold bg-white border border-emerald-200 px-1.5 py-0.5 rounded text-emerald-900">Welcome@123</span>
+              </p>
+              <p className="text-[11px] text-emerald-600">
+                Users can log in with their email and change their password anytime in Settings.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 text-center">
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-2.5">
+                <p className="text-xl font-bold text-blue-700">{result.total}</p>
+                <p className="text-[11px] text-blue-600">Total Rows</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-2.5">
+                <p className="text-xl font-bold text-emerald-700">{result.imported}</p>
+                <p className="text-[11px] text-emerald-600">Imported</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-2.5">
+                <p className="text-xl font-bold text-amber-700">{result.skipped}</p>
+                <p className="text-[11px] text-amber-600">Skipped</p>
+              </div>
+            </div>
+
+            {result.skipped > 0 && (
+              <p className="text-xs text-amber-700 text-center font-medium bg-amber-50 border border-amber-100 rounded-lg p-2">
+                {result.skipped} {result.skipped === 1 ? 'row was' : 'rows were'} skipped (email already registered or missing required fields).
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Actions Footer */}
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-100">
+          {result ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-primary btn-sm !px-4"
+            >
+              Done
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={importing}
+                className="btn-secondary btn-sm !px-3"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleImport}
+                disabled={importing || !file}
+                className="btn-primary btn-sm !px-4 inline-flex items-center gap-1.5"
+              >
+                {importing ? 'Importing...' : 'Upload & Import'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export default function Users() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -458,6 +950,7 @@ export default function Users() {
   const [status, setStatus] = useState(searchParams.get('status') || '');
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [modalOpen, setModalOpen] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
   useEffect(() => {
@@ -533,13 +1026,23 @@ export default function Users() {
             {data?.pagination?.total || 0} team members registered
           </p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="btn-primary btn-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add User</span>
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => setImportModalOpen(true)}
+            className="btn-secondary btn-sm inline-flex items-center gap-1.5"
+            title="Import users in bulk from Excel or CSV"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4 text-gray-600" />
+            <span>Import Users</span>
+          </button>
+          <button
+            onClick={openAddModal}
+            className="btn-primary btn-sm inline-flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add User</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -683,6 +1186,15 @@ export default function Users() {
         asms={asms}
         technicalExecutives={technicalExecutives}
         onSaved={handleSaved}
+      />
+
+      {/* Bulk Import Users Modal */}
+      <UserImportModal
+        open={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImportSuccess={handleSaved}
+        roles={roles}
+        asms={asms}
       />
     </div>
   );

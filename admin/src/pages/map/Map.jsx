@@ -6,7 +6,8 @@ import Spinner, { PageSpinner } from '../../components/common/Spinner';
 import {
   MagnifyingGlassIcon,
   XMarkIcon,
-    Square3Stack3DIcon,
+  Square3Stack3DIcon,
+  CheckIcon,
   MapPinIcon,
   CalendarDaysIcon,
 } from '@heroicons/react/24/outline';
@@ -36,13 +37,14 @@ export default function MapPage() {
   const markerMapRef = useRef({});
   const suppressFitBoundsRef = useRef(false);
 
-  const osmLayerRef = useRef(null);
-  const satelliteLayerRef = useRef(null);
+  const baseLayersRef = useRef({});
+  const layerMenuRef = useRef(null);
   const activeRangeLayersRef = useRef([]);
 
   const [search, setSearch] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
-  const [mapMode, setMapMode] = useState('satellite'); // Satellite view by default
+  const [activeLayer, setActiveLayer] = useState('hybrid');
+  const [showLayerMenu, setShowLayerMenu] = useState(false);
   const [isLeafletReady, setIsLeafletReady] = useState(Boolean(typeof window !== 'undefined' && window.L));
 
   // Regional & Personnel Filters (regions, asm's, techs, farmers)
@@ -239,18 +241,21 @@ export default function MapPage() {
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [locating, setLocating] = useState(false);
 
-  // Close search dropdown on click outside
+  // Close dropdowns on click outside
   useEffect(() => {
-    function handleSearchClickOutside(event) {
+    function handleClickOutside(event) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target)) {
         setShowSearchDropdown(false);
       }
+      if (layerMenuRef.current && !layerMenuRef.current.contains(event.target)) {
+        setShowLayerMenu(false);
+      }
     }
-    document.addEventListener('mousedown', handleSearchClickOutside);
-    document.addEventListener('touchstart', handleSearchClickOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleSearchClickOutside);
-      document.removeEventListener('touchstart', handleSearchClickOutside);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
     };
   }, []);
 
@@ -672,22 +677,15 @@ export default function MapPage() {
       }
     );
 
-    osmLayerRef.current = osmLayer;
-    satelliteLayerRef.current = satelliteLayer;
-
-    if (mapMode === 'satellite') {
-      satelliteLayer.addTo(map);
-    } else {
-      osmLayer.addTo(map);
-    }
-
-    const baseMaps = {
-      '🛰️ Google Hybrid HD': satelliteLayer,
-      '🌍 Pure Satellite HD': pureSatLayer,
-      '🌾 Esri Clarity HD': esriLayer,
-      '🏙️ Google Streets HD': osmLayer,
+    baseLayersRef.current = {
+      hybrid: satelliteLayer,
+      satellite: pureSatLayer,
+      esri: esriLayer,
+      street: osmLayer,
     };
-    L.control.layers(baseMaps, null, { position: 'bottomright' }).addTo(map);
+
+    // Add default initial layer
+    satelliteLayer.addTo(map);
 
     const markersLayer = L.layerGroup().addTo(map);
     mapInstanceRef.current = map;
@@ -723,21 +721,20 @@ export default function MapPage() {
     };
   }, [isLeafletReady]);
 
-  // Handle map mode switch (Roads vs Satellite)
+  // Handle map layer change (Hybrid, Satellite, Esri, Street)
   useEffect(() => {
     const map = mapInstanceRef.current;
-    const osm = osmLayerRef.current;
-    const sat = satelliteLayerRef.current;
-    if (!map || !osm || !sat) return;
+    const layers = baseLayersRef.current;
+    if (!map || !layers) return;
 
-    if (mapMode === 'satellite') {
-      if (map.hasLayer(osm)) map.removeLayer(osm);
-      if (!map.hasLayer(sat)) map.addLayer(sat);
-    } else {
-      if (map.hasLayer(sat)) map.removeLayer(sat);
-      if (!map.hasLayer(osm)) map.addLayer(osm);
-    }
-  }, [mapMode]);
+    Object.entries(layers).forEach(([key, layer]) => {
+      if (key === activeLayer) {
+        if (!map.hasLayer(layer)) map.addLayer(layer);
+      } else {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+      }
+    });
+  }, [activeLayer]);
 
   // Handle window resize or container size updates
   useEffect(() => {
@@ -1254,23 +1251,62 @@ export default function MapPage() {
             </button>
           )}
 
-          {/* Map Layer Switcher (Satellite & Roads) */}
-          <button
-            type="button"
-            title={
-              mapMode === 'satellite'
-                ? 'Map Layer: Satellite (Click to switch to Roads)'
-                : 'Map Layer: Roads (Click to switch to Satellite)'
-            }
-            onClick={() => setMapMode((prev) => (prev === 'street' ? 'satellite' : 'street'))}
-            className={`w-10 h-10 shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
-              mapMode === 'satellite'
-                ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/20'
-                : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
-            }`}
-          >
-            <Square3Stack3DIcon className="w-5 h-5" />
-          </button>
+          {/* Layer Changer Dropdown Button (Keep above, no bottom overlap) */}
+          <div ref={layerMenuRef} className="relative shrink-0">
+            <button
+              type="button"
+              title="Change Map Layer (Satellite, Pure Satellite, Esri, Roads)"
+              onClick={() => setShowLayerMenu((prev) => !prev)}
+              className={`w-10 h-10 flex-shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
+                showLayerMenu
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/30'
+                  : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
+              }`}
+            >
+              <Square3Stack3DIcon className="w-5 h-5" />
+            </button>
+
+            {showLayerMenu && (
+              <div className="absolute right-0 top-full mt-2 w-56 sm:w-60 bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200/90 p-1.5 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                  Map Layers
+                </div>
+                <div className="py-1 space-y-0.5">
+                  {[
+                    { id: 'hybrid', label: 'Google Hybrid HD', desc: 'Satellite with Roads & Names', icon: '🛰️' },
+                    { id: 'satellite', label: 'Pure Satellite HD', desc: 'Clean ponds without labels', icon: '🌍' },
+                    { id: 'esri', label: 'Esri Clarity HD', desc: 'High-contrast agriculture', icon: '🌾' },
+                    { id: 'street', label: 'Google Streets HD', desc: 'Road map & town boundaries', icon: '🏙️' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveLayer(opt.id);
+                        setShowLayerMenu(false);
+                      }}
+                      className={`w-full px-2.5 py-1.5 text-left rounded-lg text-xs flex items-center justify-between transition ${
+                        activeLayer === opt.id
+                          ? 'bg-blue-50 text-blue-900 font-bold'
+                          : 'text-gray-700 hover:bg-gray-100/80'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-sm shrink-0">{opt.icon}</span>
+                        <div className="truncate">
+                          <p className="font-semibold leading-tight truncate">{opt.label}</p>
+                          <p className="text-[10px] text-gray-500 font-normal leading-tight truncate">{opt.desc}</p>
+                        </div>
+                      </div>
+                      {activeLayer === opt.id && (
+                        <CheckIcon className="w-4 h-4 text-blue-600 shrink-0 ml-1.5" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* My Location GPS Button */}
           <button
