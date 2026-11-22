@@ -88,13 +88,19 @@ const listFollowups = async (req, res) => {
     replacements.push(userId, userId, userId, userId);
   }
 
-  if (status === 'dues' || dues_only === 'true') {
-    where += " AND f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE() AND DATEDIFF(CURDATE(), f.followup_date) <= 7";
+  if (status === 'dues' || status === 'pending') {
+    where += " AND f.status IN ('pending', 'overdue')";
+  } else if (dues_only === 'true') {
+    where += " AND f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE()";
   } else if (status === 'overdue') {
     where += " AND f.status IN ('pending', 'overdue') AND DATEDIFF(CURDATE(), f.followup_date) > 7";
-  } else if (status === 'pending') {
-    where += " AND f.status = 'pending'";
-  } else if (status) {
+  } else if (status === 'upcoming') {
+    where += " AND f.status = 'pending' AND f.followup_date > CURDATE()";
+  } else if (status === 'completed') {
+    where += " AND f.status = 'completed'";
+  } else if (status === 'cancelled') {
+    where += " AND f.status = 'cancelled'";
+  } else if (status && status !== 'all') {
     where += ' AND f.status = ?'; replacements.push(status);
   }
 
@@ -118,7 +124,8 @@ const listFollowups = async (req, res) => {
     const [followups] = await sequelize.query(
       `SELECT f.id, f.uuid, f.title, f.followup_date, f.followup_time, f.priority, f.status,
               f.remarks, f.completion_notes, f.completed_date, f.completed_by, f.created_at,
-              c.company_name, c.city, c.mobile as client_mobile, c.village, c.district,
+              c.company_name, c.city, c.city as client_city, c.mobile as client_mobile,
+              c.village, c.village as client_village, c.district, c.district as client_district,
               sp.id as salesperson_id, sp.full_name as salesperson_name, sp.mobile as salesperson_mobile,
               r.name as salesperson_role, r.display_name as salesperson_role_name,
               admin_user.full_name as completed_by_name,
@@ -130,8 +137,12 @@ const listFollowups = async (req, res) => {
        LEFT JOIN users admin_user ON f.completed_by = admin_user.id
        WHERE ${where}
        ORDER BY 
-         CASE WHEN f.status IN ('pending', 'overdue') THEN 0 ELSE 1 END,
-         f.followup_date ASC, f.priority DESC LIMIT ? OFFSET ?`,
+         CASE 
+           WHEN f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE() THEN 0 
+           WHEN f.status IN ('pending', 'overdue') THEN 1 
+           ELSE 2 
+         END,
+         f.followup_date ASC, f.created_at DESC LIMIT ? OFFSET ?`,
       { replacements: [...replacements, limit, offset] }
     );
 
@@ -503,6 +514,53 @@ const getOverdueFollowups = async (req, res) => {
   }
 };
 
+const getFollowupStats = async (req, res) => {
+  const { id: userId, role } = req.user;
+  let where = "f.deleted_at IS NULL AND (f.assigned_salesperson_id IS NULL OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE status = 'active' AND deleted_at IS NULL))";
+  const replacements = [];
+
+  if (role === 'sales_executive') {
+    where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
+    replacements.push(userId, userId);
+  } else if (role === 'sales_manager') {
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.created_by = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR f.client_id IN (SELECT id FROM clients WHERE assigned_manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(userId, userId, userId, userId);
+  }
+
+  where = applyPersonnelAndRegionFilters(req.query, where, replacements);
+
+  try {
+    const [[stats]] = await sequelize.query(
+      `SELECT
+         COUNT(*) as total,
+         SUM(CASE WHEN f.status IN ('pending', 'overdue') THEN 1 ELSE 0 END) as non_completed,
+         SUM(CASE WHEN f.status IN ('pending', 'overdue') AND f.followup_date <= CURDATE() AND DATEDIFF(CURDATE(), f.followup_date) <= 7 THEN 1 ELSE 0 END) as dues,
+         SUM(CASE WHEN f.status IN ('pending', 'overdue') AND DATEDIFF(CURDATE(), f.followup_date) > 7 THEN 1 ELSE 0 END) as overdue,
+         SUM(CASE WHEN f.status = 'pending' AND f.followup_date > CURDATE() THEN 1 ELSE 0 END) as upcoming,
+         SUM(CASE WHEN f.status = 'completed' THEN 1 ELSE 0 END) as completed
+       FROM followups f
+       WHERE ${where}`,
+      { replacements }
+    );
+
+    return sendSuccess(res, 'Follow-up stats', {
+      total: Number(stats?.total || 0),
+      non_completed: Number(stats?.non_completed || 0),
+      dues: Number(stats?.dues || 0),
+      overdue: Number(stats?.overdue || 0),
+      upcoming: Number(stats?.upcoming || 0),
+      completed: Number(stats?.completed || 0),
+    });
+  } catch (err) {
+    return sendError(res, err.message, 500);
+  }
+};
+
 module.exports = {
   listFollowups,
   createFollowup,
@@ -511,4 +569,5 @@ module.exports = {
   getTodayFollowups,
   getDuesFollowups,
   getOverdueFollowups,
+  getFollowupStats,
 };

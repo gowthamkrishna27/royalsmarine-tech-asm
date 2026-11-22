@@ -166,7 +166,7 @@ export default function Followups() {
         {canCreate && (
           <button
             onClick={() => setAddModal(true)}
-            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 active:scale-95 transition shadow-xs w-full sm:w-auto shrink-0"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition shadow-xs w-full sm:w-auto shrink-0"
           >
             <PlusIcon className="w-4 h-4 shrink-0" />
             <span>Create Followup</span>
@@ -174,30 +174,25 @@ export default function Followups() {
         )}
       </div>
 
-      {/* Minimal Quick Stats Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+      {/* Quick Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <button
           type="button"
           onClick={() => {
             setStatus('dues');
             setPage(1);
           }}
-          className={`p-3 sm:p-4 rounded-xl border text-left transition flex items-center justify-between ${
-            status === 'dues'
-              ? 'border-gray-900 bg-white ring-1 ring-gray-900 shadow-2xs'
-              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/40'
+          className={`card p-4 flex items-center gap-3 border-l-4 border-amber-500 text-left cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
+            status === 'dues' ? 'ring-2 ring-amber-500/20 bg-amber-50/40' : ''
           }`}
         >
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-              <span className="text-xs font-medium text-gray-500">All Dues</span>
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+          <ClockIcon className="w-8 h-8 text-amber-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-gray-900">
               {(todayData?.length || 0) + (overdueData?.length || 0)}
             </p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">All Dues & Overdues</p>
           </div>
-          <ClockIcon className="w-5 h-5 text-gray-400 shrink-0 hidden xs:block" />
         </button>
 
         <button
@@ -206,22 +201,17 @@ export default function Followups() {
             setStatus('overdue');
             setPage(1);
           }}
-          className={`p-3 sm:p-4 rounded-xl border text-left transition flex items-center justify-between ${
-            status === 'overdue'
-              ? 'border-gray-900 bg-white ring-1 ring-gray-900 shadow-2xs'
-              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/40'
+          className={`card p-4 flex items-center gap-3 border-l-4 border-red-500 text-left cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
+            status === 'overdue' ? 'ring-2 ring-red-500/20 bg-red-50/40' : ''
           }`}
         >
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
-              <span className="text-xs font-medium text-gray-500">Overdues</span>
-            </div>
-            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+          <ExclamationTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-2xl font-bold text-gray-900">
               {overdueData?.length || 0}
             </p>
+            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Overdue Dues</p>
           </div>
-          <ExclamationTriangleIcon className="w-5 h-5 text-gray-400 shrink-0 hidden xs:block" />
         </button>
       </div>
 
@@ -471,9 +461,9 @@ export default function Followups() {
                                 setCompleteTarget(f);
                                 setCompleteNotes('');
                               }}
-                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 active:scale-95 transition shadow-2xs"
+                              className="group w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 shadow-2xs hover:shadow-xs cursor-pointer"
                             >
-                              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600" />
+                              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 group-hover:scale-115 transition-transform duration-150" />
                               <span>Complete</span>
                             </button>
                           </div>
@@ -585,9 +575,9 @@ export default function Followups() {
                 type="button"
                 onClick={handleComplete}
                 disabled={completing}
-                className="btn-primary flex-1 sm:flex-initial py-2 sm:py-1.5 flex items-center justify-center gap-1.5"
+                className="group btn-primary flex-1 sm:flex-initial py-2 sm:py-1.5 flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 shadow-xs hover:shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
               >
-                <CheckCircleIcon className="w-4 h-4" />
+                <CheckCircleIcon className="w-4 h-4 group-hover:scale-115 transition-transform duration-150" />
                 <span>{completing ? 'Completing...' : 'Complete & Notify'}</span>
               </button>
             </div>
