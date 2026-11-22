@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -17,12 +17,14 @@ import {
 const fmt = (v, fallback = '—') => (v === null || v === undefined || v === '' ? fallback : v);
 
 export default function CountTracker() {
-  const [countInput, setCountInput] = useState('1');
+  const [countInput, setCountInput] = useState('');
+  const [tempCount, setTempCount] = useState('');
   const [regionFilter, setRegionFilter] = useState('');
   const [areaFilter, setAreaFilter] = useState('');
   const [search, setSearch] = useState('');
   const [selectedTank, setSelectedTank] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const tableRef = useRef(null);
 
   // Fetch all tanks and count data
   const { data = {}, isLoading, error, refetch } = useQuery({
@@ -62,6 +64,66 @@ export default function CountTracker() {
     });
     return Array.from(set).sort();
   }, [rawTanks, regionFilter]);
+
+  // Extract distinct counts across dataset
+  const availableCounts = useMemo(() => {
+    const set = new Set();
+    rawTanks.forEach((t) => {
+      (t.counts_records || []).forEach((cr) => {
+        const val = parseFloat(cr.count);
+        if (!isNaN(val) && val > 0) set.add(val);
+      });
+      const p = parseFloat(t.primary_count);
+      if (!isNaN(p) && p > 0) set.add(p);
+    });
+    const arr = Array.from(set).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  }, [rawTanks]);
+
+  const applyCountSearch = (val) => {
+    const clean = val !== undefined ? String(val).trim() : '';
+    setCountInput(clean);
+    setTempCount(clean);
+    setTimeout(() => {
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleStepUp = () => {
+    const current = parseFloat(tempCount || countInput);
+    let nextVal;
+    if (isNaN(current) || (!tempCount && !countInput)) {
+      nextVal = availableCounts.length > 0 ? availableCounts[0] : 10;
+    } else {
+      const next = availableCounts.find((c) => c > current);
+      nextVal = next !== undefined ? next : Math.round(current + 10);
+    }
+    applyCountSearch(String(nextVal));
+  };
+
+  const handleStepDown = () => {
+    const current = parseFloat(tempCount || countInput);
+    if (isNaN(current) || (!tempCount && !countInput)) return;
+    const prev = [...availableCounts].reverse().find((c) => c < current);
+    let prevVal;
+    if (prev !== undefined) {
+      prevVal = prev;
+    } else if (current > 10) {
+      prevVal = Math.round(current - 10);
+    } else {
+      prevVal = '';
+    }
+    applyCountSearch(String(prevVal));
+  };
+
+  const handleWheelCount = (e) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      handleStepUp();
+    } else if (e.deltaY > 0) {
+      handleStepDown();
+    }
+  };
 
   // Filter tanks by count, region, area, and search
   const filteredTanks = useMemo(() => {
@@ -187,6 +249,7 @@ export default function CountTracker() {
 
   const handleResetFilters = () => {
     setCountInput('');
+    setTempCount('');
     setRegionFilter('');
     setAreaFilter('');
     setSearch('');
@@ -285,11 +348,40 @@ export default function CountTracker() {
 
       {/* Minimal Metric Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+        {/* Minimal Editable Target Count Card */}
+        <div
+          className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4 transition hover:border-blue-400 group relative"
+          onWheel={handleWheelCount}
+          title="Type count & press Enter to search, or scroll mouse wheel"
+        >
           <span className="text-xs font-medium text-gray-500 block">Target Count</span>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900 font-mono mt-1">
-            {countInput ? countInput : 'All'}
-          </p>
+          <div className="mt-1 flex items-center justify-between gap-1">
+            <input
+              type="number"
+              step="any"
+              min="0"
+              value={tempCount}
+              onChange={(e) => setTempCount(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  applyCountSearch(tempCount);
+                }
+              }}
+              placeholder="All"
+              className="text-xl sm:text-2xl font-bold text-gray-900 font-mono w-full bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder-gray-300"
+            />
+            {tempCount && (
+              <button
+                type="button"
+                onClick={() => applyCountSearch('')}
+                className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded"
+                title="Clear count"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
@@ -317,33 +409,6 @@ export default function CountTracker() {
       {/* Filter Toolbar: Minimal & Clean */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-2.5">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Count input */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs font-medium text-gray-500">Count:</span>
-            <div className="relative w-24 sm:w-28">
-              <input
-                type="number"
-                step="any"
-                min="0"
-                placeholder="Count"
-                value={countInput}
-                onChange={(e) => setCountInput(e.target.value)}
-                className="h-8 px-2.5 text-xs font-mono font-bold text-gray-900 bg-white border border-gray-200 rounded-lg hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 w-full"
-                title="Enter count"
-              />
-              {countInput && (
-                <button
-                  type="button"
-                  onClick={() => setCountInput('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
-                  title="Clear count"
-                >
-                  <XMarkIcon className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          </div>
-
           {/* Region */}
           <select
             value={regionFilter}
@@ -454,7 +519,7 @@ export default function CountTracker() {
         />
       ) : (
         /* Minimal Table matching other pages */
-        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs">
+        <div ref={tableRef} className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs scroll-mt-4">
           {/* Desktop & Tablet Table */}
           <div className="hidden sm:block w-full overflow-x-hidden">
             <table className="w-full text-left text-xs divide-y divide-gray-100">

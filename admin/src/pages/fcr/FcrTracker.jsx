@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -20,9 +20,12 @@ const fmt = (v, fallback = '—') => (v === null || v === undefined || v === '' 
 
 export default function FcrTracker() {
   const [docInput, setDocInput] = useState('');
+  const [tempDoc, setTempDoc] = useState('');
   const [search, setSearch] = useState('');
+  const [districtFilter, setDistrictFilter] = useState('');
   const [selectedTank, setSelectedTank] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const tableRef = useRef(null);
 
   // Fetch all tanks once; client-side filtering handles search & DOC reactively with zero lag
   const { data: tanks = [], isLoading, isFetching, error, refetch } = useQuery({
@@ -43,7 +46,64 @@ export default function FcrTracker() {
     return Array.from(docs).sort((a, b) => a - b);
   }, [tanks]);
 
-  // Reactive instant filtering by DOC and search keyword
+  // Extract distinct districts/locations
+  const availableDistricts = useMemo(() => {
+    const set = new Set();
+    tanks.forEach((t) => {
+      const loc = t.district || t.village || t.city;
+      if (loc && typeof loc === 'string' && loc.trim()) {
+        set.add(loc.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [tanks]);
+
+  const applyDocSearch = (val) => {
+    const clean = val !== undefined ? String(val).trim() : '';
+    setDocInput(clean);
+    setTempDoc(clean);
+    setTimeout(() => {
+      tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleStepUp = () => {
+    const current = parseInt(tempDoc || docInput, 10);
+    let nextVal;
+    if (isNaN(current) || (!tempDoc && !docInput)) {
+      nextVal = availableDocs.length > 0 ? availableDocs[0] : 100;
+    } else {
+      const next = availableDocs.find((d) => d > current);
+      nextVal = next !== undefined ? next : current + 5;
+    }
+    applyDocSearch(String(nextVal));
+  };
+
+  const handleStepDown = () => {
+    const current = parseInt(tempDoc || docInput, 10);
+    if (isNaN(current) || (!tempDoc && !docInput)) return;
+    const prev = [...availableDocs].reverse().find((d) => d < current);
+    let prevVal;
+    if (prev !== undefined) {
+      prevVal = prev;
+    } else if (current > 5) {
+      prevVal = current - 5;
+    } else {
+      prevVal = '';
+    }
+    applyDocSearch(String(prevVal));
+  };
+
+  const handleWheelDoc = (e) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      handleStepUp();
+    } else if (e.deltaY > 0) {
+      handleStepDown();
+    }
+  };
+
+  // Reactive instant filtering by DOC, location, and search keyword
   const filteredTanks = useMemo(() => {
     let result = tanks;
 
@@ -59,6 +119,13 @@ export default function FcrTracker() {
           return h === target || c === target || p === target || v.includes(target);
         });
       }
+    }
+
+    // Filter by District / Location
+    if (districtFilter) {
+      result = result.filter(
+        (t) => t.district === districtFilter || t.village === districtFilter || t.city === districtFilter
+      );
     }
 
     // Filter by search text (farmer name, tank number, phone, village, district, feed type)
@@ -85,7 +152,7 @@ export default function FcrTracker() {
     }
 
     return result;
-  }, [tanks, docInput, search]);
+  }, [tanks, docInput, districtFilter, search]);
 
   // Reactive summary metrics calculated directly from the filtered tanks
   const summary = useMemo(() => {
@@ -121,10 +188,12 @@ export default function FcrTracker() {
     };
   }, [filteredTanks]);
 
-  const hasActiveFilters = Boolean(docInput || search);
+  const hasActiveFilters = Boolean(docInput || districtFilter || search);
 
   const handleResetFilters = () => {
     setDocInput('');
+    setTempDoc('');
+    setDistrictFilter('');
     setSearch('');
   };
 
@@ -207,7 +276,7 @@ export default function FcrTracker() {
         <div>
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">FCR Tracker</h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            {summary.totalTanks} harvested tanks {hasActiveFilters ? 'matching filters' : 'recorded'}
+            {summary.totalTanks} harvested tanks {hasActiveFilters ? 'matching target criteria' : 'recorded'}
           </p>
         </div>
 
@@ -236,8 +305,43 @@ export default function FcrTracker() {
         </div>
       </div>
 
-      {/* Minimal Metric Summary Cards */}
+      {/* Minimal Metric Summary Cards matching Count Tracker layout */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {/* Minimal Editable Target DOC Card */}
+        <div
+          className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4 transition hover:border-blue-400 group relative"
+          onWheel={handleWheelDoc}
+          title="Type DOC & press Enter to search, or scroll mouse wheel"
+        >
+          <span className="text-xs font-medium text-gray-500 block">Target DOC</span>
+          <div className="mt-1 flex items-center justify-between gap-1">
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              placeholder="All"
+              value={tempDoc}
+              onChange={(e) => setTempDoc(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  applyDocSearch(tempDoc);
+                }
+              }}
+              className="text-xl sm:text-2xl font-bold text-gray-900 font-mono w-full bg-transparent border-0 p-0 focus:outline-none focus:ring-0 placeholder-gray-400"
+            />
+            {tempDoc && (
+              <button
+                type="button"
+                onClick={() => applyDocSearch('')}
+                className="text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded"
+                title="Clear DOC"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
         <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
           <span className="text-xs font-medium text-gray-500 block">Harvested Tanks</span>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.totalTanks}</p>
@@ -250,121 +354,79 @@ export default function FcrTracker() {
           <span className="text-xs font-medium text-gray-500 block">Total Biomass</span>
           <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.totalBiomass}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
-          <span className="text-xs font-medium text-gray-500 block">Avg Harvest DOC</span>
-          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.avgDoc}</p>
-        </div>
       </div>
 
-      {/* Filter and Search Bar: Minimal & Clean */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-2.5 sm:p-3">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          {/* DOC Filter & Quick Select Chips */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">DOC:</span>
-            <div className="relative w-28">
-              <input
-                type="number"
-                min="0"
-                inputMode="numeric"
-                placeholder="Any DOC"
-                value={docInput}
-                onChange={(e) => setDocInput(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                aria-label="Filter by DOC"
-              />
-              {docInput && (
-                <button
-                  type="button"
-                  onClick={() => setDocInput('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                  aria-label="Clear DOC"
-                >
-                  <XMarkIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-            {availableDocs.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setDocInput('')}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
-                    !docInput
-                      ? 'bg-blue-600 text-white shadow-2xs font-semibold'
-                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                  }`}
-                >
-                  All
-                </button>
-                {availableDocs.slice(0, 8).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDocInput(String(d))}
-                    className={`rounded-lg px-2 py-1 text-xs font-medium tabular-nums transition cursor-pointer ${
-                      docInput === String(d)
-                        ? 'bg-blue-600 text-white shadow-2xs font-semibold'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* Filter Toolbar: Creative, Minimal & Fastly Visible */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Location / District Filter Dropdown */}
+          {availableDistricts.length > 0 && (
+            <select
+              value={districtFilter}
+              onChange={(e) => setDistrictFilter(e.target.value)}
+              className="h-8 px-2.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 min-w-[120px] cursor-pointer shrink-0"
+              title="Filter by Location / District"
+            >
+              <option value="">All Locations</option>
+              {availableDistricts.map((dist) => (
+                <option key={dist} value={dist}>
+                  {dist}
+                </option>
+              ))}
+            </select>
+          )}
 
-          {/* Search Box & Controls */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-64">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search farmer, tank, phone..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 bg-white pl-8 pr-7 py-1 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300"
-                aria-label="Search"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
-                >
-                  <XMarkIcon className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
-
-            {hasActiveFilters && (
+          {/* 4. Creative & Fastly Visible Instant Search Input */}
+          <div className="relative flex-1 min-w-[180px]">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search farmer, tank, phone, village..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 w-full pl-8 pr-7 text-xs rounded-lg border border-gray-200 text-gray-900 bg-white placeholder-gray-400 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 transition"
+              aria-label="Search farmer or tank"
+            />
+            {search && (
               <button
                 type="button"
-                onClick={handleResetFilters}
-                className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1 transition cursor-pointer shrink-0"
-                title="Reset filters"
+                onClick={() => setSearch('')}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                title="Clear search"
               >
-                <XMarkIcon className="w-3 h-3" />
-                <span>Reset</span>
+                <XMarkIcon className="h-3 w-3" />
               </button>
             )}
-
-            <span className="shrink-0 text-xs text-gray-400 tabular-nums">
-              {filteredTanks.length} shown
-            </span>
           </div>
+
+          {/* 5. Fastly Visible Match Count Pill */}
+          <div className="h-8 px-2.5 bg-gray-50 border border-gray-200 rounded-lg flex items-center text-[11px] font-semibold text-gray-600 tabular-nums shrink-0 shadow-2xs">
+            <span>{filteredTanks.length} {filteredTanks.length === 1 ? 'tank' : 'tanks'}</span>
+          </div>
+
+          {/* 6. Reset Filters Button */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="h-8 px-2.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-xs font-medium inline-flex items-center gap-1 transition cursor-pointer shrink-0 shadow-2xs"
+              title="Reset all filters"
+            >
+              <XMarkIcon className="w-3.5 h-3.5 text-gray-400" />
+              <span>Reset</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Table Content Area */}
       {isLoading ? (
-        <div className="rounded-xl border border-gray-200 bg-white py-14 text-center">
+        <div className="rounded-xl border border-gray-200 bg-white py-14 text-center shadow-2xs">
           <PageSpinner />
           <p className="mt-2 text-xs text-gray-500">Loading harvested tanks...</p>
         </div>
       ) : error ? (
-        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
+        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center shadow-2xs">
           <p className="text-sm font-semibold text-gray-900">Could not load FCR data</p>
           <p className="mt-1 text-xs text-gray-500">{error.message}</p>
           <button
@@ -376,13 +438,13 @@ export default function FcrTracker() {
           </button>
         </div>
       ) : filteredTanks.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white">
+        <div className="rounded-xl border border-gray-200 bg-white shadow-2xs">
           <EmptyState
             icon={ScaleIcon}
-            title="No harvested tanks found"
+            title={docInput ? `No tanks found matching DOC ${docInput}` : 'No harvested tanks found'}
             description={
               hasActiveFilters
-                ? 'No tanks match the selected filters. Clear the filter to see all.'
+                ? 'Try entering another DOC value (e.g. 90, 100, 110) or clearing your search filters.'
                 : 'Tanks and farmer details will appear here once the tank completes final harvest.'
             }
             action={
@@ -390,34 +452,35 @@ export default function FcrTracker() {
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="btn-secondary btn-sm"
+                  className="btn-secondary btn-sm mt-2 text-xs"
                 >
-                  Clear filters
+                  Clear Filters
                 </button>
               ) : null
             }
           />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xs">
+        <div ref={tableRef} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xs scroll-mt-4">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50/75 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <table className="min-w-full text-left text-xs divide-y divide-gray-100">
+              <thead className="bg-gray-50 text-gray-600 font-semibold text-[11px] uppercase tracking-wider border-b border-gray-100">
                 <tr>
-                  <th className="px-4 py-2.5 font-semibold">Tank</th>
-                  <th className="px-4 py-2.5 font-semibold">Farmer</th>
-                  <th className="px-4 py-2.5 font-semibold">Harvest DOC</th>
-                  <th className="px-4 py-2.5 font-semibold">Final FCR</th>
-                  <th className="px-4 py-2.5 font-semibold">ABW</th>
-                  <th className="px-4 py-2.5 font-semibold">Biomass</th>
-                  <th className="px-4 py-2.5 font-semibold">Survival</th>
-                  <th className="px-4 py-2.5 font-semibold">Harvest Date</th>
-                  <th className="px-4 py-2.5 font-semibold">Area</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Action</th>
+                  <th className="py-2.5 px-3 font-semibold w-10 text-center text-gray-400">No.</th>
+                  <th className="py-2.5 px-3 font-semibold">Tank</th>
+                  <th className="py-2.5 px-3 font-semibold">Farmer</th>
+                  <th className="py-2.5 px-3 font-semibold">Harvest DOC</th>
+                  <th className="py-2.5 px-3 font-semibold">Final FCR</th>
+                  <th className="py-2.5 px-3 font-semibold">ABW</th>
+                  <th className="py-2.5 px-3 font-semibold">Biomass</th>
+                  <th className="py-2.5 px-3 font-semibold">Survival</th>
+                  <th className="py-2.5 px-3 font-semibold">Harvest Date</th>
+                  <th className="py-2.5 px-3 font-semibold">Area</th>
+                  <th className="py-2.5 px-3 text-right font-semibold">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredTanks.map((tank) => {
+              <tbody className="divide-y divide-gray-100 bg-white">
+                {filteredTanks.map((tank, idx) => {
                   const fh = tank.final_harvest || tank.harvest_info?.final_harvest || {};
                   const lf = tank.latest_feeding || {};
                   const harvestDoc = tank.harvest_doc || fh.doc || tank.current_doc;
@@ -429,29 +492,32 @@ export default function FcrTracker() {
 
                   return (
                     <tr key={tank.id} className="hover:bg-gray-50/80 transition">
-                      <td className="px-4 py-3">
+                      <td className="py-2.5 px-3 text-center text-gray-400 font-mono text-[11px]">
+                        {idx + 1}
+                      </td>
+                      <td className="py-2.5 px-3">
                         <div className="font-semibold text-gray-900">
                           {fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}
                         </div>
-                        <div className="text-xs text-gray-400">ID {tank.id}</div>
+                        <div className="text-[11px] text-gray-400 font-mono">ID {tank.id}</div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="py-2.5 px-3">
                         <Link
                           to={`/clients/${tank.client_id}`}
-                          className="font-semibold text-gray-900 hover:text-blue-600 transition"
+                          className="font-semibold text-gray-900 hover:text-blue-600 transition block truncate max-w-[180px]"
                         >
                           {fmt(tank.company_name)}
                         </Link>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-[11px] text-gray-500">
                           {fmt(tank.farmer_phone || tank.village)}
                         </div>
                       </td>
-                      <td className="px-4 py-3 tabular-nums">
+                      <td className="py-2.5 px-3 tabular-nums">
                         <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700">
                           {harvestDoc ? `DOC ${harvestDoc}` : '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 tabular-nums font-bold text-gray-900">
+                      <td className="py-2.5 px-3 tabular-nums font-bold text-gray-900">
                         {fcrVal ? (
                           <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
                             {fcrVal}
@@ -460,22 +526,22 @@ export default function FcrTracker() {
                           '—'
                         )}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-gray-700">
+                      <td className="py-2.5 px-3 tabular-nums text-gray-700">
                         {abwVal ? `${abwVal} g` : '—'}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-gray-700">
+                      <td className="py-2.5 px-3 tabular-nums text-gray-700 font-medium">
                         {biomassVal ? `${Math.round(parseFloat(biomassVal)).toLocaleString()} kg` : '—'}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-emerald-700 font-medium">
+                      <td className="py-2.5 px-3 tabular-nums text-emerald-700 font-medium">
                         {survivalVal ? (String(survivalVal).includes('%') ? survivalVal : `${survivalVal}%`) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="py-2.5 px-3 text-[11px] text-gray-600">
                         {harvestDate ? String(harvestDate).slice(0, 10) : '—'}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-gray-700">
+                      <td className="py-2.5 px-3 tabular-nums text-gray-700">
                         {Number(tank.area_acres || tank.area || 0).toFixed(2)} ac
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="py-2.5 px-3 text-right">
                         <button
                           type="button"
                           onClick={() => setSelectedTank(tank)}
