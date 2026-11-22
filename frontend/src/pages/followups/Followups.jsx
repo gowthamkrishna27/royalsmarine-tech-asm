@@ -445,6 +445,9 @@ export default function Followups() {
               <>
                 <div className="divide-y divide-gray-100">
                   {(data?.data || []).map((f) => {
+                    const isOverdue =
+                      f.status === 'overdue' ||
+                      (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');
                     const isDue = f.status === 'pending' || f.status === 'overdue';
                     const roleDisplay =
                       f.salesperson_role_name ||
