@@ -68,6 +68,17 @@ export default function SalesExecutiveFab() {
     },
   ];
 
+  // Remove nav bar on Log Visit & Create/Edit Farmer forms
+  const hideNavBar =
+    location.pathname === '/visits/new' ||
+    (location.pathname.startsWith('/visits/') && location.pathname !== '/visits') ||
+    location.pathname === '/clients/new' ||
+    location.pathname.endsWith('/edit');
+
+  if (hideNavBar) {
+    return null;
+  }
+
   // Close when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
