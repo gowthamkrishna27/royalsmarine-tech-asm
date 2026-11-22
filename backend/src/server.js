@@ -13,6 +13,9 @@ const logger = require('./utils/logger');
 const app = express();
 const API = process.env.API_PREFIX || '/api/v1';
 
+// Behind reverse proxies (Render, Cloudflare, etc.) trust the first proxy hop
+app.set('trust proxy', 1);
+
 // Security & middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
@@ -105,6 +108,9 @@ app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan('combined', { stream: { write: msg => logger.info(msg.trim()) } }));
+// Health check (placed before rate limiter so uptime monitors & health checks never consume rate limits)
+app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
+
 app.use(apiLimiter);
 
 // Static uploads (restrict to authenticated users via nginx in production)
@@ -122,9 +128,6 @@ app.use(`${API}/dashboard`, require('./routes/dashboard'));
 app.use(`${API}/reports`, require('./routes/reports'));
 app.use(`${API}/notifications`, require('./routes/notifications'));
 app.use(`${API}/audit-logs`, require('./routes/auditLogs'));
-
-// Health check
-app.get('/health', (req, res) => res.json({ status: 'ok', timestamp: new Date() }));
 
 // 404
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
