@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { followupApi, clientApi, userApi, visitApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -216,9 +217,18 @@ export default function Followups() {
   const canCreate = hasRole('super_admin', 'admin', 'sales_manager', 'sales_executive');
   const canAssignUsers = hasRole('super_admin', 'admin', 'sales_manager');
 
+  const [searchParams] = useSearchParams();
+  const urlStatus = searchParams.get('status');
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('dues'); // Default to dues
-  const [asmId, setAsmId] = useState('');
+  const [status, setStatus] = useState(urlStatus !== null ? urlStatus : 'dues'); // Default to dues unless query param provided
+
+  useEffect(() => {
+    const s = searchParams.get('status');
+    if (s !== null) {
+      setStatus(s);
+      setPage(1);
+    }
+  }, [searchParams]);
   const [techId, setTechId] = useState('');
   const [date, setDate] = useState('');
   const [addModal, setAddModal] = useState(false);

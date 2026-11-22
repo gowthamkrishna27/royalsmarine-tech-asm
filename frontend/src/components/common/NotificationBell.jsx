@@ -34,7 +34,7 @@ export default function NotificationBell() {
       }
       setOpen(false);
       if (notif.reference_type === 'followup') {
-        navigate('/followups');
+        navigate('/followups?status=pending');
       } else if (notif.reference_type === 'visit' && notif.reference_id) {
         navigate(`/visits/${notif.reference_id}`);
       }

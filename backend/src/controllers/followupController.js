@@ -79,8 +79,13 @@ const listFollowups = async (req, res) => {
     where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
     replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
-    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
-    replacements.push(userId, userId);
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.created_by = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR f.client_id IN (SELECT id FROM clients WHERE assigned_manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(userId, userId, userId, userId);
   }
 
   if (status === 'dues' || dues_only === 'true') {
@@ -169,6 +174,68 @@ const createFollowup = async (req, res) => {
 
     const followupId = typeof result === 'number' ? result : (result?.insertId || result);
     await log({ action: 'FOLLOWUP_CREATED', module: 'followups', recordId: followupId, performedBy: req.user.id, req });
+
+    // Send In-App Notifications to the assigned Tech or ASM
+    try {
+      const [metaRows] = await sequelize.query(
+        `SELECT 
+           c.company_name, c.city, c.assigned_manager_id as client_mgr_id,
+           sp.id as sp_id, sp.full_name as sp_name, sp.manager_id as sp_mgr_id,
+           r.name as sp_role, r.display_name as sp_role_name,
+           mgr.id as mgr_id, mgr.full_name as mgr_name
+         FROM users sp
+         LEFT JOIN roles r ON sp.role_id = r.id
+         LEFT JOIN users mgr ON sp.manager_id = mgr.id
+         LEFT JOIN clients c ON c.id = ?
+         WHERE sp.id = ? LIMIT 1`,
+        { replacements: [client_id || null, salespersonId] }
+      );
+
+      const target = metaRows[0] || {};
+      const farmerName = target.company_name || 'Farmer';
+      const creatorRoleLabel = ['super_admin', 'admin'].includes(req.user.role)
+        ? 'Administrator'
+        : (req.user.role === 'sales_manager' ? 'ASM' : 'Technical Executive');
+      const creatorDisplayName = req.user.full_name ? `${creatorRoleLabel} ${req.user.full_name}` : creatorRoleLabel;
+      const timeStr = followup_time ? ` at ${followup_time}` : '';
+      const notesStr = remarks ? ` Notes: "${remarks}"` : '';
+
+      // 1. Notify the assigned Executive (Tech or ASM) if creator is not the assignee
+      if (Number(salespersonId) !== Number(req.user.id)) {
+        const notifTitle = `New Follow-up Assigned: ${title}`;
+        const notifMessage = `${creatorDisplayName} has assigned you a follow-up for farmer "${farmerName}" scheduled on ${followup_date}${timeStr}.${notesStr}`;
+
+        await sequelize.query(
+          `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'followup', 'followup', ?, 0, NOW())`,
+          { replacements: [salespersonId, notifTitle, notifMessage, followupId] }
+        );
+      }
+
+      // 2. Identify the ASM manager:
+      // Can be the manager of the assigned executive (target.sp_mgr_id) OR client's assigned manager (target.client_mgr_id)
+      const asmManagerId = target.sp_mgr_id || target.client_mgr_id;
+
+      // If the assigned executive has an ASM manager, also notify the ASM manager
+      // (Unless the ASM manager is the creator themselves, or the assigned user is the ASM manager)
+      if (
+        asmManagerId &&
+        Number(asmManagerId) !== Number(req.user.id) &&
+        Number(asmManagerId) !== Number(salespersonId)
+      ) {
+        const asmTitle = `New Follow-up Assigned to ${target.sp_name || 'Technical Executive'}: ${title}`;
+        const asmMessage = `${creatorDisplayName} has scheduled a follow-up for farmer "${farmerName}" assigned to ${target.sp_name || 'Technical Executive'} on ${followup_date}${timeStr}.${notesStr}`;
+
+        await sequelize.query(
+          `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
+           VALUES (?, ?, ?, 'followup', 'followup', ?, 0, NOW())`,
+          { replacements: [asmManagerId, asmTitle, asmMessage, followupId] }
+        );
+      }
+    } catch (notifErr) {
+      console.error('Failed to dispatch follow-up creation notification:', notifErr.message);
+    }
+
     return sendSuccess(res, 'Follow-up created', { id: followupId, uuid }, 201);
   } catch (err) {
     return sendError(res, err.message, 500);
@@ -231,7 +298,10 @@ const completeFollowup = async (req, res) => {
       return sendError(res, 'Access denied: not your follow-up', 403);
     }
 
-    const adminName = req.user.full_name || 'Administrator';
+    const actorRole = ['super_admin', 'admin'].includes(req.user.role)
+      ? 'Administrator'
+      : (req.user.role === 'sales_manager' ? 'ASM' : 'Technical Executive');
+    const actorName = req.user.full_name ? `${actorRole} (${req.user.full_name})` : actorRole;
     const notes = completion_notes ? completion_notes.trim() : '';
 
     // 1. Update follow-up status in the database
@@ -243,22 +313,24 @@ const completeFollowup = async (req, res) => {
            completed_by = ?, 
            updated_at = NOW() 
        WHERE id = ?`,
-      { replacements: [notes || 'Completed by Admin', req.user.id, req.params.id] }
+      { replacements: [notes || `Completed by ${actorRole}`, req.user.id, req.params.id] }
     );
 
     // 2. Insert In-App Notification into Database for the assigned ASM or Technical Executive
-    const notifTitle = 'Follow-up Marked Completed by Administrator';
-    const notifMessage = `Your scheduled follow-up for "${item.company_name}" ("${item.title}") on ${item.followup_date} has been marked as COMPLETED by Administrator ${adminName}.${notes ? ` Notes: "${notes}"` : ''}`;
+    const notifTitle = `Follow-up Marked Completed by ${actorRole}`;
+    const notifMessage = `Your scheduled follow-up for "${item.company_name}" ("${item.title}") on ${item.followup_date} has been marked as COMPLETED by ${actorName}.${notes ? ` Notes: "${notes}"` : ''}`;
 
-    await sequelize.query(
-      `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
-       VALUES (?, ?, ?, 'followup', 'followup', ?, 0, NOW())`,
-      { replacements: [item.assigned_salesperson_id, notifTitle, notifMessage, String(item.id)] }
-    );
+    if (item.assigned_salesperson_id && Number(item.assigned_salesperson_id) !== Number(req.user.id)) {
+      await sequelize.query(
+        `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
+         VALUES (?, ?, ?, 'followup', 'followup', ?, 0, NOW())`,
+        { replacements: [item.assigned_salesperson_id, notifTitle, notifMessage, String(item.id)] }
+      );
+    }
 
     // If technical executive reports to an ASM manager, also insert notification for the ASM in database
-    if (item.mgr_id && item.mgr_id !== req.user.id && item.mgr_id !== item.assigned_salesperson_id) {
-      const asmMessage = `Follow-up due for "${item.company_name}" assigned to ${item.sp_name} (${item.sp_role_name || 'Technical Executive'}) has been marked as COMPLETED by Administrator ${adminName}.${notes ? ` Notes: "${notes}"` : ''}`;
+    if (item.mgr_id && Number(item.mgr_id) !== Number(req.user.id) && Number(item.mgr_id) !== Number(item.assigned_salesperson_id)) {
+      const asmMessage = `Follow-up due for "${item.company_name}" assigned to ${item.sp_name} (${item.sp_role_name || 'Technical Executive'}) has been marked as COMPLETED by ${actorName}.${notes ? ` Notes: "${notes}"` : ''}`;
       await sequelize.query(
         `INSERT INTO notifications (user_id, title, message, type, reference_type, reference_id, is_read, created_at)
          VALUES (?, ?, ?, 'followup', 'followup', ?, 0, NOW())`,
@@ -348,8 +420,13 @@ const getDuesFollowups = async (req, res) => {
   if (role === 'sales_executive') {
     where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
-    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
-    replacements.push(userId, userId);
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.created_by = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR f.client_id IN (SELECT id FROM clients WHERE assigned_manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(userId, userId, userId, userId);
   }
 
   where = applyPersonnelAndRegionFilters(req.query, where, replacements);
@@ -381,8 +458,13 @@ const getOverdueFollowups = async (req, res) => {
   if (role === 'sales_executive') {
     where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
-    where += " AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND status = 'active' AND deleted_at IS NULL))";
-    replacements.push(userId, userId);
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.created_by = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR f.client_id IN (SELECT id FROM clients WHERE assigned_manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(userId, userId, userId, userId);
   }
 
   where = applyPersonnelAndRegionFilters(req.query, where, replacements);
