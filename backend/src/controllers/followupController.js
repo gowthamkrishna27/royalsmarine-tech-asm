@@ -386,10 +386,16 @@ const getTodayFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
-  } else if (role === 'sales_manager') {
-    where += ' AND (f.assigned_salesperson_id = ? OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ?))';
+    where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
     replacements.push(userId, userId);
+  } else if (role === 'sales_manager') {
+    where += ` AND (
+      f.assigned_salesperson_id = ?
+      OR f.created_by = ?
+      OR f.assigned_salesperson_id IN (SELECT id FROM users WHERE manager_id = ? AND deleted_at IS NULL)
+      OR f.client_id IN (SELECT id FROM clients WHERE assigned_manager_id = ? AND deleted_at IS NULL)
+    )`;
+    replacements.push(userId, userId, userId, userId);
   }
 
   where = applyPersonnelAndRegionFilters(req.query, where, replacements);
@@ -418,7 +424,8 @@ const getDuesFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
+    where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
+    replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += ` AND (
       f.assigned_salesperson_id = ?
@@ -456,7 +463,8 @@ const getOverdueFollowups = async (req, res) => {
   const replacements = [];
 
   if (role === 'sales_executive') {
-    where += ' AND f.client_id IN (SELECT id FROM clients WHERE (assigned_salesperson_id = ? OR (assigned_salesperson_id IS NULL AND created_by = ?)) AND deleted_at IS NULL)'; replacements.push(userId, userId);
+    where += ' AND (f.assigned_salesperson_id = ? OR (f.assigned_salesperson_id IS NULL AND f.created_by = ?))';
+    replacements.push(userId, userId);
   } else if (role === 'sales_manager') {
     where += ` AND (
       f.assigned_salesperson_id = ?

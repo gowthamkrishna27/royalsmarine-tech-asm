@@ -220,21 +220,22 @@ export default function Followups() {
   const [searchParams] = useSearchParams();
   const urlStatus = searchParams.get('status');
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState(urlStatus !== null ? urlStatus : 'dues'); // Default to dues unless query param provided
-
-  useEffect(() => {
-    const s = searchParams.get('status');
-    if (s !== null) {
-      setStatus(s);
-      setPage(1);
-    }
-  }, [searchParams]);
+  const [status, setStatus] = useState(urlStatus !== null ? urlStatus : 'dues');
+  const [asmId, setAsmId] = useState('');
   const [techId, setTechId] = useState('');
   const [date, setDate] = useState('');
   const [addModal, setAddModal] = useState(false);
   const [completeTarget, setCompleteTarget] = useState(null);
   const [completeNotes, setCompleteNotes] = useState('');
   const [completing, setCompleting] = useState(false);
+
+  useEffect(() => {
+    const s = searchParams.get('status');
+    if (s !== null && s !== status) {
+      setStatus(s);
+      setPage(1);
+    }
+  }, [searchParams]);
 
   // Fetch filter metadata (ASMs, techs)
   const { data: filterMeta } = useQuery({
@@ -547,7 +548,7 @@ export default function Followups() {
           <PageSpinner />
         ) : (
           <div className="card">
-            {data?.data?.length === 0 ? (
+            {(!data?.data || data.data.length === 0) ? (
               <EmptyState
                 title={
                   status === 'dues'
@@ -578,7 +579,7 @@ export default function Followups() {
             ) : (
               <>
                 <div className="divide-y divide-gray-100">
-                  {data.data.map((f) => {
+                  {(data.data || []).map((f) => {
                     const isOverdue = f.status === 'overdue' || (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');
                     const isDue = f.status === 'pending' || f.status === 'overdue';
                     const roleDisplay =
