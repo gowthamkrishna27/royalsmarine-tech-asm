@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { userApi } from '../../services/api';
 import { PageSpinner } from '../../components/common/Spinner';
 import Pagination from '../../components/common/Pagination';
@@ -9,18 +9,17 @@ import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import Modal from '../../components/common/Modal';
 import EmptyState from '../../components/common/EmptyState';
 import {
-  UsersIcon,
-  PlusIcon,
-  PencilSquareIcon,
-  UserGroupIcon,
-  MapPinIcon,
-  CheckIcon,
-  PhoneIcon,
-  EnvelopeIcon,
-  MagnifyingGlassIcon,
-  XMarkIcon,
-  ClockIcon,
-} from '@heroicons/react/24/outline';
+  Users as UsersIcon,
+  Plus,
+  Pencil,
+  MapPin,
+  Check,
+  Phone,
+  Mail,
+  Search,
+  X,
+  Clock,
+} from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 
@@ -227,7 +226,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
           <div className="border border-blue-200 bg-blue-50/40 rounded-xl p-3.5 sm:p-4 space-y-3.5">
             <div className="flex items-center gap-2 text-blue-900 font-semibold text-sm">
               <span className="p-1 rounded-md bg-blue-100 text-blue-700">
-                <UserGroupIcon className="w-4 h-4" />
+                <UsersIcon className="w-4 h-4" />
               </span>
               Area Sales Manager (ASM) Territory & Team
             </div>
@@ -270,7 +269,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
               </div>
 
               <div className="relative mb-2">
-                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="text"
                   value={execSearch}
@@ -284,7 +283,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
                     onClick={() => setExecSearch('')}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <XMarkIcon className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
@@ -317,8 +316,9 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
                             <span className="font-medium text-gray-900 block sm:inline truncate">{exec.full_name}</span>
                             <span className="text-gray-400 text-[11px] sm:ml-2 font-mono">({exec.mobile})</span>
                             {exec.area && (
-                              <span className="sm:ml-2 inline-flex items-center text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded text-[10px] font-medium border border-emerald-100">
-                                📍 {exec.area}
+                              <span className="sm:ml-2 inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] font-medium border border-emerald-200">
+                                <MapPin className="w-2.5 h-2.5 text-emerald-600" />
+                                <span>{exec.area}</span>
                               </span>
                             )}
                           </div>
@@ -327,7 +327,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
                         <div className="shrink-0 text-right">
                           {isChecked ? (
                             <span className="text-[10px] text-blue-700 bg-blue-100 font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <CheckIcon className="w-3 h-3" /> Reporting
+                              <Check className="w-3 h-3" /> Reporting
                             </span>
                           ) : isAssignedElsewhere ? (
                             <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
@@ -354,7 +354,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
           <div className="border border-emerald-200 bg-emerald-50/40 rounded-xl p-3.5 sm:p-4 space-y-3.5">
             <div className="flex items-center gap-2 text-emerald-900 font-semibold text-sm">
               <span className="p-1 rounded-md bg-emerald-100 text-emerald-700">
-                <MapPinIcon className="w-4 h-4" />
+                <MapPin className="w-4 h-4" />
               </span>
               Technical Executive Territory & Reporting
             </div>
@@ -398,7 +398,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
         {/* Section 3: Additional Employment Details */}
         <div>
           <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-            <ClockIcon className="w-3.5 h-3.5" /> Additional Info
+            <Clock className="w-3.5 h-3.5" /> Additional Info
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {!isAsm && !isTechExec && (
@@ -440,6 +440,7 @@ export function UserModal({ open, onClose, user, roles, asms, technicalExecutive
 }
 
 export default function Users() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -523,20 +524,20 @@ export default function Users() {
   };
 
   return (
-    <div>
-      {/* Clean Page Header */}
-      <div className="page-header">
+    <div className="space-y-4">
+      {/* Minimal Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="page-title">Users & Team</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {data?.pagination?.total || 0} users in system
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Users</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {data?.pagination?.total || 0} team members registered
           </p>
         </div>
         <button
           onClick={openAddModal}
-          className="btn-primary btn-sm flex items-center gap-1.5"
+          className="btn-primary btn-sm inline-flex items-center gap-1.5 self-start sm:self-auto"
         >
-          <PlusIcon className="w-4 h-4" />
+          <Plus className="w-4 h-4" />
           <span>Add User</span>
         </button>
       </div>
@@ -596,159 +597,66 @@ export default function Users() {
             />
           ) : (
             <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
+              {/* Table View */}
+              <div className="table-container">
                 <table className="table">
                   <thead>
                     <tr>
-                      <th className="w-1/4">User</th>
-                      <th className="w-1/5">Contact</th>
+                      <th>Name</th>
                       <th>Role</th>
-                      <th>Region / Area</th>
-                      <th>Hierarchy / Team</th>
+                      <th>Email</th>
+                      <th>Phone</th>
+                      <th>Territory / Area</th>
+                      <th>Reporting / Team</th>
                       <th>Status</th>
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {data.data.map(u => {
                       const isAsmUser = u.role === 'sales_manager';
                       const isTechExecUser = u.role === 'sales_executive';
 
                       return (
-                        <tr key={u.id} className="hover:bg-gray-50/80 transition">
-                          <td>
-                            <div className="flex items-center gap-3">
-                              <Link
-                                to={`/users/${u.id}`}
-                                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 hover:opacity-90 transition ${
-                                  isAsmUser ? 'bg-blue-600' :
-                                  isTechExecUser ? 'bg-emerald-600' :
-                                  'bg-gray-600'
-                                }`}
-                                title="View full user details"
-                              >
-                                {u.full_name?.[0]?.toUpperCase() || 'U'}
-                              </Link>
-                              <div className="min-w-0">
-                                <Link
-                                  to={`/users/${u.id}`}
-                                  className="font-semibold text-gray-900 hover:text-blue-600 transition truncate block"
-                                  title="View full user details"
-                                >
-                                  {u.full_name}
-                                </Link>
-                                {u.department ? (
-                                  <span className="text-[11px] text-gray-400 font-medium">{u.department}</span>
-                                ) : (
-                                  <span className="text-[11px] text-gray-400">#{u.id}</span>
-                                )}
-                              </div>
-                            </div>
+                        <tr
+                          key={u.id}
+                          onClick={() => navigate(`/users/${u.id}`)}
+                          className="hover:bg-gray-50/80 transition-colors cursor-pointer"
+                        >
+                          <td className="font-medium text-gray-900 whitespace-nowrap text-sm">
+                            {u.full_name}
                           </td>
-
-                          <td>
-                            <div className="space-y-0.5 text-xs">
-                              <div className="text-gray-700 flex items-center gap-1.5 truncate" title={u.email}>
-                                <EnvelopeIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span className="truncate">{u.email}</span>
-                              </div>
-                              <div className="text-gray-500 font-mono flex items-center gap-1.5">
-                                <PhoneIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                                <span>{u.mobile}</span>
-                              </div>
-                            </div>
+                          <td className="whitespace-nowrap text-xs text-gray-600">
+                            {u.role_display}
                           </td>
-
-                          <td>
-                            <Badge color={isAsmUser ? 'blue' : isTechExecUser ? 'green' : 'gray'}>
-                              {u.role_display}
-                            </Badge>
+                          <td className="text-gray-500 whitespace-nowrap text-xs">{u.email || '—'}</td>
+                          <td className="text-gray-500 font-mono text-xs whitespace-nowrap">{u.mobile || '—'}</td>
+                          <td className="text-gray-500 whitespace-nowrap text-xs">
+                            {isAsmUser ? (u.region || '—') : isTechExecUser ? (u.area || '—') : (u.department || '—')}
                           </td>
-
-                          <td>
-                            {isAsmUser && (
-                              <div>
-                                {u.region ? (
-                                  <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
-                                    <MapPinIcon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                                    {u.region}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs italic">Unassigned</span>
-                                )}
-                              </div>
-                            )}
-                            {isTechExecUser && (
-                              <div>
-                                {u.area ? (
-                                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                                    <MapPinIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                    {u.area}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs italic">Unassigned</span>
-                                )}
-                              </div>
-                            )}
-                            {!isAsmUser && !isTechExecUser && (
-                              <span className="text-gray-400 text-xs">—</span>
-                            )}
+                          <td className="text-gray-500 whitespace-nowrap text-xs">
+                            {isAsmUser
+                              ? (u.assigned_executives_count > 0 ? `${u.assigned_executives_count} execs` : '0 execs')
+                              : isTechExecUser
+                              ? (u.manager_name ? `ASM: ${u.manager_name}` : 'Unassigned')
+                              : (u.manager_name || '—')}
                           </td>
-
-                          <td>
-                            {isAsmUser && (
-                              <div>
-                                {u.assigned_executives_count > 0 ? (
-                                  <span
-                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100 cursor-help"
-                                    title={`Assigned Technical Executives:\n${u.assigned_executives_names}`}
-                                  >
-                                    <UserGroupIcon className="w-3.5 h-3.5 text-indigo-600" />
-                                    {u.assigned_executives_count} Executives
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400 text-xs italic">0 executives</span>
-                                )}
-                              </div>
-                            )}
-                            {isTechExecUser && (
-                              <div className="text-xs">
-                                {u.manager_name ? (
-                                  <span className="text-gray-800">
-                                    ASM: <span className="font-medium text-blue-700">{u.manager_name}</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-700 font-medium bg-amber-50 border border-amber-200 px-2 py-0.5 rounded text-[11px]">
-                                    No ASM Assigned
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {!isAsmUser && !isTechExecUser && (
-                              <span className="text-gray-600 text-xs">{u.manager_name || '—'}</span>
-                            )}
-                          </td>
-
-                          <td>
+                          <td className="whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => toggleStatus(u)}
-                              className="group cursor-pointer hover:opacity-80 transition"
+                              className="text-xs font-medium text-gray-700 hover:text-gray-900 transition cursor-pointer"
                               title="Click to toggle status"
                             >
-                              <Badge color={u.status === 'active' ? 'green' : 'red'}>
-                                {u.status}
-                              </Badge>
+                              <span className={u.status === 'active' ? 'text-gray-800' : 'text-gray-400'}>
+                                {u.status === 'active' ? 'Active' : 'Inactive'}
+                              </span>
                             </button>
                           </td>
-
-                          <td className="text-right">
+                          <td className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => openEditModal(u)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition active:scale-95"
-                              title="Edit user"
+                              className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 hover:text-gray-900"
                             >
-                              <PencilSquareIcon className="w-3.5 h-3.5" />
                               Edit
                             </button>
                           </td>
@@ -757,119 +665,6 @@ export default function Users() {
                     })}
                   </tbody>
                 </table>
-              </div>
-
-              {/* Mobile Card Layout */}
-              <div className="md:hidden divide-y divide-gray-100">
-                {data.data.map(u => {
-                  const isAsmUser = u.role === 'sales_manager';
-                  const isTechExecUser = u.role === 'sales_executive';
-
-                  return (
-                    <div key={u.id} className="p-4 space-y-3 hover:bg-gray-50/70 transition">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <Link
-                            to={`/users/${u.id}`}
-                            className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 hover:opacity-90 transition ${
-                              isAsmUser ? 'bg-blue-600' :
-                              isTechExecUser ? 'bg-emerald-600' :
-                              'bg-gray-600'
-                            }`}
-                            title="View full user details"
-                          >
-                            {u.full_name?.[0]?.toUpperCase() || 'U'}
-                          </Link>
-                          <div className="min-w-0">
-                            <Link
-                              to={`/users/${u.id}`}
-                              className="font-semibold text-gray-900 text-sm leading-tight truncate hover:text-blue-600 transition block"
-                              title="View full user details"
-                            >
-                              {u.full_name}
-                            </Link>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge color={isAsmUser ? 'blue' : isTechExecUser ? 'green' : 'gray'}>
-                                {u.role_display}
-                              </Badge>
-                              {u.department && (
-                                <span className="text-[11px] text-gray-400 truncate">{u.department}</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => toggleStatus(u)}
-                          className="cursor-pointer shrink-0"
-                          title="Toggle Status"
-                        >
-                          <Badge color={u.status === 'active' ? 'green' : 'red'}>
-                            {u.status}
-                          </Badge>
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-gray-50/80 p-3 rounded-lg border border-gray-100">
-                        <div className="space-y-1">
-                          <a href={`mailto:${u.email}`} className="text-gray-700 flex items-center gap-1.5 truncate hover:text-blue-600">
-                            <EnvelopeIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <span className="truncate">{u.email}</span>
-                          </a>
-                          <a href={`tel:${u.mobile}`} className="text-gray-700 font-mono flex items-center gap-1.5 hover:text-blue-600">
-                            <PhoneIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                            <span>{u.mobile}</span>
-                          </a>
-                        </div>
-
-                        <div className="space-y-1 pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-200/60">
-                          {isAsmUser && (
-                            <div>
-                              <span className="text-gray-500">Region: </span>
-                              <span className="font-medium text-blue-800">{u.region || 'None'}</span>
-                            </div>
-                          )}
-                          {isTechExecUser && (
-                            <div>
-                              <span className="text-gray-500">Area: </span>
-                              <span className="font-medium text-emerald-800">{u.area || 'None'}</span>
-                            </div>
-                          )}
-
-                          {isAsmUser && (
-                            <div>
-                              <span className="text-gray-500">Team: </span>
-                              <span className="font-medium text-indigo-700">
-                                {u.assigned_executives_count} Executives
-                              </span>
-                            </div>
-                          )}
-                          {isTechExecUser && (
-                            <div>
-                              <span className="text-gray-500">Reporting ASM: </span>
-                              <span className="font-medium text-gray-800">
-                                {u.manager_name || 'Unassigned'}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-0.5">
-                        <span className="text-[11px] text-gray-400">
-                          Last login: {u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never'}
-                        </span>
-                        <button
-                          onClick={() => openEditModal(u)}
-                          className="btn-secondary !py-1 !px-2.5 text-xs flex items-center gap-1 text-blue-600 font-medium"
-                        >
-                          <PencilSquareIcon className="w-3.5 h-3.5" />
-                          Edit
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
 
               {/* Bottom Pagination */}
