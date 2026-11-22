@@ -13,8 +13,8 @@ const logger = require('./utils/logger');
 const app = express();
 const API = process.env.API_PREFIX || '/api/v1';
 
-// Behind reverse proxies (Render, Cloudflare, etc.) trust the first proxy hop
-app.set('trust proxy', 1);
+// Behind reverse proxies (Render, Cloudflare, etc.) trust reverse proxy to extract real client IP
+app.set('trust proxy', true);
 
 // Security & middleware
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));

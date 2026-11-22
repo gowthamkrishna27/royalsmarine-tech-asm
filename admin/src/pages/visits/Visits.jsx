@@ -449,7 +449,7 @@ export default function Visits() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.data.map((v) => (
+                    {(data?.data || []).map((v) => (
                       <tr key={v.id}>
                         <td className="text-gray-600 whitespace-nowrap">{v.visit_date}</td>
                         <td>
@@ -493,7 +493,7 @@ export default function Visits() {
 
               {/* Mobile Cards */}
               <div className="sm:hidden divide-y divide-gray-100">
-                {data.data.map((v) => (
+                {(data?.data || []).map((v) => (
                   <div key={v.id} className="px-4 py-4">
                     <div className="flex justify-between items-start gap-2 mb-2">
                       <div className="min-w-0">

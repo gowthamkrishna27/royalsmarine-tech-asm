@@ -490,7 +490,7 @@ export default function Followups() {
       </div>
 
       {/* Top 4 Static Cards: Dues (Orange), Overdue (Red), Completed (Green) & Create (Blue) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden">
+      <div className={`grid ${canCreate ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'} bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden`}>
         {/* 1. Dues (Orange / Amber) */}
         <button
           type="button"
@@ -757,7 +757,7 @@ export default function Followups() {
         <PageSpinner />
       ) : (
         <div className="card overflow-hidden">
-          {(!data?.data || data.data.length === 0) ? (
+          {(!data?.data || data?.data?.length === 0) ? (
             <EmptyState
               title="No follow-ups found"
               description="No follow-ups matched the selected status or filters."
@@ -787,7 +787,7 @@ export default function Followups() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(data.data || []).map((f) => {
+                    {(data?.data || []).map((f) => {
                       const isOverdue =
                         f.status === 'overdue' ||
                         (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');

@@ -324,7 +324,7 @@ export default function Clients() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.data.map(c => (
+                    {(data?.data || []).map(c => (
                       <tr key={c.id}>
                         <td className="font-medium text-gray-900">{c.company_name}</td>
                         <td className="text-gray-600">{c.mobile || '—'}</td>
@@ -342,7 +342,7 @@ export default function Clients() {
 
               {/* Mobile Cards */}
               <div className="sm:hidden divide-y divide-gray-100">
-                {data.data.map(c => (
+                {(data?.data || []).map(c => (
                   <Link to={`/clients/${c.id}`} key={c.id} className="block px-4 py-4 hover:bg-gray-50 active:bg-gray-100">
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">

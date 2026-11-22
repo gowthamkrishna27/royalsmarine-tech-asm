@@ -257,9 +257,8 @@ export default function Followups() {
             <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
               {duesCount}
             </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium truncate mt-0.5" title="Dues (This Week)">
-              <span className="sm:hidden">Dues</span>
-              <span className="hidden sm:inline">Dues (This Week)</span>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Dues (This Week)">
+              <span className="block sm:inline">Dues</span> <span className="text-gray-400 sm:text-gray-500">(This Week)</span>
             </p>
           </div>
         </button>
@@ -281,9 +280,8 @@ export default function Followups() {
             <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
               {overdueCount}
             </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium truncate mt-0.5" title="Overdue (Skipped Week)">
-              <span className="sm:hidden">Overdue</span>
-              <span className="hidden sm:inline">Overdue (Skipped)</span>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Overdue (Skipped Week)">
+              <span className="block sm:inline">Overdue</span> <span className="text-gray-400 sm:text-gray-500">(Skipped)</span>
             </p>
           </div>
         </button>
@@ -305,9 +303,8 @@ export default function Followups() {
             <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
               {completedCount}
             </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium truncate mt-0.5" title="Completed Tests">
-              <span className="sm:hidden">Completed</span>
-              <span className="hidden sm:inline">Completed Tests</span>
+            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Completed Tests">
+              <span className="block sm:inline">Completed</span> <span className="text-gray-400 sm:text-gray-500">Tests</span>
             </p>
           </div>
         </button>
@@ -321,7 +318,7 @@ export default function Followups() {
             title="Create new follow-up"
           >
             <PlusIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white shrink-0" />
-            <span className="truncate">Create</span>
+            <span className="truncate">Create Follow-up</span>
           </button>
         )}
       </div>
@@ -423,7 +420,7 @@ export default function Followups() {
           <PageSpinner />
         ) : (
           <div className="bg-white rounded-xl border border-gray-200/90 shadow-2xs overflow-hidden">
-            {(!data?.data || data.data.length === 0) ? (
+            {(!data?.data || data?.data?.length === 0) ? (
               <EmptyState
                 title={status === 'dues' ? 'No pending dues or overdues' : 'No follow-ups found'}
                 description={
@@ -446,7 +443,7 @@ export default function Followups() {
             ) : (
               <>
                 <div className="divide-y divide-gray-100">
-                  {(data.data || []).map((f) => {
+                  {(data?.data || []).map((f) => {
                     const isDue = f.status === 'pending' || f.status === 'overdue';
                     const roleDisplay =
                       f.salesperson_role_name ||

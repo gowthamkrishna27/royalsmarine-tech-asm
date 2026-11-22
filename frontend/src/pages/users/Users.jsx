@@ -611,7 +611,7 @@ export default function Users() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.data.map(u => {
+                    {(data?.data || []).map(u => {
                       const isAsmUser = u.role === 'sales_manager';
                       const isTechExecUser = u.role === 'sales_executive';
 
@@ -751,7 +751,7 @@ export default function Users() {
 
               {/* Mobile Card Layout */}
               <div className="md:hidden divide-y divide-gray-100">
-                {data.data.map(u => {
+                {(data?.data || []).map(u => {
                   const isAsmUser = u.role === 'sales_manager';
                   const isTechExecUser = u.role === 'sales_executive';
 

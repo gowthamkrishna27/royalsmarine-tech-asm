@@ -1116,7 +1116,7 @@ export default function Users() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.data.map(u => {
+                    {(data?.data || []).map(u => {
                       const isAsmUser = u.role === 'sales_manager';
                       const isTechExecUser = u.role === 'sales_executive';
 
