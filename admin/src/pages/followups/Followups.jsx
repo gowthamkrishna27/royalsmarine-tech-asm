@@ -481,205 +481,115 @@ export default function Followups() {
 
   return (
     <div className="space-y-4">
-      {/* Header Bar */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Follow-ups & Tank Tests</h1>
-        <p className="text-xs text-gray-500 mt-0.5">
-          {data?.pagination?.total || 0} follow-up and weekly test records
-        </p>
-      </div>
+      {/* Header Bar with Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Follow-ups & Tank Tests</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            {data?.pagination?.total || 0} follow-up and weekly test records
+          </p>
+        </div>
 
-      {/* Top 4 Static Cards: Dues (Orange), Overdue (Red), Completed (Green) & Create (Blue) */}
-      <div className={`grid ${canCreate ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'} bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden`}>
-        {/* 1. Dues (Orange / Amber) */}
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange(status === 'dues' ? '' : 'dues')}
-          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'dues'
-              ? 'bg-amber-50/80 ring-2 ring-inset ring-amber-500'
-              : 'hover:bg-amber-50/40'
-            }`}
-          title="Filter by dues"
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'dues'
-                ? 'text-amber-700 font-bold'
-                : 'text-gray-500'
-              }`}>
-              Dues (This Week)
-            </span>
-            <Clock className={`w-4 h-4 ${status === 'dues' ? 'text-amber-600' : 'text-gray-400'}`} />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5 h-8">
-            <span className={`text-2xl font-bold tracking-tight ${status === 'dues'
-                ? 'text-amber-900'
-                : 'text-gray-900'
-              }`}>
-              {duesCount}
-            </span>
-            <span className={`text-xs font-medium ${status === 'dues'
-                ? 'text-amber-600'
-                : 'text-gray-400'
-              }`}>
-              due tests & follow-ups
-            </span>
-          </div>
-        </button>
-
-        {/* 2. Overdue (Red / Rose) */}
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange(status === 'overdue' ? '' : 'overdue')}
-          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'overdue'
-              ? 'bg-rose-50/80 ring-2 ring-inset ring-rose-500'
-              : 'hover:bg-rose-50/40'
-            }`}
-          title="Filter by overdue (skipped week tests)"
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'overdue'
-                ? 'text-rose-700 font-bold'
-                : 'text-gray-500'
-              }`}>
-              Overdue (Skipped Week)
-            </span>
-            <AlertTriangle className={`w-4 h-4 ${status === 'overdue' ? 'text-rose-600' : 'text-gray-400'}`} />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5 h-8">
-            <span className={`text-2xl font-bold tracking-tight ${status === 'overdue'
-                ? 'text-rose-900'
-                : 'text-gray-900'
-              }`}>
-              {overdueCount}
-            </span>
-            <span className={`text-xs font-medium ${status === 'overdue'
-                ? 'text-rose-600'
-                : 'text-gray-400'
-              }`}>
-              skipped week tests
-            </span>
-          </div>
-        </button>
-
-        {/* 3. Completed (Green / Emerald) */}
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange(status === 'completed' ? '' : 'completed')}
-          className={`p-4 sm:p-5 flex flex-col justify-between text-left cursor-pointer transition-colors ${status === 'completed'
-              ? 'bg-emerald-50/80 ring-2 ring-inset ring-emerald-500'
-              : 'hover:bg-emerald-50/40'
-            }`}
-          title="Filter by completed follow-ups"
-        >
-          <div className="flex items-center justify-between">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${status === 'completed'
-                ? 'text-emerald-700 font-bold'
-                : 'text-gray-500'
-              }`}>
-              Completed
-            </span>
-            <CheckCircle2 className={`w-4 h-4 ${status === 'completed' ? 'text-emerald-600' : 'text-gray-400'}`} />
-          </div>
-          <div className="mt-2 flex items-baseline gap-1.5 h-8">
-            <span className={`text-2xl font-bold tracking-tight ${status === 'completed'
-                ? 'text-emerald-900'
-                : 'text-gray-900'
-              }`}>
-              {completedCount}
-            </span>
-            <span className={`text-xs font-medium ${status === 'completed'
-                ? 'text-emerald-600'
-                : 'text-gray-400'
-              }`}>
-              completed tests
-            </span>
-          </div>
-        </button>
-
-        {/* 4. Create Follow-up Button (Clean blue with simple white plus) */}
         {canCreate && (
           <button
             type="button"
             onClick={() => setAddModal(true)}
-            className="p-4 sm:p-5 flex items-center justify-center gap-2 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm sm:text-base transition-colors"
+            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition cursor-pointer self-start sm:self-auto"
             title="Create Follow-up"
           >
-            <Plus className="w-5 h-5 text-white" />
+            <Plus className="w-4 h-4 text-white" />
             <span>Create Follow-up</span>
           </button>
         )}
       </div>
 
-      {/* Minimal Status Tabs: All, Dues, Overdue, Completed */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange('')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === '' || status === 'all'
-              ? 'bg-blue-600 text-white shadow-xs hover:bg-blue-700 hover:shadow-sm'
-              : 'bg-white text-gray-700 border border-gray-200 hover:bg-blue-50/60 hover:text-blue-700 hover:border-blue-300'
+      {/* Segmented Status Cards (Prominent & Clean) */}
+      <div className="w-full">
+        <div className="grid grid-cols-2 sm:flex bg-gray-100/90 p-1.5 rounded-2xl w-full sm:w-fit gap-1.5 border border-gray-200/50">
+          <button
+            type="button"
+            onClick={() => handleStatusTabChange('')}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === '' || status === 'all'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
             }`}
-        >
-          All ({data?.pagination?.total || 0})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange('dues')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'dues'
-              ? 'bg-amber-600 text-white shadow-xs hover:bg-amber-700 hover:shadow-sm'
-              : 'bg-amber-50/60 text-amber-800 border border-amber-300 hover:bg-amber-100/70 hover:border-amber-400 hover:text-amber-900 shadow-2xs'
+          >
+            <span>All</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === '' || status === 'all'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
+              {data?.pagination?.total || 0}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusTabChange('dues')}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'dues'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
             }`}
-        >
-          <span>Dues</span>
-          {duesCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'dues'
-                ? 'bg-amber-700 text-white'
-                : 'bg-amber-100 text-amber-800 group-hover:bg-amber-200 group-hover:text-amber-900'
-              }`}>
+          >
+            <span>Dues</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'dues'
+                  ? 'bg-amber-100 text-amber-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
               {duesCount}
             </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange('overdue')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'overdue'
-              ? 'bg-rose-600 text-white shadow-xs hover:bg-rose-700 hover:shadow-sm'
-              : 'bg-rose-50/60 text-rose-800 border border-rose-300 hover:bg-rose-100/70 hover:border-rose-400 hover:text-rose-900 shadow-2xs'
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusTabChange('overdue')}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'overdue'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
             }`}
-        >
-          <span>Overdue</span>
-          {overdueCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'overdue'
-                ? 'bg-rose-700 text-white'
-                : 'bg-rose-100 text-rose-800 group-hover:bg-rose-200 group-hover:text-rose-900'
-              }`}>
+          >
+            <span>Overdue</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'overdue'
+                  ? 'bg-rose-100 text-rose-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
               {overdueCount}
             </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleStatusTabChange('completed')}
-          className={`group px-3 py-1.5 rounded-lg font-medium transition-all duration-150 cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${status === 'completed'
-              ? 'bg-emerald-600 text-white shadow-xs hover:bg-emerald-700 hover:shadow-sm'
-              : 'bg-emerald-50/60 text-emerald-800 border border-emerald-300 hover:bg-emerald-100/70 hover:border-emerald-400 hover:text-emerald-900 shadow-2xs'
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStatusTabChange('completed')}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'completed'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
             }`}
-        >
-          <span>Completed</span>
-          {completedCount > 0 && (
-            <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold transition-colors duration-150 ${status === 'completed'
-                ? 'bg-emerald-700 text-white'
-                : 'bg-emerald-100 text-emerald-800 group-hover:bg-emerald-200 group-hover:text-emerald-900'
-              }`}>
+          >
+            <span>Completed</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'completed'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
               {completedCount}
             </span>
-          )}
-        </button>
+          </button>
+        </div>
       </div>
+
+
 
       {/* Filter Toolbar */}
       <div className="bg-white rounded-xl border border-gray-200 p-2.5">
@@ -777,7 +687,7 @@ export default function Followups() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>Title & Remarks</th>
+                      <th>Title</th>
                       <th>Farmer / Location</th>
                       <th>Assigned Executive</th>
                       <th>Due Date</th>
@@ -792,13 +702,12 @@ export default function Followups() {
                         f.status === 'overdue' ||
                         (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');
                       const isDue = f.status === 'pending' || f.status === 'overdue';
-                      const roleDisplay =
-                        f.salesperson_role_name ||
-                        (f.salesperson_role === 'sales_manager'
-                          ? 'ASM'
-                          : f.salesperson_role === 'sales_executive'
-                            ? 'Technical Executive'
-                            : 'Staff');
+                      const cleanTitle = (f.title || '').replace(/\s*\((?:Skipped Week|Overdue)\)/gi, '').trim();
+                      const isWeeklyTest = Boolean(f.test_week);
+                      const isAutoRemark = f.remarks?.startsWith('Overdue: Weekly test skipped') || f.remarks?.startsWith('Weekly water quality test for');
+                      const showRemark = f.remarks && !isAutoRemark;
+                      const hasTankInTitle = cleanTitle.toLowerCase().includes(f.tank_name?.toLowerCase() || 'tank');
+                      const showTank = f.tank_name && !hasTankInTitle && !isWeeklyTest;
 
                       const locationText = [f.client_village, f.client_city || f.city, f.client_district || f.district]
                         .filter(Boolean)
@@ -806,35 +715,25 @@ export default function Followups() {
 
                       return (
                         <tr key={f.id} className="hover:bg-gray-50/70 transition-colors">
-                          {/* Title & Remarks */}
-                          <td className="min-w-[200px] max-w-sm">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-medium text-gray-900 text-sm block">
-                                {f.title}
-                              </span>
-                              {Boolean(f.test_required) && (
-                                <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold ${f.test_week
-                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                  }`}>
-                                  🧪 {f.test_week ? 'Weekly Tank Test' : 'Test Required'}
-                                </span>
-                              )}
-                            </div>
-                            {f.remarks && (
+                          {/* Title */}
+                          <td className="min-w-[180px] max-w-sm py-3 px-4">
+                            <span className="font-medium text-gray-900 text-sm block">
+                              {cleanTitle}
+                            </span>
+                            {showRemark && (
                               <span className="text-xs text-gray-500 truncate block mt-0.5">
                                 {f.remarks}
                               </span>
                             )}
-                            {f.tank_name && (
-                              <span className="text-[11px] text-indigo-600 font-medium block mt-0.5">
-                                Pond / Tank: {f.tank_name} {f.tank_number ? `(#${f.tank_number})` : ''}
+                            {showTank && (
+                              <span className="text-[11px] text-gray-500 font-medium block mt-0.5">
+                                Tank: {f.tank_name}
                               </span>
                             )}
                           </td>
 
                           {/* Farmer */}
-                          <td className="whitespace-nowrap text-xs">
+                          <td className="whitespace-nowrap text-xs py-3 px-4">
                             <span className="font-medium text-gray-900 block">
                               {f.company_name}
                             </span>
@@ -846,7 +745,7 @@ export default function Followups() {
                           </td>
 
                           {/* Assigned Executive */}
-                          <td className="whitespace-nowrap text-xs">
+                          <td className="whitespace-nowrap text-xs py-3 px-4">
                             <div className="flex items-center gap-1.5">
                               <span className="font-medium text-gray-900">
                                 {f.salesperson_name || 'Unassigned'}
@@ -863,48 +762,25 @@ export default function Followups() {
                                 </a>
                               )}
                             </div>
-                            <span className="text-gray-400 text-[11px] block mt-0.5">
-                              {roleDisplay}
-                            </span>
                           </td>
 
                           {/* Due Date */}
-                          <td className="whitespace-nowrap text-xs font-mono text-gray-700">
-                            <div>
-                              <span>{f.followup_date}</span>
-                              {f.followup_time && <span className="text-gray-400 ml-1">{f.followup_time}</span>}
-                            </div>
-                            {f.status !== 'completed' && f.status !== 'cancelled' && (
-                              <div className="mt-0.5 font-sans">
-                                {isOverdue ? (
-                                  <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
-                                    <AlertTriangle className="w-3 h-3 shrink-0" />
-                                    {f.test_week ? 'Skipped Week (Overdue)' : (f.days_overdue ? `${f.days_overdue}d overdue` : 'Overdue')}
-                                  </span>
-                                ) : Number(f.days_overdue) === 0 ? (
-                                  <span className="text-[11px] text-amber-700 font-medium">
-                                    Due today
-                                  </span>
-                                ) : Number(f.days_overdue) > 0 ? (
-                                  <span className="text-[11px] text-amber-700 font-medium">
-                                    {f.test_week ? 'Due this week' : `${f.days_overdue}d due`}
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] text-gray-400">
-                                    Upcoming
-                                  </span>
-                                )}
-                              </div>
+                          <td className="whitespace-nowrap text-xs font-mono text-gray-800 py-3 px-4">
+                            <span>{f.followup_date}</span>
+                            {f.followup_time && f.followup_time !== '09:00:00' && !isWeeklyTest && (
+                              <span className="text-gray-400 ml-1">{f.followup_time.slice(0, 5)}</span>
                             )}
                           </td>
 
                           {/* Priority */}
-                          <td className="whitespace-nowrap text-xs text-gray-600 capitalize">
-                            {f.priority || 'medium'}
+                          <td className="whitespace-nowrap text-xs py-3 px-4">
+                            <span className={f.priority === 'high' ? 'text-rose-600 font-medium' : 'text-gray-500'}>
+                              {f.priority ? f.priority.charAt(0).toUpperCase() + f.priority.slice(1) : 'Medium'}
+                            </span>
                           </td>
 
                           {/* Status */}
-                          <td className="whitespace-nowrap text-xs font-medium">
+                          <td className="whitespace-nowrap text-xs font-medium py-3 px-4">
                             {f.status === 'completed' ? (
                               <Badge variant="success">Completed</Badge>
                             ) : f.status === 'cancelled' ? (
@@ -917,17 +793,17 @@ export default function Followups() {
                           </td>
 
                           {/* Actions */}
-                          <td className="text-right whitespace-nowrap text-xs">
+                          <td className="text-right whitespace-nowrap text-xs py-3 px-4">
                             {isDue ? (
                               <button
                                 onClick={() => {
                                   setCompleteTarget(f);
                                   setCompleteNotes('');
                                 }}
-                                className="group relative inline-flex items-center gap-1.5 py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50/70 shadow-2xs hover:shadow-xs hover:-translate-y-0.5 active:translate-y-0 active:scale-95 transition-all duration-150 cursor-pointer"
+                                className="inline-flex items-center gap-1 py-1 px-2.5 text-xs font-medium rounded-lg border border-gray-200 bg-white text-gray-700 hover:text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50 transition cursor-pointer"
                                 title="Mark as completed"
                               >
-                                <Check className="w-3.5 h-3.5 text-gray-400 group-hover:text-emerald-600 group-hover:scale-115 transition-transform duration-150" />
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Complete</span>
                               </button>
                             ) : (

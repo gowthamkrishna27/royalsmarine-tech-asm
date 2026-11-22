@@ -178,13 +178,13 @@ async function syncWeeklyTankTests(force = false) {
           `, {
             replacements: [
               uuid,
-              'Weekly Water Test - ' + tankLabel + ' (Skipped Week)',
+              'Weekly Water Test - ' + tankLabel,
               pond.client_id,
               pond.pond_id,
               assignedExecId,
               prev_week_start,
               prevWeekKey,
-              'Overdue: Weekly test skipped for week of ' + prev_week_start + ' (' + pond.company_name + ' - ' + tankLabel + ')'
+              'Weekly water quality test for ' + pond.company_name + ' (' + tankLabel + ')'
             ]
           });
         } else if (prevFollowup.status !== 'overdue' && prevFollowup.status !== 'completed') {
@@ -265,6 +265,9 @@ const listFollowups = async (req, res) => {
     );
     await sequelize.query(
       "UPDATE followups SET status='pending' WHERE status='overdue' AND DATEDIFF(CURDATE(), followup_date) <= 7 AND deleted_at IS NULL"
+    );
+    await sequelize.query(
+      "UPDATE followups SET title = TRIM(REPLACE(title, '(Skipped Week)', '')) WHERE title LIKE '%(Skipped Week)%'"
     );
   } catch (e) {
     console.error('Auto overdue update failed:', e.message);

@@ -231,97 +231,112 @@ export default function Followups() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Follow-ups & Dues</h1>
-        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-          {data?.pagination?.total || 0} total follow-up records
-        </p>
-      </div>
+      {/* Header with Create Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Follow-ups & Dues</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            {data?.pagination?.total || 0} total follow-up records
+          </p>
+        </div>
 
-      {/* Quick Stats Grid: 3 Boxes side by side for Tech, 4 for ASM/Admin */}
-      <div className={`grid gap-2 sm:gap-3 ${canCreate ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
-        {/* 1. Dues (Amber) */}
-        <button
-          type="button"
-          onClick={() => {
-            setStatus(status === 'dues' ? '' : 'dues');
-            setPage(1);
-          }}
-          className={`card p-2 sm:p-4 flex items-center gap-2 sm:gap-3 border-l-3 sm:border-l-4 border-amber-500 text-left cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'dues' ? 'ring-2 ring-amber-500/20 bg-amber-50/40' : ''
-          }`}
-          title="Filter by dues"
-        >
-          <ClockIcon className="w-5 h-5 sm:w-8 sm:h-8 text-amber-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
-              {duesCount}
-            </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Dues (This Week)">
-              <span className="block sm:inline">Dues</span> <span className="text-gray-400 sm:text-gray-500">(This Week)</span>
-            </p>
-          </div>
-        </button>
-
-        {/* 2. Overdue (Rose) */}
-        <button
-          type="button"
-          onClick={() => {
-            setStatus(status === 'overdue' ? '' : 'overdue');
-            setPage(1);
-          }}
-          className={`card p-2 sm:p-4 flex items-center gap-2 sm:gap-3 border-l-3 sm:border-l-4 border-rose-500 text-left cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'overdue' ? 'ring-2 ring-rose-500/20 bg-rose-50/40' : ''
-          }`}
-          title="Filter by overdue (skipped week)"
-        >
-          <ExclamationTriangleIcon className="w-5 h-5 sm:w-8 sm:h-8 text-rose-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
-              {overdueCount}
-            </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Overdue (Skipped Week)">
-              <span className="block sm:inline">Overdue</span> <span className="text-gray-400 sm:text-gray-500">(Skipped)</span>
-            </p>
-          </div>
-        </button>
-
-        {/* 3. Completed (Emerald) */}
-        <button
-          type="button"
-          onClick={() => {
-            setStatus(status === 'completed' ? '' : 'completed');
-            setPage(1);
-          }}
-          className={`card p-2 sm:p-4 flex items-center gap-2 sm:gap-3 border-l-3 sm:border-l-4 border-emerald-500 text-left cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'completed' ? 'ring-2 ring-emerald-500/20 bg-emerald-50/40' : ''
-          }`}
-          title="Filter by completed"
-        >
-          <CheckCircleIcon className="w-5 h-5 sm:w-8 sm:h-8 text-emerald-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-base sm:text-2xl font-bold text-gray-900 leading-tight">
-              {completedCount}
-            </p>
-            <p className="text-[10px] sm:text-xs text-gray-500 font-medium leading-tight mt-0.5" title="Completed Tests">
-              <span className="block sm:inline">Completed</span> <span className="text-gray-400 sm:text-gray-500">Tests</span>
-            </p>
-          </div>
-        </button>
-
-        {/* 4. Create Follow-up Button (Only for ASM / Admin) */}
         {canCreate && (
           <button
             type="button"
             onClick={() => setAddModal(true)}
-            className="card p-2 sm:p-4 flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm border-blue-600 shadow-xs transition-colors"
-            title="Create new follow-up"
+            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition cursor-pointer self-start sm:self-auto"
+            title="Create Follow-up"
           >
-            <PlusIcon className="w-4 h-4 sm:w-5 sm:h-5 text-white shrink-0" />
-            <span className="truncate">Create Follow-up</span>
+            <PlusIcon className="w-4 h-4 text-white" />
+            <span>Create Follow-up</span>
           </button>
         )}
+      </div>
+
+      {/* Segmented Status Cards (Prominent & Clean) */}
+      <div className="w-full">
+        <div className="grid grid-cols-2 sm:flex bg-gray-100/90 p-1.5 rounded-2xl w-full sm:w-fit gap-1.5 border border-gray-200/50">
+          <button
+            type="button"
+            onClick={() => { setStatus(''); setPage(1); }}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === '' || status === 'all'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>All</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === '' || status === 'all'
+                  ? 'bg-gray-100 text-gray-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
+              {data?.pagination?.total || 0}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStatus('dues'); setPage(1); }}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'dues'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Dues</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'dues'
+                  ? 'bg-amber-100 text-amber-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
+              {duesCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStatus('overdue'); setPage(1); }}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'overdue'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Overdue</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'overdue'
+                  ? 'bg-rose-100 text-rose-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
+              {overdueCount}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setStatus('completed'); setPage(1); }}
+            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+              status === 'completed'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-900'
+            }`}
+          >
+            <span>Completed</span>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
+                status === 'completed'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : 'bg-gray-200/70 text-gray-600'
+              }`}
+            >
+              {completedCount}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar: minimal, clean, and responsive */}
@@ -382,26 +397,6 @@ export default function Followups() {
               )}
             </div>
 
-            {/* Followup Status */}
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-              className={`h-9 px-3 text-xs rounded-lg border transition cursor-pointer w-full lg:flex-1 lg:min-w-[140px] focus:outline-none focus:ring-1 focus:ring-gray-400 ${status && status !== 'dues'
-                ? 'border-gray-400 text-gray-900 font-medium bg-gray-50/60'
-                : 'border-gray-200 text-gray-700 bg-white hover:border-gray-300'
-                }`}
-              title="Followup Status"
-            >
-              <option value="dues">All Dues & Overdues</option>
-              <option value="pending">Pending Dues Only</option>
-              <option value="overdue">Overdue Dues Only</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="">All Records</option>
-            </select>
 
             {/* Reset Filters Button */}
             {hasActiveFilters && (
@@ -449,13 +444,12 @@ export default function Followups() {
                       f.status === 'overdue' ||
                       (Number(f.days_overdue) > 7 && f.status !== 'completed' && f.status !== 'cancelled');
                     const isDue = f.status === 'pending' || f.status === 'overdue';
-                    const roleDisplay =
-                      f.salesperson_role_name ||
-                      (f.salesperson_role === 'sales_manager'
-                        ? 'ASM'
-                        : f.salesperson_role === 'sales_executive'
-                          ? 'Technical Executive'
-                          : 'Staff');
+                    const cleanTitle = (f.title || '').replace(/\s*\((?:Skipped Week|Overdue)\)/gi, '').trim();
+                    const isWeeklyTest = Boolean(f.test_week);
+                    const isAutoRemark = f.remarks?.startsWith('Overdue: Weekly test skipped') || f.remarks?.startsWith('Weekly water quality test for');
+                    const showRemark = f.remarks && !isAutoRemark;
+                    const hasTankInTitle = cleanTitle.toLowerCase().includes(f.tank_name?.toLowerCase() || 'tank');
+                    const showTank = f.tank_name && !hasTankInTitle && !isWeeklyTest;
 
                     return (
                       <div
@@ -465,22 +459,7 @@ export default function Followups() {
                         <div className="flex-1 min-w-0">
                           {/* Title & Status Pills */}
                           <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <p className="text-sm sm:text-base font-semibold text-gray-900">{f.title}</p>
-
-                            {Boolean(f.test_required) && (
-                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${f.test_week
-                                ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
-                                }`}>
-                                🧪 {f.test_week ? 'Weekly Tank Test' : 'Test Required'}
-                              </span>
-                            )}
-
-                            {f.priority === 'high' && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/60">
-                                High
-                              </span>
-                            )}
+                            <p className="text-sm sm:text-base font-semibold text-gray-900">{cleanTitle}</p>
 
                             {f.status === 'completed' ? (
                               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
@@ -505,9 +484,9 @@ export default function Followups() {
                             )}
                           </div>
 
-                          {f.tank_name && (
+                          {showTank && (
                             <p className="text-xs text-indigo-600 font-medium mb-1">
-                              Pond / Tank: {f.tank_name} {f.tank_number ? `(#${f.tank_number})` : ''}
+                              Tank: {f.tank_name} {f.tank_number ? `(#${f.tank_number})` : ''}
                             </p>
                           )}
 
@@ -525,7 +504,6 @@ export default function Followups() {
                           <div className="flex items-center gap-x-4 gap-y-1.5 text-xs text-gray-600 flex-wrap mt-2">
                             <div className="flex items-center gap-1.5">
                               <UserIcon className="w-3.5 h-3.5 text-gray-400" />
-                              <span className="text-gray-500">{roleDisplay}:</span>
                               <span className="text-gray-900 font-medium">{f.salesperson_name || 'Unassigned'}</span>
                             </div>
 
@@ -546,12 +524,12 @@ export default function Followups() {
                             <div className="flex items-center gap-1 text-gray-500">
                               <CalendarDaysIcon className="w-3.5 h-3.5 text-gray-400" />
                               <span>Due: {f.followup_date}</span>
-                              {f.followup_time ? <span>at {f.followup_time}</span> : null}
+                              {f.followup_time && f.followup_time !== '09:00:00' && !isWeeklyTest ? <span>at {f.followup_time.slice(0, 5)}</span> : null}
                             </div>
                           </div>
 
                           {/* Remarks */}
-                          {f.remarks && (
+                          {showRemark && (
                             <p className="text-xs text-gray-600 mt-2 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 line-clamp-2">
                               <span className="font-medium text-gray-700">Remarks:</span> {f.remarks}
                             </p>
