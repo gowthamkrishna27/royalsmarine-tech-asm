@@ -7,22 +7,20 @@ import { PageSpinner } from '../../components/common/Spinner';
 import Badge from '../../components/common/Badge';
 import { UserModal } from './Users';
 import {
-  ArrowLeftIcon,
-  EnvelopeIcon,
-  PhoneIcon,
-  MapPinIcon,
-  CalendarDaysIcon,
-  ClockIcon,
-  BriefcaseIcon,
-  UserGroupIcon,
-  UsersIcon,
-  PencilSquareIcon,
-  BuildingOfficeIcon,
-  ClipboardDocumentListIcon,
-  ArrowTopRightOnSquareIcon,
-  IdentificationIcon,
-  ArrowDownTrayIcon,
-} from '@heroicons/react/24/outline';
+  ArrowLeft,
+  Phone,
+  Mail,
+  Download,
+  Pencil,
+  User,
+  Users,
+  MapPin,
+  ExternalLink,
+  ClipboardList,
+  Building2,
+  ArrowRight,
+  ShieldCheck,
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function UserDetail() {
@@ -116,8 +114,8 @@ export default function UserDetail() {
           onClick={() => navigate('/users')}
           className="btn-secondary btn-sm mt-4 inline-flex items-center gap-1.5"
         >
-          <ArrowLeftIcon className="w-3.5 h-3.5" />
-          <span>Back to Users & Team</span>
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Users</span>
         </button>
       </div>
     );
@@ -133,56 +131,68 @@ export default function UserDetail() {
   return (
     <div className="space-y-5 fade-in pb-12">
       {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-200">
         <div className="flex items-center gap-3">
           <Link
             to="/users"
-            className="w-8 h-8 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-gray-900 transition shrink-0"
-            title="Back to Users & Team"
+            className="w-9 h-9 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center text-gray-500 hover:text-gray-900 transition shrink-0 shadow-2xs"
+            title="Back to Users"
           >
-            <ArrowLeftIcon className="w-4 h-4" />
+            <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-bold text-gray-900 tracking-tight">
                 {user.full_name}
               </h1>
-              <Badge color={isAsm ? 'blue' : isTechExec ? 'green' : 'gray'}>
+              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
                 {user.role_display}
-              </Badge>
+              </span>
               <button
                 type="button"
                 onClick={toggleStatus}
-                className="cursor-pointer hover:opacity-85 transition"
+                className="cursor-pointer hover:opacity-80 transition"
                 title="Click to toggle status"
               >
-                <Badge color={user.status === 'active' ? 'green' : 'red'}>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                    user.status === 'active'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-red-50 text-red-700 border-red-200'
+                  }`}
+                >
                   {user.status}
-                </Badge>
+                </span>
               </button>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">
-              User ID #{user.id} {user.department ? `• Department: ${user.department}` : ''}
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-1.5">
+              <span>User ID #{user.id}</span>
+              {user.department && (
+                <>
+                  <span className="text-gray-300">•</span>
+                  <span>Department: {user.department}</span>
+                </>
+              )}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
           {user.mobile && (
             <a
               href={`tel:${user.mobile}`}
-              className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5"
+              className="btn-secondary h-8 !py-0 px-3 text-xs inline-flex items-center gap-1.5"
             >
-              <PhoneIcon className="w-3.5 h-3.5 text-gray-400" />
+              <Phone className="w-3.5 h-3.5 text-gray-500" />
               <span>Call</span>
             </a>
           )}
           {user.email && (
             <a
               href={`mailto:${user.email}`}
-              className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5"
+              className="btn-secondary h-8 !py-0 px-3 text-xs inline-flex items-center gap-1.5"
             >
-              <EnvelopeIcon className="w-3.5 h-3.5 text-gray-400" />
+              <Mail className="w-3.5 h-3.5 text-gray-500" />
               <span>Email</span>
             </a>
           )}
@@ -191,220 +201,387 @@ export default function UserDetail() {
               type="button"
               onClick={handleDownloadReport}
               disabled={downloadingReport}
-              className="btn-secondary btn-sm text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+              className="btn-secondary h-8 !py-0 px-3 text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
               title="Download Visit Report in standard format"
             >
-              <ArrowDownTrayIcon className="w-3.5 h-3.5 text-gray-400" />
+              <Download className="w-3.5 h-3.5 text-gray-500" />
               <span>{downloadingReport ? 'Downloading...' : 'Download Report'}</span>
             </button>
           )}
           <button
             type="button"
             onClick={() => setEditModalOpen(true)}
-            className="btn-primary btn-sm text-xs inline-flex items-center gap-1.5"
+            className="btn-primary h-8 !py-0 px-3 text-xs inline-flex items-center gap-1.5"
           >
-            <PencilSquareIcon className="w-3.5 h-3.5" />
+            <Pencil className="w-3.5 h-3.5" />
             <span>Edit Profile</span>
           </button>
         </div>
       </div>
 
       {/* 2. Key Metrics Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200 rounded-xl divide-y sm:divide-y-0 sm:divide-x divide-gray-100 shadow-2xs overflow-hidden">
+      <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-gray-200 rounded-xl shadow-2xs divide-y sm:divide-y-0 sm:divide-x divide-gray-100 overflow-hidden">
         {isAsm ? (
           <>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Team Size
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_team_members || 0} <span className="text-xs font-normal text-gray-400">executives</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_team_members || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">executives</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Territory Farmers
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_farmers || 0} <span className="text-xs font-normal text-gray-400">farmers</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_farmers || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">farmers</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Team Field Visits
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_visits || 0} <span className="text-xs font-normal text-gray-400">logged</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_visits || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">logged</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Tanks Managed
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_ponds || 0} <span className="text-xs font-normal text-gray-400">ponds</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_ponds || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">ponds</span>
+              </div>
             </div>
           </>
         ) : isTechExec ? (
           <>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Assigned Farmers
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_farmers || 0} <span className="text-xs font-normal text-gray-400">farmers</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_farmers || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">farmers</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Field Visits Logged
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_visits || 0} <span className="text-xs font-normal text-gray-400">visits</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_visits || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">visits</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Tanks / Ponds
               </p>
-              <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-0.5">
-                {stats.total_ponds || 0} <span className="text-xs font-normal text-gray-400">tanks</span>
-              </p>
+              <div className="mt-1.5 flex items-baseline gap-1.5 h-8">
+                <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                  {stats.total_ponds || 0}
+                </span>
+                <span className="text-xs font-medium text-gray-400">tanks</span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Assigned Area
               </p>
-              <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5 truncate">
-                {user.area || '—'}
-              </p>
+              <div className="mt-1.5 flex items-center gap-1.5 h-8">
+                <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-base sm:text-lg font-bold text-gray-900 truncate">
+                  {user.area || '—'}
+                </span>
+              </div>
             </div>
           </>
         ) : (
           <>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Role
               </p>
-              <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5">
-                {user.role_display}
-              </p>
+              <div className="mt-1.5 flex items-center h-8">
+                <span className="text-base font-bold text-gray-900">
+                  {user.role_display}
+                </span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Department
               </p>
-              <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5">
-                {user.department || 'Operations'}
-              </p>
+              <div className="mt-1.5 flex items-center h-8">
+                <span className="text-base font-bold text-gray-900">
+                  {user.department || 'Operations'}
+                </span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Account Status
               </p>
-              <p className="text-base sm:text-lg font-bold text-gray-900 mt-0.5 capitalize">
-                {user.status}
-              </p>
+              <div className="mt-1.5 flex items-center h-8">
+                <span className="text-base font-bold text-gray-900 capitalize">
+                  {user.status}
+                </span>
+              </div>
             </div>
-            <div className="p-3.5 sm:p-4">
-              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 flex flex-col justify-between">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Last Activity
               </p>
-              <p className="text-xs sm:text-sm font-medium text-gray-800 mt-1">
-                {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
-              </p>
+              <div className="mt-1.5 flex items-center h-8">
+                <span className="text-xs sm:text-sm font-medium text-gray-700">
+                  {user.last_login ? new Date(user.last_login).toLocaleDateString() : 'Never'}
+                </span>
+              </div>
             </div>
           </>
         )}
       </div>
 
       {/* 3. Profile Information Card */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-2xs">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-1.5">
-          <IdentificationIcon className="w-4 h-4 text-gray-500" /> User Profile & Assignment
-        </h2>
+      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+            <User className="w-4 h-4 text-gray-400" />
+            <span>User Profile & Assignment</span>
+          </h2>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6 text-xs">
-          <div>
-            <span className="text-gray-400 block font-medium">Full Name</span>
-            <span className="text-gray-900 font-semibold text-sm mt-0.5 block">{user.full_name}</span>
-          </div>
-
-          <div>
-            <span className="text-gray-400 block font-medium">Email Address</span>
-            <span className="text-gray-800 font-medium mt-0.5 block truncate">{user.email || '—'}</span>
-          </div>
-
-          <div>
-            <span className="text-gray-400 block font-medium">Mobile Number</span>
-            <span className="text-gray-800 font-mono font-medium mt-0.5 block">{user.mobile || '—'}</span>
-          </div>
-
-          <div>
-            <span className="text-gray-400 block font-medium">Role</span>
-            <span className="text-gray-900 font-medium mt-0.5 block">{user.role_display}</span>
-          </div>
-
-          {isAsm && (
-            <div>
-              <span className="text-gray-400 block font-medium">Managed Region / Territory</span>
-              <span className="text-blue-800 font-semibold mt-0.5 block">
-                {user.region ? `📍 ${user.region}` : 'Unassigned'}
+        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-y-6 gap-x-8 text-xs">
+          {/* Row 1 */}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Full Name
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-semibold text-gray-900">
+                {user.full_name}
               </span>
             </div>
-          )}
+          </div>
 
-          {isTechExec && (
-            <div>
-              <span className="text-gray-400 block font-medium">Field Area / Territory</span>
-              <span className="text-emerald-800 font-semibold mt-0.5 block">
-                {user.area ? `📍 ${user.area}` : 'Unassigned'}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Email Address
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-medium text-gray-800 truncate">
+                {user.email || '—'}
               </span>
             </div>
-          )}
+          </div>
 
-          {isTechExec && (
-            <div>
-              <span className="text-gray-400 block font-medium">Reporting Area Sales Manager (ASM)</span>
-              {user.manager_id ? (
-                <Link
-                  to={`/users/${user.manager_id}`}
-                  className="text-blue-600 hover:text-blue-800 font-medium mt-0.5 inline-flex items-center gap-1 hover:underline"
-                >
-                  <span>{user.manager_name}</span>
-                  <ArrowTopRightOnSquareIcon className="w-3 h-3" />
-                </Link>
-              ) : (
-                <span className="text-amber-700 font-medium mt-0.5 block">No ASM Assigned</span>
-              )}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Mobile Number
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-mono font-medium text-gray-800">
+                {user.mobile || '—'}
+              </span>
             </div>
+          </div>
+
+          {/* Row 2 */}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Role
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-medium text-gray-900">
+                {user.role_display}
+              </span>
+            </div>
+          </div>
+
+          {isTechExec ? (
+            <>
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Field Area / Territory
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  {user.area ? (
+                    <span className="text-sm font-medium text-gray-900 inline-flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span>{user.area}</span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">Unassigned</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Reporting ASM
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  {user.manager_id ? (
+                    <Link
+                      to={`/users/${user.manager_id}`}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 inline-flex items-center gap-1 hover:underline"
+                    >
+                      <span>{user.manager_name}</span>
+                      <ExternalLink className="w-3 h-3 text-blue-500 shrink-0" />
+                    </Link>
+                  ) : (
+                    <span className="text-sm text-amber-700 font-medium">No ASM Assigned</span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : isAsm ? (
+            <>
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Managed Region / Territory
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  {user.region ? (
+                    <span className="text-sm font-medium text-gray-900 inline-flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <span>{user.region}</span>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-gray-400">Unassigned</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Managed Team
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  <span className="text-sm font-medium text-gray-900">
+                    {teamMembers.length} {teamMembers.length === 1 ? 'Executive' : 'Executives'}
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Access Level
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  <span className="text-sm font-medium text-gray-900 inline-flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                    <span>Administrator</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-start">
+                <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+                  Scope
+                </span>
+                <div className="mt-1.5 min-h-[22px] flex items-center">
+                  <span className="text-sm font-medium text-gray-900">
+                    Full System Access
+                  </span>
+                </div>
+              </div>
+            </>
           )}
 
-          <div>
-            <span className="text-gray-400 block font-medium">Department</span>
-            <span className="text-gray-800 mt-0.5 block">{user.department || '—'}</span>
+          {/* Row 3 */}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Department
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm text-gray-800">
+                {user.department || '—'}
+              </span>
+            </div>
           </div>
 
-          <div>
-            <span className="text-gray-400 block font-medium">Joining Date</span>
-            <span className="text-gray-800 mt-0.5 block">
-              {user.joining_date ? String(user.joining_date).slice(0, 10) : '—'}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Joining Date
             </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm text-gray-800">
+                {user.joining_date ? String(user.joining_date).slice(0, 10) : '—'}
+              </span>
+            </div>
           </div>
 
-          <div>
-            <span className="text-gray-400 block font-medium">Last Login</span>
-            <span className="text-gray-800 mt-0.5 block">
-              {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never logged in'}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Last Login
             </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm text-gray-800">
+                {user.last_login ? new Date(user.last_login).toLocaleString() : 'Never logged in'}
+              </span>
+            </div>
           </div>
 
-          <div>
-            <span className="text-gray-400 block font-medium">Account Created</span>
-            <span className="text-gray-500 mt-0.5 block font-mono text-[11px]">
-              {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+          {/* Row 4 */}
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Account Created
             </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-mono text-gray-500">
+                {user.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              Account Status
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${
+                  user.status === 'active'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+                }`}
+              >
+                {user.status === 'active' ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-start">
+            <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider block">
+              User ID
+            </span>
+            <div className="mt-1.5 min-h-[22px] flex items-center">
+              <span className="text-sm font-mono text-gray-500">
+                #{user.id}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -412,42 +589,44 @@ export default function UserDetail() {
       {/* 4. Team Members List (If ASM) */}
       {isAsm && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-              <UserGroupIcon className="w-4 h-4 text-blue-600" />
-              Technical Executives Under Management ({teamMembers.length})
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+              <Users className="w-4 h-4 text-gray-500" />
+              <span>Technical Executives Under Management ({teamMembers.length})</span>
             </h2>
             <button
               type="button"
               onClick={() => setEditModalOpen(true)}
-              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline"
             >
-              Manage Team
+              <span>Manage Team</span>
+              <ExternalLink className="w-3 h-3 text-blue-500" />
             </button>
           </div>
 
           {teamMembers.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-400">
-              No technical executives are currently assigned to this ASM.
+            <div className="py-12 text-center text-xs text-gray-400">
+              <Users className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p>No technical executives are currently assigned to this ASM.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Executive</th>
-                    <th className="py-2.5 px-3">Contact</th>
-                    <th className="py-2.5 px-3">Assigned Area</th>
-                    <th className="py-2.5 px-3 text-center">Farmers</th>
-                    <th className="py-2.5 px-3 text-center">Visits</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
+                    <th className="py-2.5 px-4">Executive</th>
+                    <th className="py-2.5 px-4">Contact</th>
+                    <th className="py-2.5 px-4">Assigned Area</th>
+                    <th className="py-2.5 px-4 text-center">Farmers</th>
+                    <th className="py-2.5 px-4 text-center">Visits</th>
+                    <th className="py-2.5 px-4">Status</th>
+                    <th className="py-2.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {teamMembers.map((exec) => (
                     <tr key={exec.id} className="hover:bg-gray-50/70 transition">
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-4">
                         <Link
                           to={`/users/${exec.id}`}
                           className="font-medium text-gray-900 hover:text-blue-600 transition"
@@ -455,35 +634,44 @@ export default function UserDetail() {
                           {exec.full_name}
                         </Link>
                       </td>
-                      <td className="py-2.5 px-3 text-gray-600 font-mono text-[11px]">
+                      <td className="py-3 px-4 text-gray-600 font-mono text-[11px]">
                         <div>{exec.mobile || '—'}</div>
                         <div className="text-gray-400 font-sans">{exec.email}</div>
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-4">
                         {exec.area ? (
-                          <span className="text-gray-800 font-medium">{exec.area}</span>
+                          <span className="text-gray-800 font-medium inline-flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-gray-400" />
+                            <span>{exec.area}</span>
+                          </span>
                         ) : (
                           <span className="text-gray-400 italic">Unassigned</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-semibold text-gray-800">
+                      <td className="py-3 px-4 text-center font-semibold text-gray-800">
                         {exec.farmers_count || 0}
                       </td>
-                      <td className="py-2.5 px-3 text-center font-semibold text-gray-800">
+                      <td className="py-3 px-4 text-center font-semibold text-gray-800">
                         {exec.visits_count || 0}
                       </td>
-                      <td className="py-2.5 px-3">
-                        <Badge color={exec.status === 'active' ? 'green' : 'red'}>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
+                            exec.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-red-50 text-red-700 border-red-200'
+                          }`}
+                        >
                           {exec.status}
-                        </Badge>
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right">
+                      <td className="py-3 px-4 text-right">
                         <Link
                           to={`/users/${exec.id}`}
-                          className="text-xs font-medium text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 transition inline-flex items-center gap-1"
+                          className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 inline-flex items-center gap-1"
                         >
                           <span>View</span>
-                          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                          <ExternalLink className="w-3 h-3 text-gray-400" />
                         </Link>
                       </td>
                     </tr>
@@ -498,40 +686,45 @@ export default function UserDetail() {
       {/* 5. Recent Field Visits */}
       {(isAsm || isTechExec) && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-              <ClipboardDocumentListIcon className="w-4 h-4 text-emerald-600" />
-              Recent Field Visits {isAsm ? '(Team Activity)' : ''}
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-gray-500" />
+              <span>Recent Field Visits {isAsm ? '(Team Activity)' : ''}</span>
             </h2>
-            <Link to="/visits" className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-              View All Visits →
+            <Link
+              to="/visits"
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline"
+            >
+              <span>View All Visits</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
           {recentVisits.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-400">
-              No recent field visits recorded.
+            <div className="py-12 text-center text-xs text-gray-400">
+              <ClipboardList className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p>No recent field visits recorded.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Farmer</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    {isAsm && <th className="py-2.5 px-3">Technician</th>}
-                    <th className="py-2.5 px-3">Visit Type</th>
-                    <th className="py-2.5 px-3 text-right">Details</th>
+                    <th className="py-2.5 px-4">Date</th>
+                    <th className="py-2.5 px-4">Farmer</th>
+                    <th className="py-2.5 px-4">Location</th>
+                    {isAsm && <th className="py-2.5 px-4">Technician</th>}
+                    <th className="py-2.5 px-4">Visit Type</th>
+                    <th className="py-2.5 px-4 text-right">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {recentVisits.map((v) => (
                     <tr key={v.id} className="hover:bg-gray-50/70 transition">
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
+                      <td className="py-3 px-4 font-mono text-[11px] text-gray-600">
                         {v.visit_date}
                       </td>
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-4">
                         <Link
                           to={`/clients/${v.client_id}`}
                           className="font-medium text-gray-900 hover:text-blue-600 transition"
@@ -539,26 +732,26 @@ export default function UserDetail() {
                           {v.farmer_name || 'Farmer'}
                         </Link>
                       </td>
-                      <td className="py-2.5 px-3 text-gray-500 truncate max-w-[140px]">
+                      <td className="py-3 px-4 text-gray-500 truncate max-w-[140px]">
                         {[v.village, v.district].filter(Boolean).join(', ') || '—'}
                       </td>
                       {isAsm && (
-                        <td className="py-2.5 px-3 text-gray-800 font-medium">
+                        <td className="py-3 px-4 text-gray-800 font-medium">
                           {v.technician_name || '—'}
                         </td>
                       )}
-                      <td className="py-2.5 px-3">
-                        <span className="capitalize px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px]">
+                      <td className="py-3 px-4">
+                        <span className="capitalize px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-[11px]">
                           {v.visit_type?.replace(/_/g, ' ') || 'Routine'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right">
+                      <td className="py-3 px-4 text-right">
                         <Link
                           to={`/visits/${v.id}`}
-                          className="text-xs font-medium text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 transition inline-flex items-center gap-1"
+                          className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 inline-flex items-center gap-1"
                         >
                           <span>View</span>
-                          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                          <ExternalLink className="w-3 h-3 text-gray-400" />
                         </Link>
                       </td>
                     </tr>
@@ -573,37 +766,42 @@ export default function UserDetail() {
       {/* 6. Associated Farmers */}
       {(isAsm || isTechExec) && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-              <BuildingOfficeIcon className="w-4 h-4 text-gray-500" />
-              Farmers Assigned / Registered
+          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-xs font-semibold text-gray-700 uppercase tracking-wider flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-gray-500" />
+              <span>Farmers Assigned / Registered</span>
             </h2>
-            <Link to="/clients" className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-              View All Farmers →
+            <Link
+              to="/clients"
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium inline-flex items-center gap-1 hover:underline"
+            >
+              <span>View All Farmers</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
           {recentFarmers.length === 0 ? (
-            <div className="p-8 text-center text-xs text-gray-400">
-              No farmers assigned yet.
+            <div className="py-12 text-center text-xs text-gray-400">
+              <Building2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+              <p>No farmers assigned yet.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Farmer</th>
-                    <th className="py-2.5 px-3">Phone</th>
-                    <th className="py-2.5 px-3">Location</th>
-                    {isAsm && <th className="py-2.5 px-3">Assigned Tech</th>}
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
+                    <th className="py-2.5 px-4">Farmer</th>
+                    <th className="py-2.5 px-4">Phone</th>
+                    <th className="py-2.5 px-4">Location</th>
+                    {isAsm && <th className="py-2.5 px-4">Assigned Tech</th>}
+                    <th className="py-2.5 px-4">Status</th>
+                    <th className="py-2.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {recentFarmers.map((f) => (
                     <tr key={f.id} className="hover:bg-gray-50/70 transition">
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-4">
                         <Link
                           to={`/clients/${f.id}`}
                           className="font-medium text-gray-900 hover:text-blue-600 transition"
@@ -614,29 +812,35 @@ export default function UserDetail() {
                           <span className="text-[11px] text-gray-400 block">{f.contact_person}</span>
                         )}
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-gray-600">
+                      <td className="py-3 px-4 font-mono text-[11px] text-gray-600">
                         {f.mobile || '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-gray-500 truncate max-w-[140px]">
+                      <td className="py-3 px-4 text-gray-500 truncate max-w-[140px]">
                         {[f.village, f.district].filter(Boolean).join(', ') || '—'}
                       </td>
                       {isAsm && (
-                        <td className="py-2.5 px-3 text-gray-800 font-medium">
+                        <td className="py-3 px-4 text-gray-800 font-medium">
                           {f.assigned_to_name || '—'}
                         </td>
                       )}
-                      <td className="py-2.5 px-3">
-                        <Badge color={f.status === 'active' ? 'green' : 'gray'}>
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
+                            f.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-gray-100 text-gray-700 border-gray-200'
+                          }`}
+                        >
                           {f.status || 'active'}
-                        </Badge>
+                        </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right">
+                      <td className="py-3 px-4 text-right">
                         <Link
                           to={`/clients/${f.id}`}
-                          className="text-xs font-medium text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 transition inline-flex items-center gap-1"
+                          className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 inline-flex items-center gap-1"
                         >
                           <span>Profile</span>
-                          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                          <ExternalLink className="w-3 h-3 text-gray-400" />
                         </Link>
                       </td>
                     </tr>
