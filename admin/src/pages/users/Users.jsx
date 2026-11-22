@@ -9,17 +9,17 @@ import FilterBar, { SelectFilter } from '../../components/common/FilterBar';
 import Modal from '../../components/common/Modal';
 import EmptyState from '../../components/common/EmptyState';
 import {
-  Users as UsersIcon,
-  Plus,
-  Pencil,
-  MapPin,
-  Check,
-  Phone,
-  Mail,
-  Search,
-  X,
-  Clock,
-} from 'lucide-react';
+  UserGroupIcon as UsersIcon,
+  PlusIcon as Plus,
+  PencilSquareIcon as Pencil,
+  MapPinIcon as MapPin,
+  CheckIcon as Check,
+  PhoneIcon as Phone,
+  EnvelopeIcon as Mail,
+  MagnifyingGlassIcon as Search,
+  XMarkIcon as X,
+  ClockIcon as Clock,
+} from '@heroicons/react/24/outline';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
 

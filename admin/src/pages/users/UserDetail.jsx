@@ -7,20 +7,20 @@ import { PageSpinner } from '../../components/common/Spinner';
 import Badge from '../../components/common/Badge';
 import { UserModal } from './Users';
 import {
-  ArrowLeft,
-  Phone,
-  Mail,
-  Download,
-  Pencil,
-  User,
-  Users,
-  MapPin,
-  ExternalLink,
-  ClipboardList,
-  Building2,
-  ArrowRight,
-  ShieldCheck,
-} from 'lucide-react';
+  ArrowLeftIcon as ArrowLeft,
+  PhoneIcon as Phone,
+  EnvelopeIcon as Mail,
+  ArrowDownTrayIcon as Download,
+  PencilSquareIcon as Pencil,
+  UserIcon as User,
+  UserGroupIcon as Users,
+  MapPinIcon as MapPin,
+  ArrowTopRightOnSquareIcon as ExternalLink,
+  ClipboardDocumentListIcon as ClipboardList,
+  BuildingOffice2Icon as Building2,
+  ArrowRightIcon as ArrowRight,
+  ShieldCheckIcon as ShieldCheck,
+} from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
 export default function UserDetail() {
