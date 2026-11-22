@@ -29,8 +29,7 @@ import CountTracker from './pages/count/CountTracker';
 import SeedTracker from './pages/seed/SeedTracker';
 import Dealers from './pages/dealers/Dealers';
 import ProfilePage from './pages/profile/Profile';
-
-const MapPage = lazy(() => import('./pages/map/Map'));
+import MapPage from './pages/map/Map';
 
 const ADMIN_ROLES = ['super_admin', 'admin', 'management', 'backend_ops'];
 
@@ -90,7 +89,7 @@ function AppRouter() {
 
         <Route path="followups" element={<Followups />} />
 
-        <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
+        <Route path="map" element={<MapPage />} />
         <Route path="reports" element={<Reports />} />
         <Route path="harvested-tanks" element={<HarvestedTanks />} />
         <Route path="fcr" element={<FcrTracker />} />

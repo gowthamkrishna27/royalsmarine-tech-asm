@@ -5,6 +5,12 @@ import { Toaster } from 'react-hot-toast';
 import App from './App';
 import './index.css';
 
+// Automatically handle and recover from stale Vite module chunks on redeployment
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault();
+  window.location.reload();
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 30000 },

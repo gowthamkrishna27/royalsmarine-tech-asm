@@ -15,8 +15,7 @@ import Reports from '../pages/reports/Reports';
 import TechExecReports from '../pages/reports/TechExecReports';
 import HarvestedTanks from '../pages/tanks/HarvestedTanks';
 import ProfilePage from '../pages/profile/Profile';
-
-const MapPage = lazy(() => import('../pages/map/Map'));
+import MapPage from '../pages/map/Map';
 
 /**
  * FieldRoutes — Route tree for Technical Executives & Area Executive Managers.
@@ -40,7 +39,7 @@ export default function FieldRoutes() {
 
         <Route path="followups" element={<Followups />} />
 
-        <Route path="map" element={<Suspense fallback={<PageSpinner />}><MapPage /></Suspense>} />
+        <Route path="map" element={<MapPage />} />
         <Route path="reports" element={<Reports />} />
         <Route path="te-reports" element={<TechExecReports />} />
         <Route path="harvested-tanks" element={<HarvestedTanks />} />
