@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -11,8 +12,8 @@ import {
   XMarkIcon,
   ScaleIcon,
   CheckBadgeIcon,
-  ChartBarIcon,
   ArrowDownTrayIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 
 const fmt = (v, fallback = '—') => (v === null || v === undefined || v === '' ? fallback : v);
@@ -23,24 +24,79 @@ export default function FcrTracker() {
   const [selectedTank, setSelectedTank] = useState(null);
   const [exporting, setExporting] = useState(false);
 
-  const { data: tanks = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['fcr-tanks', search],
+  // Fetch all tanks once; client-side filtering handles search & DOC reactively with zero lag
+  const { data: tanks = [], isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['fcr-tanks'],
     queryFn: () =>
       clientService
-        .getFcrTanks({ search: search || undefined })
+        .getFcrTanks()
         .then((r) => r.data.data || []),
   });
 
-  // Calculate high-level summary metrics across harvested tanks
+  // Extract all distinct DOC values available across the harvested tanks
+  const availableDocs = useMemo(() => {
+    const docs = new Set();
+    tanks.forEach((t) => {
+      const d = t.harvest_doc || t.final_harvest?.doc || t.current_doc;
+      if (d !== undefined && d !== null && !isNaN(d)) docs.add(parseInt(d, 10));
+    });
+    return Array.from(docs).sort((a, b) => a - b);
+  }, [tanks]);
+
+  // Reactive instant filtering by DOC and search keyword
+  const filteredTanks = useMemo(() => {
+    let result = tanks;
+
+    // Filter by DOC
+    if (docInput.trim()) {
+      const target = parseInt(docInput, 10);
+      if (!Number.isNaN(target)) {
+        result = result.filter((t) => {
+          const h = parseInt(t.harvest_doc || t.final_harvest?.doc, 10);
+          const c = parseInt(t.current_doc, 10);
+          const p = parseInt(t.doc, 10);
+          const v = t.recorded_docs || [];
+          return h === target || c === target || p === target || v.includes(target);
+        });
+      }
+    }
+
+    // Filter by search text (farmer name, tank number, phone, village, district, feed type)
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((t) => {
+        const tankNum = String(t.tank_number || t.pond_name || `Tank #${t.id}`).toLowerCase();
+        const company = String(t.company_name || '').toLowerCase();
+        const contact = String(t.contact_person || '').toLowerCase();
+        const phone = String(t.farmer_phone || '').toLowerCase();
+        const village = String(t.village || '').toLowerCase();
+        const district = String(t.district || '').toLowerCase();
+        const feed = String(t.feed_type || '').toLowerCase();
+        return (
+          tankNum.includes(q) ||
+          company.includes(q) ||
+          contact.includes(q) ||
+          phone.includes(q) ||
+          village.includes(q) ||
+          district.includes(q) ||
+          feed.includes(q)
+        );
+      });
+    }
+
+    return result;
+  }, [tanks, docInput, search]);
+
+  // Reactive summary metrics calculated directly from the filtered tanks
   const summary = useMemo(() => {
-    const totalTanks = tanks.length;
+    const totalTanks = filteredTanks.length;
     let totalBiomass = 0;
     let fcrSum = 0;
     let fcrCount = 0;
     let docSum = 0;
     let docCount = 0;
 
-    tanks.forEach((t) => {
+    filteredTanks.forEach((t) => {
       const b = parseFloat(t.total_biomass || t.final_harvest?.total_biomass || t.final_harvest?.harvested_biomass || 0);
       if (!isNaN(b) && b > 0) totalBiomass += b;
 
@@ -63,29 +119,14 @@ export default function FcrTracker() {
       totalBiomass: totalBiomass > 0 ? `${Math.round(totalBiomass).toLocaleString()} kg` : '—',
       avgDoc: docCount > 0 ? `${Math.round(docSum / docCount)}d` : '—',
     };
-  }, [tanks]);
+  }, [filteredTanks]);
 
-  const availableDocs = useMemo(() => {
-    const docs = new Set();
-    tanks.forEach((t) => {
-      const d = t.harvest_doc || t.final_harvest?.doc || t.current_doc;
-      if (d !== undefined && d !== null && !isNaN(d)) docs.add(parseInt(d, 10));
-    });
-    return Array.from(docs).sort((a, b) => a - b);
-  }, [tanks]);
+  const hasActiveFilters = Boolean(docInput || search);
 
-  const filteredTanks = useMemo(() => {
-    if (!docInput.trim()) return tanks;
-    const target = parseInt(docInput, 10);
-    if (Number.isNaN(target)) return tanks;
-    return tanks.filter((t) => {
-      const h = parseInt(t.harvest_doc || t.final_harvest?.doc, 10);
-      const c = parseInt(t.current_doc, 10);
-      const p = parseInt(t.doc, 10);
-      const v = t.recorded_docs || [];
-      return h === target || c === target || p === target || v.includes(target);
-    });
-  }, [tanks, docInput]);
+  const handleResetFilters = () => {
+    setDocInput('');
+    setSearch('');
+  };
 
   // Export handler with fallback to client-side CSV
   const handleExport = async () => {
@@ -151,7 +192,7 @@ export default function FcrTracker() {
         const csvContent = [headers.join(','), ...rows].join('\n');
         downloadBlob(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), 'fcr-report.csv');
         toast.success('FCR report exported (CSV)');
-      } catch (e) {
+      } catch {
         toast.error('Failed to export FCR report');
       }
     } finally {
@@ -160,84 +201,99 @@ export default function FcrTracker() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-full">
       {/* Page Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-gray-900">FCR Tracker</h1>
-          </div>
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">FCR Tracker</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {summary.totalTanks} harvested tanks {hasActiveFilters ? 'matching filters' : 'recorded'}
+          </p>
         </div>
 
-        {/* Action button: Export */}
-        <div className="flex items-center gap-2">
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="btn-secondary btn-sm py-1.5 px-3 text-xs inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium transition cursor-pointer"
+            title="Refresh data"
+          >
+            <ArrowPathIcon className={`h-3.5 w-3.5 text-gray-500 ${isFetching ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
           <button
             type="button"
             onClick={handleExport}
             disabled={exporting || filteredTanks.length === 0}
-            className="btn-secondary btn-sm inline-flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+            className="btn-secondary btn-sm py-1.5 px-3 text-xs inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium transition cursor-pointer disabled:opacity-50"
             title="Export FCR data to Excel"
           >
-            <ArrowDownTrayIcon className="h-4 w-4 text-gray-600" />
-            <span>{exporting ? 'Exporting...' : 'Export'}</span>
+            <ArrowDownTrayIcon className="h-3.5 w-3.5 text-gray-500" />
+            <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
         </div>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-gray-200/80 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Harvested Tanks</span>
-          <p className="mt-1 text-xl font-bold text-gray-900 tabular-nums">{summary.totalTanks}</p>
+      {/* Minimal Metric Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Harvested Tanks</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.totalTanks}</p>
         </div>
-        <div className="rounded-xl border border-sky-100 bg-sky-50/40 p-3.5 shadow-xs">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-sky-800/80">Average FCR</span>
-          <p className="mt-1 text-xl font-bold text-sky-900 tabular-nums">{summary.avgFcr}</p>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Average FCR</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.avgFcr}</p>
         </div>
-        <div className="rounded-xl border border-gray-200/80 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Total Biomass</span>
-          <p className="mt-1 text-xl font-bold text-gray-900 tabular-nums">{summary.totalBiomass}</p>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Total Biomass</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.totalBiomass}</p>
         </div>
-        <div className="rounded-xl border border-gray-200/80 bg-white p-3.5 shadow-xs">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-gray-500">Avg Harvest DOC</span>
-          <p className="mt-1 text-xl font-bold text-gray-900 tabular-nums">{summary.avgDoc}</p>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Avg Harvest DOC</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">{summary.avgDoc}</p>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="rounded-lg border border-sky-100 bg-white p-3 sm:p-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <label className="text-xs font-medium uppercase tracking-wide text-sky-700/70">DOC</label>
-            <div className="relative w-full sm:w-28">
+      {/* Filter and Search Bar: Minimal & Clean */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-2.5 sm:p-3">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          {/* DOC Filter & Quick Select Chips */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">DOC:</span>
+            <div className="relative w-28">
               <input
                 type="number"
                 min="0"
                 inputMode="numeric"
-                placeholder="Any"
+                placeholder="Any DOC"
                 value={docInput}
                 onChange={(e) => setDocInput(e.target.value)}
-                className="input py-1.5 pr-8 text-sm"
+                className="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300"
                 aria-label="Filter by DOC"
               />
               {docInput && (
                 <button
                   type="button"
                   onClick={() => setDocInput('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
                   aria-label="Clear DOC"
                 >
-                  <XMarkIcon className="h-4 w-4" />
+                  <XMarkIcon className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
             {availableDocs.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setDocInput('')}
-                  className={`rounded-md border px-2 py-1 text-xs font-medium transition ${!docInput ? 'border-sky-600 bg-sky-600 text-white' : 'border-sky-100 bg-sky-50/50 text-sky-700 hover:border-sky-200 hover:bg-sky-50'
-                    }`}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                    !docInput
+                      ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
                 >
                   All
                 </button>
@@ -246,10 +302,11 @@ export default function FcrTracker() {
                     key={d}
                     type="button"
                     onClick={() => setDocInput(String(d))}
-                    className={`rounded-md border px-2 py-1 text-xs font-medium tabular-nums transition ${docInput === String(d)
-                        ? 'border-sky-600 bg-sky-600 text-white'
-                        : 'border-sky-100 bg-sky-50/50 text-sky-700 hover:border-sky-200 hover:bg-sky-50'
-                      }`}
+                    className={`rounded-lg px-2 py-1 text-xs font-medium tabular-nums transition cursor-pointer ${
+                      docInput === String(d)
+                        ? 'bg-blue-600 text-white shadow-2xs font-semibold'
+                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    }`}
                   >
                     {d}
                   </button>
@@ -258,64 +315,105 @@ export default function FcrTracker() {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative w-full sm:w-64">
-              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          {/* Search Box & Controls */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 sm:w-64">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search farmer or tank"
+                placeholder="Search farmer, tank, phone..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="input w-full py-1.5 pl-8 text-sm"
+                className="w-full rounded-lg border border-gray-200 bg-white pl-8 pr-7 py-1 text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300"
                 aria-label="Search"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer"
+                >
+                  <XMarkIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <span className="shrink-0 text-xs text-gray-500 tabular-nums">{filteredTanks.length} shown</span>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="h-7 px-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium flex items-center gap-1 transition cursor-pointer shrink-0"
+                title="Reset filters"
+              >
+                <XMarkIcon className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+
+            <span className="shrink-0 text-xs text-gray-400 tabular-nums">
+              {filteredTanks.length} shown
+            </span>
           </div>
         </div>
       </div>
 
       {/* Table Content Area */}
       {isLoading ? (
-        <div className="rounded-lg border border-gray-200 bg-white py-14 text-center">
+        <div className="rounded-xl border border-gray-200 bg-white py-14 text-center">
           <PageSpinner />
-          <p className="mt-2 text-sm text-gray-500">Loading harvested tanks</p>
+          <p className="mt-2 text-xs text-gray-500">Loading harvested tanks...</p>
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 text-center">
-          <p className="text-sm font-medium text-gray-900">Could not load FCR data</p>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 text-center">
+          <p className="text-sm font-semibold text-gray-900">Could not load FCR data</p>
           <p className="mt-1 text-xs text-gray-500">{error.message}</p>
-          <button type="button" onClick={() => refetch()} className="btn-secondary btn-sm mt-3">Retry</button>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="btn-secondary btn-sm mt-3"
+          >
+            Retry
+          </button>
         </div>
       ) : filteredTanks.length === 0 ? (
-        <div className="rounded-lg border border-gray-200 bg-white">
+        <div className="rounded-xl border border-gray-200 bg-white">
           <EmptyState
             icon={ScaleIcon}
             title="No harvested tanks found"
             description={
-              docInput
-                ? `No tanks with completed final harvest match DOC ${docInput}. Clear the filter to see all.`
+              hasActiveFilters
+                ? 'No tanks match the selected filters. Clear the filter to see all.'
                 : 'Tanks and farmer details will appear here once the tank completes final harvest.'
             }
-            action={docInput ? <button type="button" onClick={() => setDocInput('')} className="btn-secondary btn-sm">Clear filter</button> : null}
+            action={
+              hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={handleResetFilters}
+                  className="btn-secondary btn-sm"
+                >
+                  Clear filters
+                </button>
+              ) : null
+            }
           />
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-sky-100 bg-white shadow-xs">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xs">
           <div className="overflow-x-auto">
             <table className="min-w-full text-left text-sm">
-              <thead className="border-b border-sky-100 bg-sky-50/60 text-xs font-medium uppercase tracking-wide text-sky-800/70">
+              <thead className="border-b border-gray-200 bg-gray-50/75 text-xs font-semibold uppercase tracking-wider text-gray-500">
                 <tr>
-                  <th className="px-4 py-2.5 font-medium">Tank</th>
-                  <th className="px-4 py-2.5 font-medium">Farmer</th>
-                  <th className="px-4 py-2.5 font-medium">Harvest DOC</th>
-                  <th className="px-4 py-2.5 font-medium">Final FCR</th>
-                  <th className="px-4 py-2.5 font-medium">ABW</th>
-                  <th className="px-4 py-2.5 font-medium">Biomass</th>
-                  <th className="px-4 py-2.5 font-medium">Survival</th>
-                  <th className="px-4 py-2.5 font-medium">Harvest Date</th>
-                  <th className="px-4 py-2.5 font-medium">Area</th>
-                  <th className="px-4 py-2.5 text-right font-medium">Action</th>
+                  <th className="px-4 py-2.5 font-semibold">Tank</th>
+                  <th className="px-4 py-2.5 font-semibold">Farmer</th>
+                  <th className="px-4 py-2.5 font-semibold">Harvest DOC</th>
+                  <th className="px-4 py-2.5 font-semibold">Final FCR</th>
+                  <th className="px-4 py-2.5 font-semibold">ABW</th>
+                  <th className="px-4 py-2.5 font-semibold">Biomass</th>
+                  <th className="px-4 py-2.5 font-semibold">Survival</th>
+                  <th className="px-4 py-2.5 font-semibold">Harvest Date</th>
+                  <th className="px-4 py-2.5 font-semibold">Area</th>
+                  <th className="px-4 py-2.5 text-right font-semibold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -330,32 +428,41 @@ export default function FcrTracker() {
                   const harvestDate = fh.date || tank.harvest_date;
 
                   return (
-                    <tr key={tank.id} className="hover:bg-gray-50/60 transition">
+                    <tr key={tank.id} className="hover:bg-gray-50/80 transition">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-gray-900">{fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}</div>
+                        <div className="font-semibold text-gray-900">
+                          {fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}
+                        </div>
                         <div className="text-xs text-gray-400">ID {tank.id}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <Link to={`/clients/${tank.client_id}`} className="font-medium text-sky-800 hover:underline">
+                        <Link
+                          to={`/clients/${tank.client_id}`}
+                          className="font-semibold text-gray-900 hover:text-blue-600 transition"
+                        >
                           {fmt(tank.company_name)}
                         </Link>
-                        <div className="text-xs text-gray-500">{fmt(tank.farmer_phone || tank.village)}</div>
+                        <div className="text-xs text-gray-500">
+                          {fmt(tank.farmer_phone || tank.village)}
+                        </div>
                       </td>
                       <td className="px-4 py-3 tabular-nums">
-                        <span className="inline-flex items-center rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                        <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-700">
                           {harvestDoc ? `DOC ${harvestDoc}` : '—'}
                         </span>
                       </td>
                       <td className="px-4 py-3 tabular-nums font-bold text-gray-900">
                         {fcrVal ? (
-                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
+                          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800 border border-emerald-200">
                             {fcrVal}
                           </span>
                         ) : (
                           '—'
                         )}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-gray-700">{abwVal ? `${abwVal} g` : '—'}</td>
+                      <td className="px-4 py-3 tabular-nums text-gray-700">
+                        {abwVal ? `${abwVal} g` : '—'}
+                      </td>
                       <td className="px-4 py-3 tabular-nums text-gray-700">
                         {biomassVal ? `${Math.round(parseFloat(biomassVal)).toLocaleString()} kg` : '—'}
                       </td>
@@ -372,7 +479,7 @@ export default function FcrTracker() {
                         <button
                           type="button"
                           onClick={() => setSelectedTank(tank)}
-                          className="rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 hover:text-sky-900 transition"
+                          className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition shadow-2xs cursor-pointer"
                         >
                           Details
                         </button>
@@ -391,23 +498,9 @@ export default function FcrTracker() {
   );
 }
 
-function Detail({ label, value, highlight = false }) {
-  return (
-    <div className={highlight ? 'rounded-lg bg-sky-50/70 p-2.5 border border-sky-100' : ''}>
-      <dt className={`text-[11px] uppercase tracking-wide ${highlight ? 'font-semibold text-sky-800' : 'text-gray-500'}`}>
-        {label}
-      </dt>
-      <dd className={`mt-0.5 text-sm font-medium ${highlight ? 'text-sky-950 font-bold' : 'text-gray-900'}`}>
-        {value}
-      </dd>
-    </div>
-  );
-}
-
 function TankModal({ tank, onClose }) {
   const fh = tank.final_harvest || tank.harvest_info?.final_harvest || {};
   const lf = tank.latest_feeding || {};
-  const visits = Array.isArray(tank.visits) ? tank.visits : [];
   const harvestDoc = tank.harvest_doc || fh.doc || tank.current_doc;
   const fcrVal = fh.fcr || tank.fcr || lf.fcr;
   const abwVal = fh.abw || tank.abw || lf.abw;
@@ -415,101 +508,133 @@ function TankModal({ tank, onClose }) {
   const survivalVal = fh.survival_rate || tank.survival_rate;
   const harvestDate = fh.date || tank.harvest_date;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4 backdrop-blur-xs" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="max-h-[90vh] w-full overflow-y-auto rounded-t-xl bg-white sm:max-w-2xl sm:rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+  const modalContent = (
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
+      <div
+        className="w-full max-w-md rounded-xl bg-white shadow-2xl border border-gray-200 overflow-hidden relative z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-sky-100 bg-sky-50/50 px-4 py-3.5 sm:px-5">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="truncate text-base font-bold text-gray-900">{fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}</h2>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                <CheckBadgeIcon className="h-3.5 w-3.5" /> Final Harvest Completed
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-gray-900">
+                {fmt(tank.tank_number || tank.pond_name, `Tank #${tank.id}`)}
+              </h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <CheckBadgeIcon className="h-3 w-3" /> Harvested
               </span>
             </div>
-            <p className="text-sm text-gray-600 mt-0.5">
-              <span className="font-semibold text-sky-800">Harvest DOC {harvestDoc ?? '—'}</span> • {fmt(tank.company_name)}
+            <p className="text-[11px] text-gray-500 mt-0.5">
+              {fmt(tank.company_name)} · {fmt([tank.village, tank.district].filter(Boolean).join(', '))}
             </p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition" aria-label="Close">
-            <XMarkIcon className="h-5 w-5" />
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition cursor-pointer"
+            aria-label="Close"
+          >
+            <XMarkIcon className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="space-y-5 px-4 py-4 sm:px-5">
-          {/* Final Harvest & FCR Performance Block */}
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700 flex items-center gap-1.5">
-              <ChartBarIcon className="h-4 w-4 text-sky-600" /> Final Harvest &amp; FCR Details
-            </h3>
-            <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Detail label="Final FCR" value={fmt(fcrVal)} highlight />
-              <Detail label="Harvest DOC" value={harvestDoc ? `${harvestDoc} Days` : '—'} highlight />
-              <Detail label="Final ABW" value={abwVal ? `${abwVal} g` : '—'} highlight />
-              <Detail
-                label="Total Biomass"
-                value={biomassVal ? `${Math.round(parseFloat(biomassVal)).toLocaleString()} kg` : '—'}
-                highlight
-              />
-              <Detail label="Harvest Date" value={harvestDate ? String(harvestDate).slice(0, 10) : '—'} />
-              <Detail
-                label="Survival Rate"
-                value={survivalVal ? (String(survivalVal).includes('%') ? survivalVal : `${survivalVal}%`) : '—'}
-              />
-              <Detail label="Harvest Qty" value={fh.harvested_quantity ? Number(fh.harvested_quantity).toLocaleString() : (fh.count ? String(fh.count) : '—')} />
-              <Detail label="Feed Type" value={fmt(tank.feed_type)} />
-            </dl>
-            {fh.remarks && (
-              <div className="mt-2.5 rounded-lg bg-gray-50 p-2.5 text-xs text-gray-600 border border-gray-100">
-                <span className="font-semibold text-gray-700">Harvest Remarks: </span>
-                {fh.remarks}
+        {/* Modal Body: Minimal & Clean */}
+        <div className="p-4 space-y-3 text-xs">
+          {/* Key FCR & Harvest Highlight Card */}
+          <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block">
+                Final FCR
+              </span>
+              <p className="text-2xl font-bold text-gray-900 font-mono mt-0.5">
+                {fmt(fcrVal)}
+              </p>
+              <span className="text-[11px] text-gray-500 block mt-0.5 font-medium">
+                DOC: <strong className="text-gray-800">{harvestDoc ? `${harvestDoc}d` : '—'}</strong>
+              </span>
+            </div>
+            <div className="text-right space-y-1">
+              <div>
+                <span className="text-[10px] text-gray-500 block uppercase">Biomass</span>
+                <span className="text-base font-bold text-gray-900 font-mono">
+                  {biomassVal ? `${Math.round(parseFloat(biomassVal)).toLocaleString()} kg` : '—'}
+                </span>
               </div>
-            )}
+              <div className="text-[11px] text-gray-500">
+                ABW: <strong className="text-gray-800">{abwVal ? `${abwVal}g` : '—'}</strong>
+              </div>
+            </div>
           </div>
 
-          {/* Farmer & Tank Overview */}
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700">Farmer &amp; Tank Info</h3>
-            <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border border-gray-100 bg-gray-50/50 p-3 sm:grid-cols-3 text-sm">
-              <Detail label="Farmer" value={fmt(tank.company_name)} />
-              <Detail label="Mobile" value={fmt(tank.farmer_phone)} />
-              <Detail label="Location" value={fmt([tank.village, tank.district].filter(Boolean).join(', '))} />
-              <Detail label="Area" value={`${Number(tank.area_acres || tank.area || 0).toFixed(2)} ac`} />
-              <Detail label="Seed Date" value={tank.seed_date ? String(tank.seed_date).slice(0, 10) : '—'} />
-              <Detail label="Stocking" value={tank.stocking_quantity_lakhs ? `${tank.stocking_quantity_lakhs} Lakhs` : '—'} />
-            </dl>
+          {/* Minimal Key Details Grid */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-lg border border-gray-100 bg-white">
+              <span className="text-[10px] uppercase font-semibold text-gray-400 block">Harvest Date</span>
+              <p className="text-xs font-semibold text-gray-800 mt-0.5">
+                {harvestDate ? String(harvestDate).slice(0, 10) : '—'}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-lg border border-gray-100 bg-white">
+              <span className="text-[10px] uppercase font-semibold text-gray-400 block">Survival Rate</span>
+              <p className="text-xs font-semibold text-emerald-700 mt-0.5">
+                {survivalVal ? (String(survivalVal).includes('%') ? survivalVal : `${survivalVal}%`) : '—'}
+              </p>
+            </div>
           </div>
 
-          {/* Visits History */}
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-700">Visits Logged ({visits.length})</h3>
-            {visits.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-500">No visits logged.</p>
-            ) : (
-              <ul className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-100 rounded-lg border border-gray-200">
-                {visits.map((v) => (
-                  <li key={v.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-gray-50">
-                    <div className="min-w-0">
-                      <span className="font-medium text-gray-900">{v.visit_date}</span>
-                      <span className="text-gray-500"> • {fmt(v.salesperson_name, 'Technical Exec')}</span>
-                      {v.feeding_details?.fcr && <span className="text-gray-600 tabular-nums"> • FCR {v.feeding_details.fcr}</span>}
-                    </div>
-                    <Link to={`/visits/${v.id}`} className="shrink-0 font-medium text-sky-700 hover:text-sky-900">View</Link>
-                  </li>
-                ))}
-              </ul>
-            )}
+          {/* Farmer Contact Info */}
+          <div className="p-3 rounded-lg border border-gray-100 bg-white space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400 block">Farmer Information</span>
+            <div className="flex items-center justify-between text-xs pt-0.5">
+              <span className="font-semibold text-gray-900">{fmt(tank.company_name)}</span>
+              {tank.farmer_phone ? (
+                <a
+                  href={`tel:${tank.farmer_phone}`}
+                  className="font-mono text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  {tank.farmer_phone}
+                </a>
+              ) : (
+                <span className="text-gray-400">—</span>
+              )}
+            </div>
           </div>
+
+          {fh.remarks && (
+            <div className="p-2.5 rounded-lg bg-gray-50 text-xs text-gray-600 border border-gray-100">
+              <span className="font-semibold text-gray-700">Remarks: </span>
+              {fh.remarks}
+            </div>
+          )}
         </div>
 
         {/* Modal Footer */}
-        <div className="flex flex-col-reverse gap-2 border-t border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 bg-gray-50/40">
-          <Link to={`/clients/${tank.client_id}`} className="text-sm font-semibold text-sky-700 hover:text-sky-900">
-            Open farmer profile →
+        <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+          <Link
+            to={`/clients/${tank.client_id}`}
+            className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+          >
+            Go to Farmer Page →
           </Link>
-          <button type="button" onClick={onClose} className="btn-secondary btn-sm w-full sm:w-auto">Close</button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1 bg-white border border-gray-200 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }

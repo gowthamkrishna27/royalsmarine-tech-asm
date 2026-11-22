@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -258,12 +259,14 @@ export default function CountTracker() {
   };
 
   return (
-    <div className="space-y-3 max-w-full">
+    <div className="space-y-4 max-w-full">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-1 border-b border-sky-100">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-base sm:text-lg font-bold text-sky-950 tracking-tight">Count</h1>
-
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Count Tracker</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {summary.totalFarmers} farmers · {summary.totalTanks} tanks matching target count
+          </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -271,52 +274,52 @@ export default function CountTracker() {
             type="button"
             onClick={handleExport}
             disabled={exporting || filteredTanks.length === 0}
-            className="btn-secondary btn-sm py-1.5 px-3 text-xs inline-flex items-center gap-1.5 rounded-lg border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-800 shadow-none font-medium transition"
+            className="btn-secondary btn-sm py-1.5 px-3 text-xs inline-flex items-center gap-1.5 rounded-lg border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium transition cursor-pointer"
             title="Export to Excel"
           >
-            <ArrowDownTrayIcon className="h-3.5 w-3.5 text-sky-700" />
+            <ArrowDownTrayIcon className="h-4 w-4 text-gray-500" />
             <span>{exporting ? 'Exporting...' : 'Export Excel'}</span>
           </button>
         </div>
       </div>
 
-      {/* Light Blue Minimal Metric Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="rounded-lg border border-sky-200 bg-sky-50/50 p-2.5 sm:p-3">
-          <span className="text-[11px] font-semibold text-sky-800 uppercase tracking-wide block">Target Count</span>
-          <p className="text-lg sm:text-xl font-bold text-sky-950 font-mono mt-0.5">
+      {/* Minimal Metric Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Target Count</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 font-mono mt-1">
             {countInput ? countInput : 'All'}
           </p>
         </div>
 
-        <div className="rounded-lg border border-sky-100 bg-sky-50/25 p-2.5 sm:p-3">
-          <span className="text-[11px] font-medium text-sky-800 block">Farmers</span>
-          <p className="text-lg sm:text-xl font-bold text-sky-950 tabular-nums mt-0.5">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Farmers</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">
             {summary.totalFarmers}
           </p>
         </div>
 
-        <div className="rounded-lg border border-sky-100 bg-sky-50/25 p-2.5 sm:p-3">
-          <span className="text-[11px] font-medium text-sky-800 block">Tanks</span>
-          <p className="text-lg sm:text-xl font-bold text-sky-950 tabular-nums mt-0.5">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Tanks</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">
             {summary.totalTanks}
           </p>
         </div>
 
-        <div className="rounded-lg border border-sky-100 bg-sky-50/25 p-2.5 sm:p-3">
-          <span className="text-[11px] font-medium text-sky-800 block">Total Biomass</span>
-          <p className="text-lg sm:text-xl font-bold text-sky-950 tabular-nums mt-0.5">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-3 sm:p-4">
+          <span className="text-xs font-medium text-gray-500 block">Total Biomass</span>
+          <p className="text-xl sm:text-2xl font-bold text-gray-900 tabular-nums mt-1">
             {summary.totalBiomass}
           </p>
         </div>
       </div>
 
-      {/* Filter Toolbar: Light Blue Theme, Responsive & Minimal */}
-      <div className="rounded-lg border border-sky-100 bg-white p-2.5 sm:p-3">
-        <div className="flex flex-wrap items-center gap-2.5 justify-start">
-          {/* Count input only (Quick pills removed as requested) */}
+      {/* Filter Toolbar: Minimal & Clean */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-2xs p-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Count input */}
           <div className="flex items-center gap-1.5">
-            <span className="text-xs font-semibold text-sky-900">Count:</span>
+            <span className="text-xs font-medium text-gray-500">Count:</span>
             <div className="relative w-24 sm:w-28">
               <input
                 type="number"
@@ -325,7 +328,7 @@ export default function CountTracker() {
                 placeholder="Count"
                 value={countInput}
                 onChange={(e) => setCountInput(e.target.value)}
-                className="input py-1 px-2.5 text-xs font-mono font-bold text-sky-950 bg-sky-50/30 border-sky-200 focus:bg-white focus:border-sky-500 rounded-md w-full"
+                className="h-8 px-2.5 text-xs font-mono font-bold text-gray-900 bg-white border border-gray-200 rounded-lg hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 w-full"
                 title="Enter count"
               />
               {countInput && (
@@ -348,7 +351,7 @@ export default function CountTracker() {
               setRegionFilter(e.target.value);
               setAreaFilter('');
             }}
-            className="h-8 px-2.5 py-1 text-xs font-medium rounded-md border border-sky-200 bg-sky-50/30 text-sky-950 hover:bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-[115px]"
+            className="h-8 px-2.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 min-w-[120px] cursor-pointer"
             title="Filter by Region"
           >
             <option value="">All Regions</option>
@@ -363,7 +366,7 @@ export default function CountTracker() {
           <select
             value={areaFilter}
             onChange={(e) => setAreaFilter(e.target.value)}
-            className="h-8 px-2.5 py-1 text-xs font-medium rounded-md border border-sky-200 bg-sky-50/30 text-sky-950 hover:bg-white focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-400 min-w-[115px]"
+            className="h-8 px-2.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 min-w-[120px] cursor-pointer"
             title="Filter by Area"
           >
             <option value="">All Areas</option>
@@ -375,14 +378,14 @@ export default function CountTracker() {
           </select>
 
           {/* Search */}
-          <div className="relative min-w-[160px] sm:min-w-[190px]">
-            <MagnifyingGlassIcon className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+          <div className="relative flex-1 min-w-[170px]">
+            <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
               placeholder="Search farmer, tank..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="input w-full py-1 pl-7 pr-6 text-xs bg-sky-50/30 border-sky-200 focus:bg-white rounded-md"
+              className="h-8 w-full pl-8 pr-6 text-xs rounded-lg border border-gray-200 text-gray-900 bg-white placeholder-gray-400 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400"
             />
             {search && (
               <button
@@ -400,24 +403,24 @@ export default function CountTracker() {
             <button
               type="button"
               onClick={handleResetFilters}
-              className="h-8 px-2.5 rounded-md border border-red-200 bg-red-50/40 text-red-600 hover:bg-red-50 text-xs font-medium inline-flex items-center gap-1 transition"
+              className="h-8 px-2.5 rounded-lg border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 text-xs font-medium inline-flex items-center gap-1 transition cursor-pointer"
               title="Reset filters"
             >
-              <XMarkIcon className="w-3 h-3" />
+              <XMarkIcon className="w-3.5 h-3.5 text-gray-400" />
               <span>Reset</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Main Content: Light Blue Table Format (Zero Bottom Sliding Bar) */}
+      {/* Main Content */}
       {isLoading ? (
-        <div className="rounded-lg border border-sky-100 bg-white py-14 text-center">
+        <div className="rounded-xl border border-gray-200 bg-white py-14 text-center">
           <PageSpinner />
-          <p className="mt-2 text-xs text-sky-800">Loading records...</p>
+          <p className="mt-2 text-xs text-gray-500">Loading records...</p>
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-center">
           <p className="text-xs font-semibold text-red-900">Failed to load Count data</p>
           <p className="text-xs text-red-700 mt-0.5">{error.message || 'Unknown error'}</p>
           <button
@@ -450,26 +453,26 @@ export default function CountTracker() {
           }
         />
       ) : (
-        /* Responsive Light Blue Table (No Horizontal Scrollbar / Sliding Bar) */
-        <div className="rounded-lg border border-sky-200/80 bg-white overflow-hidden shadow-2xs">
+        /* Minimal Table matching other pages */
+        <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-2xs">
           {/* Desktop & Tablet Table */}
           <div className="hidden sm:block w-full overflow-x-hidden">
-            <table className="w-full text-left text-xs divide-y divide-sky-100">
-              <thead className="bg-sky-50/70 text-sky-900 font-semibold text-[11px] uppercase tracking-wider border-b border-sky-100">
+            <table className="w-full text-left text-xs divide-y divide-gray-100">
+              <thead className="bg-gray-50 text-gray-600 font-semibold text-[11px] uppercase tracking-wider border-b border-gray-100">
                 <tr>
-                  <th className="py-2.5 px-3 font-semibold w-10 text-center text-sky-800/60">No.</th>
+                  <th className="py-2.5 px-3 font-semibold w-10 text-center text-gray-400">No.</th>
                   <th className="py-2.5 px-3 font-semibold">Farmer</th>
                   <th className="py-2.5 px-3 font-semibold">Location</th>
-                  <th className="py-2.5 px-3 font-semibold">Tanks</th>
-                  <th className="py-2.5 px-3 font-semibold text-center w-16">Tanks</th>
+                  <th className="py-2.5 px-3 font-semibold">Matching Tanks</th>
+                  <th className="py-2.5 px-3 font-semibold text-center w-16">Total Tanks</th>
                   <th className="py-2.5 px-3 font-semibold text-right w-24">Biomass</th>
                   <th className="py-2.5 px-3 font-semibold w-28">Tech</th>
                   <th className="py-2.5 px-3 font-semibold text-right w-20">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-sky-50 bg-white">
+              <tbody className="divide-y divide-gray-100 bg-white">
                 {groupedFarmers.map((farmer, idx) => (
-                  <tr key={farmer.client_id} className="hover:bg-sky-50/40 transition">
+                  <tr key={farmer.client_id} className="hover:bg-gray-50/60 transition">
                     {/* No. */}
                     <td className="py-2.5 px-3 text-center text-gray-400 font-mono text-[11px]">
                       {idx + 1}
@@ -479,14 +482,14 @@ export default function CountTracker() {
                     <td className="py-2.5 px-3">
                       <Link
                         to={`/clients/${farmer.client_id}`}
-                        className="font-semibold text-sky-950 hover:text-sky-600 transition block truncate max-w-[200px]"
+                        className="font-semibold text-gray-900 hover:text-blue-600 transition block truncate max-w-[200px]"
                         title={farmer.company_name}
                       >
                         {farmer.company_name || farmer.farmer_name}
                       </Link>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
                         {farmer.farmer_phone ? (
-                          <a href={`tel:${farmer.farmer_phone}`} className="hover:text-sky-700 font-mono">
+                          <a href={`tel:${farmer.farmer_phone}`} className="hover:text-blue-600 font-mono">
                             {farmer.farmer_phone}
                           </a>
                         ) : null}
@@ -504,7 +507,7 @@ export default function CountTracker() {
                       </span>
                     </td>
 
-                    {/* Matching Tanks with Count in light blue pill */}
+                    {/* Matching Tanks with Count in minimal tag */}
                     <td className="py-2.5 px-3">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {farmer.tanks.map((tank) => (
@@ -512,17 +515,17 @@ export default function CountTracker() {
                             key={tank.id}
                             type="button"
                             onClick={() => setSelectedTank(tank)}
-                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded border border-sky-200 bg-sky-50/60 hover:bg-sky-100 text-sky-950 text-[11px] transition shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 text-[11px] transition shadow-2xs cursor-pointer"
                             title="Click for tank details"
                           >
-                            <span className="font-semibold text-sky-950">
+                            <span className="font-medium text-gray-900">
                               {tank.tank_number || tank.pond_name || `Tank ${tank.id}`}
                             </span>
-                            <span className="px-1.5 py-0.2 rounded bg-sky-600 text-white font-mono font-bold text-[10px]">
+                            <span className="px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-200/60 font-mono font-semibold text-[10px]">
                               Count: {tank.primary_count ?? countInput}
                             </span>
                             {tank.primary_biomass ? (
-                              <span className="text-[10px] text-sky-800/70 font-mono">
+                              <span className="text-[10px] text-gray-500 font-mono">
                                 ({tank.primary_biomass}kg)
                               </span>
                             ) : null}
@@ -533,7 +536,7 @@ export default function CountTracker() {
 
                     {/* Tanks Count */}
                     <td className="py-2.5 px-3 text-center">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono font-semibold bg-sky-100 text-sky-800">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-medium bg-gray-100 text-gray-700">
                         {farmer.tanks.length}
                       </span>
                     </td>
@@ -552,7 +555,7 @@ export default function CountTracker() {
                     <td className="py-2.5 px-3 text-right">
                       <Link
                         to={`/clients/${farmer.client_id}`}
-                        className="text-xs text-sky-600 hover:text-sky-800 font-medium underline-offset-2 hover:underline"
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
                       >
                         View
                       </Link>
@@ -563,8 +566,8 @@ export default function CountTracker() {
             </table>
           </div>
 
-          {/* Mobile Layout (Zero Horizontal Scrollbar) */}
-          <div className="sm:hidden divide-y divide-sky-100">
+          {/* Mobile Layout */}
+          <div className="sm:hidden divide-y divide-gray-100">
             {groupedFarmers.map((farmer, idx) => (
               <div key={farmer.client_id} className="p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -572,7 +575,7 @@ export default function CountTracker() {
                     <span className="text-[10px] text-gray-400 font-mono mr-1">{idx + 1}.</span>
                     <Link
                       to={`/clients/${farmer.client_id}`}
-                      className="font-bold text-xs text-sky-950 hover:text-sky-600"
+                      className="font-bold text-xs text-gray-900 hover:text-blue-600"
                     >
                       {farmer.company_name || farmer.farmer_name}
                     </Link>
@@ -585,7 +588,7 @@ export default function CountTracker() {
                       {farmer.village ? <span>· {farmer.village}</span> : null}
                     </div>
                   </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 font-semibold shrink-0">
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold shrink-0">
                     {farmer.region || '—'}
                   </span>
                 </div>
@@ -597,15 +600,15 @@ export default function CountTracker() {
                       key={tank.id}
                       type="button"
                       onClick={() => setSelectedTank(tank)}
-                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-sky-200 bg-sky-50 text-[10px] text-sky-950"
+                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-gray-200 bg-gray-50 text-[10px] text-gray-800"
                     >
                       <span>{tank.tank_number || tank.pond_name || `Tank ${tank.id}`}</span>
-                      <span className="font-mono font-bold">Count: {tank.primary_count ?? countInput}</span>
+                      <span className="font-mono font-bold text-blue-600">Count: {tank.primary_count ?? countInput}</span>
                     </button>
                   ))}
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-sky-50">
+                <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100">
                   <span>Tech: {farmer.salesperson_name || '—'}</span>
                   <span className="font-mono font-semibold text-gray-800">
                     {farmer.total_biomass > 0 ? `${farmer.total_biomass} kg` : ''}
@@ -617,113 +620,116 @@ export default function CountTracker() {
         </div>
       )}
 
-      {/* Light Blue Modal for Tank Details */}
-      {selectedTank && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white rounded-xl shadow-xl border border-sky-200 max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-3.5 border-b border-sky-100 flex items-center justify-between sticky top-0 bg-white z-10">
-              <div>
-                <h3 className="font-bold text-sm text-sky-950">
-                  {selectedTank.tank_number || selectedTank.pond_name || `Tank ${selectedTank.id}`}
-                </h3>
-                <p className="text-[11px] text-sky-800/70">
-                  {selectedTank.company_name} · {selectedTank.village || selectedTank.district}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedTank(null)}
-                className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-50"
-              >
-                <XMarkIcon className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3 text-xs">
-              {/* Highlight Count Banner in light blue */}
-              <div className="p-3 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-between">
+      {/* Tank Details Modal */}
+      {selectedTank &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-2xl border border-gray-200 max-w-lg w-full max-h-[90vh] overflow-y-auto relative z-10">
+              <div className="p-3.5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <div>
-                  <span className="text-[10px] font-bold text-sky-800 uppercase tracking-wide block">
-                    Recorded Count
-                  </span>
-                  <p className="text-xl font-bold text-sky-950 font-mono mt-0.5">
-                    {selectedTank.primary_count ?? '—'}
+                  <h3 className="font-bold text-sm text-gray-900">
+                    {selectedTank.tank_number || selectedTank.pond_name || `Tank ${selectedTank.id}`}
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {selectedTank.company_name} · {selectedTank.village || selectedTank.district}
                   </p>
-                  <span className="text-[10px] text-sky-700 block mt-0.5">
-                    Source: {selectedTank.primary_source || 'Harvest Log'}
-                  </span>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-sky-800 block">Biomass</span>
-                  <span className="text-base font-bold text-sky-950 font-mono">
-                    {selectedTank.primary_biomass ? `${selectedTank.primary_biomass} kg` : '—'}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTank(null)}
+                  className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-50 cursor-pointer"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                </button>
               </div>
 
-              {/* Farmer Info */}
-              <div className="p-2.5 rounded-lg border border-sky-100 bg-white space-y-1.5">
-                <span className="font-semibold text-sky-900 block text-[11px]">Farmer Information</span>
-                <div className="grid grid-cols-2 gap-1.5 text-gray-600 text-[11px]">
-                  <div>Farmer: <strong className="text-gray-900">{selectedTank.company_name}</strong></div>
-                  <div>Phone: <strong className="text-gray-900 font-mono">{selectedTank.farmer_phone || '—'}</strong></div>
-                  <div>Region: <strong className="text-gray-900">{selectedTank.region || '—'}</strong></div>
-                  <div>Area: <strong className="text-gray-900">{selectedTank.area || '—'}</strong></div>
-                  <div>Village: <strong className="text-gray-900">{selectedTank.village || '—'}</strong></div>
-                  <div>Tech Exec: <strong className="text-gray-900">{selectedTank.salesperson_name || '—'}</strong></div>
-                </div>
-              </div>
-
-              {/* All Count Logs */}
-              {selectedTank.counts_records?.length > 0 && (
-                <div className="space-y-1.5">
-                  <span className="font-semibold text-sky-900 block text-[11px]">Count Log Sessions</span>
-                  <div className="rounded border border-sky-200 overflow-hidden">
-                    <table className="w-full text-left text-[11px]">
-                      <thead className="bg-sky-50 text-sky-800 font-medium">
-                        <tr>
-                          <th className="py-1 px-2">Source</th>
-                          <th className="py-1 px-2">Count</th>
-                          <th className="py-1 px-2">DOC</th>
-                          <th className="py-1 px-2">ABW (g)</th>
-                          <th className="py-1 px-2">Biomass (kg)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-sky-100">
-                        {selectedTank.counts_records.map((cr, idx) => (
-                          <tr key={idx}>
-                            <td className="py-1 px-2 text-gray-700">{cr.source}</td>
-                            <td className="py-1 px-2 font-bold font-mono text-sky-900">{cr.count}</td>
-                            <td className="py-1 px-2 font-mono">{cr.doc || '—'}</td>
-                            <td className="py-1 px-2 font-mono">{cr.abw || '—'}</td>
-                            <td className="py-1 px-2 font-mono">{cr.biomass ? `${cr.biomass} kg` : '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+              <div className="p-4 space-y-3 text-xs">
+                {/* Highlight Count Banner */}
+                <div className="p-3 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wide block">
+                      Recorded Count
+                    </span>
+                    <p className="text-xl font-bold text-gray-900 font-mono mt-0.5">
+                      {selectedTank.primary_count ?? '—'}
+                    </p>
+                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                      Source: {selectedTank.primary_source || 'Harvest Log'}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-500 block">Biomass</span>
+                    <span className="text-base font-bold text-gray-900 font-mono">
+                      {selectedTank.primary_biomass ? `${selectedTank.primary_biomass} kg` : '—'}
+                    </span>
                   </div>
                 </div>
-              )}
-            </div>
 
-            <div className="p-3 border-t border-sky-100 bg-sky-50/50 flex items-center justify-between">
-              <Link
-                to={`/clients/${selectedTank.client_id}`}
-                className="text-xs text-sky-700 hover:text-sky-900 font-semibold"
-              >
-                Go to Farmer Page →
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSelectedTank(null)}
-                className="btn-secondary btn-sm py-1 px-2.5 text-xs rounded border-sky-200 bg-white text-sky-800"
-              >
-                Close
-              </button>
+                {/* Farmer Info */}
+                <div className="p-2.5 rounded-lg border border-gray-100 bg-white space-y-1.5">
+                  <span className="font-semibold text-gray-900 block text-[11px]">Farmer Information</span>
+                  <div className="grid grid-cols-2 gap-1.5 text-gray-600 text-[11px]">
+                    <div>Farmer: <strong className="text-gray-900">{selectedTank.company_name}</strong></div>
+                    <div>Phone: <strong className="text-gray-900 font-mono">{selectedTank.farmer_phone || '—'}</strong></div>
+                    <div>Region: <strong className="text-gray-900">{selectedTank.region || '—'}</strong></div>
+                    <div>Area: <strong className="text-gray-900">{selectedTank.area || '—'}</strong></div>
+                    <div>Village: <strong className="text-gray-900">{selectedTank.village || '—'}</strong></div>
+                    <div>Tech Exec: <strong className="text-gray-900">{selectedTank.salesperson_name || '—'}</strong></div>
+                  </div>
+                </div>
+
+                {/* All Count Logs */}
+                {selectedTank.counts_records?.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="font-semibold text-gray-900 block text-[11px]">Count Log Sessions</span>
+                    <div className="rounded-lg border border-gray-200 overflow-hidden">
+                      <table className="w-full text-left text-[11px]">
+                        <thead className="bg-gray-50 text-gray-700 font-medium border-b border-gray-100">
+                          <tr>
+                            <th className="py-1.5 px-2 font-semibold">Source</th>
+                            <th className="py-1.5 px-2 font-semibold">Count</th>
+                            <th className="py-1.5 px-2 font-semibold">DOC</th>
+                            <th className="py-1.5 px-2 font-semibold">ABW (g)</th>
+                            <th className="py-1.5 px-2 font-semibold">Biomass (kg)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {selectedTank.counts_records.map((cr, idx) => (
+                            <tr key={idx}>
+                              <td className="py-1.5 px-2 text-gray-700">{cr.source}</td>
+                              <td className="py-1.5 px-2 font-bold font-mono text-gray-900">{cr.count}</td>
+                              <td className="py-1.5 px-2 font-mono text-gray-600">{cr.doc || '—'}</td>
+                              <td className="py-1.5 px-2 font-mono text-gray-600">{cr.abw || '—'}</td>
+                              <td className="py-1.5 px-2 font-mono text-gray-600">{cr.biomass ? `${cr.biomass} kg` : '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                <Link
+                  to={`/clients/${selectedTank.client_id}`}
+                  className="text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                >
+                  Go to Farmer Page →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTank(null)}
+                  className="btn-secondary btn-sm py-1 px-2.5 text-xs rounded-lg border-gray-200 bg-white text-gray-700"
+                >
+                  Close
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

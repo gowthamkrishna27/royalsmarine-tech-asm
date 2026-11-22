@@ -484,9 +484,9 @@ export default function Followups() {
       {/* Header Bar with Action */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">Follow-ups & Tank Tests</h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-            {data?.pagination?.total || 0} follow-up and weekly test records
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">Follow-ups & Tank Tests</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {data?.pagination?.total || 0} total records
           </p>
         </div>
 
@@ -494,7 +494,7 @@ export default function Followups() {
           <button
             type="button"
             onClick={() => setAddModal(true)}
-            className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition cursor-pointer self-start sm:self-auto"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition cursor-pointer self-start sm:self-auto"
             title="Create Follow-up"
           >
             <Plus className="w-4 h-4 text-white" />
@@ -503,88 +503,52 @@ export default function Followups() {
         )}
       </div>
 
-      {/* Segmented Status Cards (Prominent & Clean) */}
+      {/* Segmented Status Tabs (Minimal & Clean like App) */}
       <div className="w-full">
-        <div className="grid grid-cols-2 sm:flex bg-gray-100/90 p-1.5 rounded-2xl w-full sm:w-fit gap-1.5 border border-gray-200/50">
+        <div className="grid grid-cols-2 sm:flex bg-gray-100 p-1 rounded-xl w-full sm:w-fit gap-1 text-xs">
           <button
             type="button"
             onClick={() => handleStatusTabChange('')}
-            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`px-3.5 py-1.5 font-medium rounded-lg text-center transition cursor-pointer ${
               status === '' || status === 'all'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'bg-white text-gray-900 shadow-xs font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>All</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
-                status === '' || status === 'all'
-                  ? 'bg-gray-100 text-gray-900'
-                  : 'bg-gray-200/70 text-gray-600'
-              }`}
-            >
-              {data?.pagination?.total || 0}
-            </span>
+            All ({data?.pagination?.total || 0})
           </button>
           <button
             type="button"
             onClick={() => handleStatusTabChange('dues')}
-            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`px-3.5 py-1.5 font-medium rounded-lg text-center transition cursor-pointer ${
               status === 'dues'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'bg-white text-gray-900 shadow-xs font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>Dues</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
-                status === 'dues'
-                  ? 'bg-amber-100 text-amber-900'
-                  : 'bg-gray-200/70 text-gray-600'
-              }`}
-            >
-              {duesCount}
-            </span>
+            Dues ({duesCount})
           </button>
           <button
             type="button"
             onClick={() => handleStatusTabChange('overdue')}
-            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`px-3.5 py-1.5 font-medium rounded-lg text-center transition cursor-pointer ${
               status === 'overdue'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'bg-white text-gray-900 shadow-xs font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>Overdue</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
-                status === 'overdue'
-                  ? 'bg-rose-100 text-rose-900'
-                  : 'bg-gray-200/70 text-gray-600'
-              }`}
-            >
-              {overdueCount}
-            </span>
+            Overdue ({overdueCount})
           </button>
           <button
             type="button"
             onClick={() => handleStatusTabChange('completed')}
-            className={`px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base font-semibold rounded-xl text-center transition cursor-pointer flex items-center justify-center gap-2 ${
+            className={`px-3.5 py-1.5 font-medium rounded-lg text-center transition cursor-pointer ${
               status === 'completed'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-900'
+                ? 'bg-white text-gray-900 shadow-xs font-semibold'
+                : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>Completed</span>
-            <span
-              className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${
-                status === 'completed'
-                  ? 'bg-emerald-100 text-emerald-900'
-                  : 'bg-gray-200/70 text-gray-600'
-              }`}
-            >
-              {completedCount}
-            </span>
+            Completed ({completedCount})
           </button>
         </div>
       </div>

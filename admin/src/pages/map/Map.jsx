@@ -998,10 +998,9 @@ export default function MapPage() {
       )}
 
       {/* Floating Single-Row Controls Toolbar */}
-      <div className="absolute top-3 sm:top-4 left-3 right-3 z-10 pointer-events-none">
-        <div className="flex items-center gap-2 pointer-events-auto w-full overflow-x-auto pb-1 scrollbar-none">
-          {/* Search Box with Real-Time Suggestions */}
-          <div ref={searchContainerRef} className="relative min-w-[200px] flex-1 max-w-xs shrink-0">
+      <div className="absolute top-3 sm:top-4 left-3 right-3 z-20 pointer-events-none flex items-start gap-2">
+        {/* Search Box with Real-Time Suggestions (Unclipped) */}
+        <div ref={searchContainerRef} className="relative w-60 sm:w-72 shrink-0 pointer-events-auto z-40">
             <form
               onSubmit={handleSearchSubmit}
               className="relative bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center px-3 py-2 h-10"
@@ -1132,9 +1131,12 @@ export default function MapPage() {
                   )}
                 </div>
               )}
-          </div>
+        </div>
 
-          {/* 1. Regions */}
+        {/* Scrollable Filters Bar */}
+        <div className="flex flex-col gap-2 flex-1 min-w-0">
+          <div className="flex items-center gap-2 pointer-events-auto w-full overflow-x-auto pb-1 scrollbar-none">
+            {/* 1. Regions */}
           <select
             value={region}
             onChange={(e) => handleRegionChange(e.target.value)}
@@ -1250,79 +1252,11 @@ export default function MapPage() {
               <span>Reset</span>
             </button>
           )}
-
-          {/* Layer Changer Dropdown Button (Keep above, no bottom overlap) */}
-          <div ref={layerMenuRef} className="relative shrink-0">
-            <button
-              type="button"
-              title="Change Map Layer (Satellite, Pure Satellite, Esri, Roads)"
-              onClick={() => setShowLayerMenu((prev) => !prev)}
-              className={`w-10 h-10 flex-shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 ${
-                showLayerMenu
-                  ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/30'
-                  : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
-              }`}
-            >
-              <Square3Stack3DIcon className="w-5 h-5" />
-            </button>
-
-            {showLayerMenu && (
-              <div className="absolute right-0 top-full mt-2 w-56 sm:w-60 bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200/90 p-1.5 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95 duration-100">
-                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                  Map Layers
-                </div>
-                <div className="py-1 space-y-0.5">
-                  {[
-                    { id: 'hybrid', label: 'Google Hybrid HD', desc: 'Satellite with Roads & Names', icon: '🛰️' },
-                    { id: 'satellite', label: 'Pure Satellite HD', desc: 'Clean ponds without labels', icon: '🌍' },
-                    { id: 'esri', label: 'Esri Clarity HD', desc: 'High-contrast agriculture', icon: '🌾' },
-                    { id: 'street', label: 'Google Streets HD', desc: 'Road map & town boundaries', icon: '🏙️' },
-                  ].map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveLayer(opt.id);
-                        setShowLayerMenu(false);
-                      }}
-                      className={`w-full px-2.5 py-1.5 text-left rounded-lg text-xs flex items-center justify-between transition ${
-                        activeLayer === opt.id
-                          ? 'bg-blue-50 text-blue-900 font-bold'
-                          : 'text-gray-700 hover:bg-gray-100/80'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="text-sm shrink-0">{opt.icon}</span>
-                        <div className="truncate">
-                          <p className="font-semibold leading-tight truncate">{opt.label}</p>
-                          <p className="text-[10px] text-gray-500 font-normal leading-tight truncate">{opt.desc}</p>
-                        </div>
-                      </div>
-                      {activeLayer === opt.id && (
-                        <CheckIcon className="w-4 h-4 text-blue-600 shrink-0 ml-1.5" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* My Location GPS Button */}
-          <button
-            type="button"
-            title="Locate my position on map"
-            onClick={handleLocateMe}
-            disabled={locating}
-            className="w-10 h-10 shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50"
-          >
-            {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-5 h-5 text-gray-700" />}
-          </button>
         </div>
 
         {/* Date Filter Active Status Banner */}
         {selectedDate && (
-          <div className="mt-2.5 flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-2 pointer-events-auto">
             <div
               className={`px-3 py-1.5 rounded-xl shadow-lg text-xs font-medium flex items-center gap-2 backdrop-blur-md border animate-in fade-in slide-in-from-top-2 ${
                 filtered.filter((i) => i.type === 'pond').length > 0
@@ -1363,13 +1297,85 @@ export default function MapPage() {
               <button
                 type="button"
                 onClick={() => setSelectedDate('')}
-                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition"
+                className="ml-1 px-1.5 py-0.5 bg-black/20 hover:bg-black/35 rounded text-[11px] font-bold uppercase transition cursor-pointer"
               >
                 Clear
               </button>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Right Action Buttons (Layers & GPS Location) - Never clipped */}
+      <div className="flex items-center gap-2 pointer-events-auto shrink-0 z-50">
+        {/* Layer Changer Dropdown Button */}
+        <div ref={layerMenuRef} className="relative shrink-0">
+          <button
+            type="button"
+            title="Change Map Layer (Satellite, Pure Satellite, Esri, Roads)"
+            onClick={() => setShowLayerMenu((prev) => !prev)}
+            className={`w-10 h-10 flex-shrink-0 backdrop-blur-md border shadow-lg rounded-xl flex items-center justify-center transition active:scale-95 cursor-pointer ${
+              showLayerMenu
+                ? 'bg-blue-600 border-blue-600 text-white shadow-blue-600/30'
+                : 'bg-white/95 border-gray-200/90 text-gray-700 hover:text-blue-600 hover:bg-white'
+            }`}
+          >
+            <Square3Stack3DIcon className="w-5 h-5" />
+          </button>
+
+          {showLayerMenu && (
+            <div className="absolute right-0 top-full mt-2 w-56 sm:w-60 bg-white/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-200/90 p-1.5 z-50 divide-y divide-gray-100 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                Map Layers
+              </div>
+              <div className="py-1 space-y-0.5">
+                {[
+                  { id: 'hybrid', label: 'Google Hybrid HD', desc: 'Satellite with Roads & Names', icon: '🛰️' },
+                  { id: 'satellite', label: 'Pure Satellite HD', desc: 'Clean ponds without labels', icon: '🌍' },
+                  { id: 'esri', label: 'Esri Clarity HD', desc: 'High-contrast agriculture', icon: '🌾' },
+                  { id: 'street', label: 'Google Streets HD', desc: 'Road map & town boundaries', icon: '🏙️' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveLayer(opt.id);
+                      setShowLayerMenu(false);
+                    }}
+                    className={`w-full px-2.5 py-1.5 text-left rounded-lg text-xs flex items-center justify-between transition cursor-pointer ${
+                      activeLayer === opt.id
+                        ? 'bg-blue-50 text-blue-900 font-bold'
+                        : 'text-gray-700 hover:bg-gray-100/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="text-sm shrink-0">{opt.icon}</span>
+                      <div className="truncate">
+                        <p className="font-semibold leading-tight truncate">{opt.label}</p>
+                        <p className="text-[10px] text-gray-500 font-normal leading-tight truncate">{opt.desc}</p>
+                      </div>
+                    </div>
+                    {activeLayer === opt.id && (
+                      <CheckIcon className="w-4 h-4 text-blue-600 shrink-0 ml-1.5" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* My Location GPS Button */}
+        <button
+          type="button"
+          title="Locate my position on map"
+          onClick={handleLocateMe}
+          disabled={locating}
+          className="w-10 h-10 shrink-0 bg-white/95 backdrop-blur-md border border-gray-200/90 shadow-lg rounded-xl flex items-center justify-center text-gray-700 hover:text-blue-600 hover:bg-white transition active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {locating ? <Spinner size="xs" /> : <MapPinIcon className="w-5 h-5 text-gray-700" />}
+        </button>
+      </div>
       </div>
     </div>
   );
