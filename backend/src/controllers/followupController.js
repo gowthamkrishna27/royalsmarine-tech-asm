@@ -302,6 +302,7 @@ const completeFollowup = async (req, res) => {
       ? 'Administrator'
       : (req.user.role === 'sales_manager' ? 'ASM' : 'Technical Executive');
     const actorName = req.user.full_name ? `${actorRole} (${req.user.full_name})` : actorRole;
+    const adminName = req.user.full_name ? `${req.user.full_name} (${actorRole})` : actorRole;
     const notes = completion_notes ? completion_notes.trim() : '';
 
     // 1. Update follow-up status in the database
@@ -348,14 +349,14 @@ const completeFollowup = async (req, res) => {
 
 Hello *${item.sp_name}* (${roleLabel}),
 
-Your scheduled follow-up due for farmer *${item.company_name}* has been reviewed and marked as *COMPLETED* by Administrator *${adminName}*.
+Your scheduled follow-up due for farmer *${item.company_name}* has been reviewed and marked as *COMPLETED* by *${adminName}*.
 
 📌 *Follow-up Details:*
 • Title: ${item.title}
 • Scheduled Date: ${item.followup_date}${item.followup_time ? ` at ${item.followup_time}` : ''}
 • Priority: ${(item.priority || 'medium').toUpperCase()}
 • Status: ✅ Completed
-• Admin Notes: ${notes || 'All requirements completed.'}
+• Notes: ${notes || 'All requirements completed.'}
 
 This follow-up is recorded in the system database.
 Thank you!`;

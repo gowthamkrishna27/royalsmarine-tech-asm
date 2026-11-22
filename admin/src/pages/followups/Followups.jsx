@@ -373,17 +373,17 @@ export default function Followups() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div className="min-w-0">
-          <h1 className="page-title text-lg sm:text-xl font-bold text-gray-900 truncate">Follow-ups & Dues</h1>
-          <p className="text-xs sm:text-sm text-gray-500">
-            {data?.pagination?.total || 0} follow-up records
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Follow-ups & Dues</h1>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            {data?.pagination?.total || 0} total follow-up records
           </p>
         </div>
         {canCreate && (
           <button
             onClick={() => setAddModal(true)}
-            className="btn-primary btn-sm flex items-center gap-1.5 shrink-0 whitespace-nowrap active:scale-95 transition"
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 active:scale-95 transition shadow-xs w-full sm:w-auto shrink-0"
           >
             <PlusIcon className="w-4 h-4 shrink-0" />
             <span>Create Followup</span>
@@ -391,59 +391,73 @@ export default function Followups() {
         )}
       </div>
 
-      {/* Quick Stats Grid: Dues and Overdues only */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div
+      {/* Minimal Quick Stats Grid: Dues and Overdues only */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+        <button
+          type="button"
           onClick={() => {
             setStatus('dues');
             setPage(1);
           }}
-          className={`card p-4 flex items-center gap-3 border-l-4 border-amber-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'dues' ? 'ring-2 ring-amber-500/20 bg-amber-50/40' : ''
+          className={`p-3 sm:p-4 rounded-xl border text-left transition flex items-center justify-between ${
+            status === 'dues'
+              ? 'border-gray-900 bg-white ring-1 ring-gray-900 shadow-2xs'
+              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/40'
           }`}
         >
-          <ClockIcon className="w-8 h-8 text-amber-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-2xl font-bold text-gray-900">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+              <span className="text-xs font-medium text-gray-500">Dues</span>
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
               {duesData?.length || 0}
             </p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Dues</p>
           </div>
-        </div>
+          <ClockIcon className="w-5 h-5 text-gray-400 shrink-0 hidden xs:block" />
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => {
             setStatus('overdue');
             setPage(1);
           }}
-          className={`card p-4 flex items-center gap-3 border-l-4 border-red-500 cursor-pointer hover:shadow-md transition active:scale-[0.99] ${
-            status === 'overdue' ? 'ring-2 ring-red-500/20 bg-red-50/40' : ''
+          className={`p-3 sm:p-4 rounded-xl border text-left transition flex items-center justify-between ${
+            status === 'overdue'
+              ? 'border-gray-900 bg-white ring-1 ring-gray-900 shadow-2xs'
+              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/40'
           }`}
         >
-          <ExclamationTriangleIcon className="w-8 h-8 text-red-500 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-2xl font-bold text-gray-900">{overdueData?.length || 0}</p>
-            <p className="text-xs sm:text-sm text-gray-500 truncate font-medium">Overdues</p>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+              <span className="text-xs font-medium text-gray-500">Overdues</span>
+            </div>
+            <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+              {overdueData?.length || 0}
+            </p>
           </div>
-        </div>
+          <ExclamationTriangleIcon className="w-5 h-5 text-gray-400 shrink-0 hidden xs:block" />
+        </button>
       </div>
 
-      {/* Filter Toolbar: asm's, techs, single date, and status (no region) */}
-      <div className="fade-in space-y-4">
-        <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs p-2.5">
-          <div className="flex flex-wrap lg:flex-nowrap items-center gap-2 w-full">
+      {/* Filter Toolbar: minimal, clean, and responsive */}
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200/90 shadow-2xs p-2 sm:p-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2 w-full">
             {/* 1. ASM's */}
             <select
               value={asmId}
               onChange={(e) => handleAsmChange(e.target.value)}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              className={`h-9 px-3 text-xs rounded-lg border transition cursor-pointer w-full lg:flex-1 lg:min-w-[130px] focus:outline-none focus:ring-1 focus:ring-gray-400 ${
                 asmId
-                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  ? 'border-gray-400 text-gray-900 font-medium bg-gray-50/60'
+                  : 'border-gray-200 text-gray-700 bg-white hover:border-gray-300'
               }`}
               title="Filter by ASM"
             >
-              <option value="">All ASM's</option>
+              <option value="">All ASMs</option>
               {asmOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
@@ -455,10 +469,10 @@ export default function Followups() {
             <select
               value={techId}
               onChange={(e) => handleTechChange(e.target.value)}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[140px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              className={`h-9 px-3 text-xs rounded-lg border transition cursor-pointer w-full lg:flex-1 lg:min-w-[130px] focus:outline-none focus:ring-1 focus:ring-gray-400 ${
                 techId
-                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  ? 'border-gray-400 text-gray-900 font-medium bg-gray-50/60'
+                  : 'border-gray-200 text-gray-700 bg-white hover:border-gray-300'
               }`}
               title="Filter by Technical Executive"
             >
@@ -470,19 +484,17 @@ export default function Followups() {
               ))}
             </select>
 
-            {/* 3. Single Date Filter */}
+            {/* 3. Date Filter */}
             <div
-              className={`flex items-center gap-1.5 bg-white border rounded-lg px-2.5 h-[38px] shadow-xs text-xs transition shrink-0 ${
+              className={`flex items-center gap-2 border rounded-lg px-2.5 h-9 text-xs transition w-full lg:w-auto shrink-0 ${
                 date
-                  ? 'border-blue-300 bg-blue-50/40 ring-1 ring-blue-100'
-                  : 'border-gray-300 hover:border-gray-400'
+                  ? 'border-gray-400 bg-gray-50/60 text-gray-900'
+                  : 'border-gray-200 bg-white hover:border-gray-300 text-gray-700'
               }`}
             >
-              <CalendarDaysIcon
-                className={`w-3.5 h-3.5 shrink-0 ${date ? 'text-blue-600' : 'text-gray-400'}`}
-              />
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Date</span>
+              <CalendarDaysIcon className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+              <div className="flex items-center gap-1.5 flex-1 sm:flex-initial">
+                <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Date</span>
                 <input
                   type="date"
                   value={date}
@@ -490,7 +502,7 @@ export default function Followups() {
                     setDate(e.target.value);
                     setPage(1);
                   }}
-                  className="bg-transparent border-0 text-xs text-gray-800 focus:outline-none focus:ring-0 p-0 cursor-pointer w-[110px]"
+                  className="bg-transparent border-0 text-xs text-gray-800 focus:outline-none focus:ring-0 p-0 cursor-pointer w-full sm:w-[110px]"
                   title="Follow-up Date"
                 />
               </div>
@@ -501,7 +513,7 @@ export default function Followups() {
                     setDate('');
                     setPage(1);
                   }}
-                  className="text-gray-400 hover:text-gray-600 p-0.5 ml-0.5 text-sm leading-none"
+                  className="text-gray-400 hover:text-gray-600 p-0.5 ml-auto text-sm leading-none"
                   title="Clear date"
                 >
                   &times;
@@ -516,10 +528,10 @@ export default function Followups() {
                 setStatus(e.target.value);
                 setPage(1);
               }}
-              className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[130px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${
+              className={`h-9 px-3 text-xs rounded-lg border transition cursor-pointer w-full lg:flex-1 lg:min-w-[130px] focus:outline-none focus:ring-1 focus:ring-gray-400 ${
                 status && status !== 'dues'
-                  ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                  : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  ? 'border-gray-400 text-gray-900 font-medium bg-gray-50/60'
+                  : 'border-gray-200 text-gray-700 bg-white hover:border-gray-300'
               }`}
               title="Followup Status"
             >
@@ -534,10 +546,10 @@ export default function Followups() {
             {hasActiveFilters && (
               <button
                 onClick={handleResetFilters}
-                className="btn-secondary btn-sm text-red-600 hover:bg-red-50 hover:border-red-200 transition shrink-0 h-[38px] px-3 flex items-center gap-1.5"
+                className="h-9 px-3 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 transition shrink-0 flex items-center justify-center gap-1.5 w-full lg:w-auto"
                 title="Reset all filters"
               >
-                <FunnelIcon className="w-4 h-4" />
+                <FunnelIcon className="w-3.5 h-3.5 text-gray-400" />
                 <span>Reset</span>
               </button>
             )}
@@ -547,7 +559,7 @@ export default function Followups() {
         {isLoading ? (
           <PageSpinner />
         ) : (
-          <div className="card">
+          <div className="bg-white rounded-xl border border-gray-200/90 shadow-2xs overflow-hidden">
             {(!data?.data || data.data.length === 0) ? (
               <EmptyState
                 title={
@@ -569,7 +581,7 @@ export default function Followups() {
                   canCreate ? (
                     <button
                       onClick={() => setAddModal(true)}
-                      className="btn-primary btn-sm flex items-center gap-1.5"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-white bg-gray-900 hover:bg-gray-800 transition"
                     >
                       <PlusIcon className="w-4 h-4" /> Create Followup
                     </button>
@@ -593,106 +605,105 @@ export default function Followups() {
                     return (
                       <div
                         key={f.id}
-                        className={`p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 transition hover:bg-gray-50/70 ${
-                          isOverdue ? 'bg-red-50/20' : ''
-                        }`}
+                        className="p-3.5 sm:p-4 sm:flex sm:items-start sm:justify-between gap-4 transition hover:bg-gray-50/50"
                       >
                         <div className="flex-1 min-w-0">
-                          {/* Badges & Title */}
-                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                            <p className="text-base font-bold text-gray-900">{f.title}</p>
-                            <Badge
-                              color={
-                                f.priority === 'high' ? 'red' : f.priority === 'medium' ? 'blue' : 'gray'
-                              }
-                            >
-                              {f.priority?.toUpperCase()} PRIORITY
-                            </Badge>
+                          {/* Title & Status Pills */}
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <p className="text-sm sm:text-base font-semibold text-gray-900">{f.title}</p>
 
-                            <Badge
-                              color={
-                                f.status === 'completed'
-                                  ? 'green'
-                                  : f.status === 'cancelled'
-                                  ? 'gray'
-                                  : isOverdue
-                                  ? 'red'
-                                  : 'yellow'
-                              }
-                            >
-                              {f.status === 'completed'
-                                ? 'COMPLETED'
-                                : f.status === 'cancelled'
-                                ? 'CANCELLED'
-                                : isOverdue
-                                ? `${f.days_overdue}d Overdue`
-                                : Number(f.days_overdue) > 0
-                                ? `${f.days_overdue}d Due`
-                                : Number(f.days_overdue) === 0
-                                ? 'Due Today'
-                                : 'Upcoming'}
-                            </Badge>
-                          </div>
+                            {f.priority === 'high' && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-rose-50 text-rose-700 border border-rose-200/60">
+                                High
+                              </span>
+                            )}
 
-                          {/* Farmer & Location */}
-                          <div className="flex items-center gap-2 text-sm text-gray-700 font-medium flex-wrap">
-                            <span className="text-blue-700 font-semibold">{f.company_name}</span>
-                            {(f.client_village || f.client_city) && (
-                              <span className="text-xs text-gray-400">
-                                ({[f.client_village, f.client_city].filter(Boolean).join(', ')})
+                            {f.status === 'completed' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Completed
+                              </span>
+                            ) : f.status === 'cancelled' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-50 text-gray-600 border border-gray-200">
+                                <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                                Cancelled
+                              </span>
+                            ) : isOverdue ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200/60">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                {f.days_overdue ? `${f.days_overdue}d Overdue` : 'Overdue'}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                {Number(f.days_overdue) > 0
+                                  ? `${f.days_overdue}d Due`
+                                  : Number(f.days_overdue) === 0
+                                  ? 'Due Today'
+                                  : 'Due'}
                               </span>
                             )}
                           </div>
 
-                          {/* Assigned Executive / ASM info with Role Badge & WhatsApp direct link */}
-                          <div className="flex items-center gap-2 text-xs text-gray-600 flex-wrap mt-2">
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                              <UserIcon className="w-3.5 h-3.5 text-blue-600" />
-                              <span>{roleDisplay}:</span>
-                              <span className="text-gray-900 font-bold">{f.salesperson_name || 'Unassigned'}</span>
-                            </span>
+                          {/* Farmer & Location */}
+                          <div className="flex items-center gap-1.5 text-xs sm:text-sm text-gray-700 font-medium flex-wrap">
+                            <span className="text-gray-900 font-semibold">{f.company_name}</span>
+                            {(f.client_village || f.client_city) && (
+                              <span className="text-xs text-gray-400 font-normal">
+                                · {[f.client_village, f.client_city].filter(Boolean).join(', ')}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Assigned Executive, WhatsApp & Due Date Metadata */}
+                          <div className="flex items-center gap-x-4 gap-y-1.5 text-xs text-gray-600 flex-wrap mt-2">
+                            <div className="flex items-center gap-1.5">
+                              <UserIcon className="w-3.5 h-3.5 text-gray-400" />
+                              <span className="text-gray-500">{roleDisplay}:</span>
+                              <span className="text-gray-900 font-medium">{f.salesperson_name || 'Unassigned'}</span>
+                            </div>
 
                             {f.salesperson_mobile && (
                               <a
                                 href={`https://api.whatsapp.com/send?phone=91${f.salesperson_mobile.replace(/\D/g, '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 transition font-medium"
+                                className="inline-flex items-center gap-1 text-gray-600 hover:text-emerald-600 px-2 py-0.5 rounded border border-gray-200 bg-gray-50/70 hover:bg-emerald-50 hover:border-emerald-200 transition"
                                 title="Chat on WhatsApp"
                               >
-                                <PhoneIcon className="w-3.5 h-3.5 text-emerald-600" />
+                                <PhoneIcon className="w-3 h-3 text-emerald-600" />
                                 <span>+91 {f.salesperson_mobile}</span>
-                                <ArrowTopRightOnSquareIcon className="w-3 h-3 text-emerald-500" />
+                                <ArrowTopRightOnSquareIcon className="w-2.5 h-2.5 text-gray-400" />
                               </a>
                             )}
 
-                            <span className="inline-flex items-center gap-1 text-gray-500 font-medium">
+                            <div className="flex items-center gap-1 text-gray-500">
                               <CalendarDaysIcon className="w-3.5 h-3.5 text-gray-400" />
                               <span>Due: {f.followup_date}</span>
                               {f.followup_time ? <span>at {f.followup_time}</span> : null}
-                            </span>
+                            </div>
                           </div>
 
                           {/* Remarks */}
                           {f.remarks && (
-                            <p className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg border border-gray-100 line-clamp-2">
-                              <span className="font-semibold text-gray-700">Remarks:</span> {f.remarks}
+                            <p className="text-xs text-gray-600 mt-2 bg-gray-50 px-2.5 py-1.5 rounded-lg border border-gray-100 line-clamp-2">
+                              <span className="font-medium text-gray-700">Remarks:</span> {f.remarks}
                             </p>
                           )}
 
                           {/* Completed Status Banner */}
                           {f.status === 'completed' && (
-                            <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-1.5 flex-wrap">
-                              <CheckCircleIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <span className="font-bold">Completed</span>
+                            <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-gray-50 border border-gray-200/80 text-xs text-gray-600 flex items-center gap-1.5 flex-wrap">
+                              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                              <span className="font-semibold text-gray-900">Completed</span>
                               <span>by {f.completed_by_name || 'Admin'}</span>
                               {f.completed_date && (
-                                <span className="text-emerald-700">
+                                <span className="text-gray-500">
                                   on {new Date(f.completed_date).toLocaleDateString()}
                                 </span>
                               )}
                               {f.completion_notes && (
-                                <span className="text-emerald-900 font-medium italic">
+                                <span className="text-gray-700 italic">
                                   — "{f.completion_notes}"
                                 </span>
                               )}
@@ -702,16 +713,16 @@ export default function Followups() {
 
                         {/* Complete Button for Dues & Overdues */}
                         {isDue && (
-                          <div className="pt-2 sm:pt-0 shrink-0 flex items-center gap-2">
+                          <div className="pt-2 sm:pt-0 shrink-0 w-full sm:w-auto mt-2 sm:mt-0">
                             <button
                               onClick={() => {
                                 setCompleteTarget(f);
                                 setCompleteNotes('');
                               }}
-                              className="btn-success btn-sm flex items-center gap-1.5 px-3.5 py-2 shadow-xs active:scale-95 transition"
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 active:scale-95 transition shadow-2xs"
                             >
-                              <CheckCircleIcon className="w-4 h-4" />
-                              <span>Complete & Notify</span>
+                              <CheckCircleIcon className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Complete</span>
                             </button>
                           </div>
                         )}
@@ -752,10 +763,10 @@ export default function Followups() {
         {completeTarget && (
           <div className="space-y-4">
             {/* Target Executive & Farmer Details */}
-            <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs space-y-1.5 text-blue-900">
+            <div className="p-3 bg-gray-50 border border-gray-200/90 rounded-xl text-xs space-y-2 text-gray-700">
               <div className="flex items-center justify-between">
                 <span className="text-gray-500 font-medium">Assigned Executive:</span>
-                <span className="font-bold text-gray-900">
+                <span className="font-semibold text-gray-900">
                   {completeTarget.salesperson_name} (
                   {completeTarget.salesperson_role_name ||
                     (completeTarget.salesperson_role === 'sales_manager' ? 'ASM' : 'Technical Executive')}
@@ -764,17 +775,17 @@ export default function Followups() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-500 font-medium">Mobile (WhatsApp):</span>
-                <span className="font-semibold text-emerald-700">
+                <span className="font-medium text-gray-900">
                   {completeTarget.salesperson_mobile ? `+91 ${completeTarget.salesperson_mobile}` : 'No phone linked'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-500 font-medium">Farmer / Company:</span>
-                <span className="font-bold text-gray-900">{completeTarget.company_name}</span>
+                <span className="font-semibold text-gray-900">{completeTarget.company_name}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-500 font-medium">Due Date:</span>
-                <span className="font-semibold text-gray-800">
+                <span className="font-medium text-gray-800">
                   {completeTarget.followup_date}
                   {completeTarget.followup_time ? ` at ${completeTarget.followup_time}` : ''}
                 </span>
@@ -782,15 +793,15 @@ export default function Followups() {
             </div>
 
             {/* Workflow Notice */}
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-900 space-y-1">
-              <p className="font-bold text-emerald-950 flex items-center gap-1">
-                <CheckCircleIcon className="w-4 h-4 text-emerald-700" />
-                Automated Actions on Completion:
+            <div className="p-3 bg-gray-50 border border-gray-200/90 rounded-xl text-[11px] text-gray-600 space-y-1">
+              <p className="font-semibold text-gray-900 flex items-center gap-1.5">
+                <CheckCircleIcon className="w-4 h-4 text-emerald-600" />
+                Actions on Completion:
               </p>
-              <ul className="list-disc list-inside space-y-0.5 text-emerald-800">
-                <li>Database status updated to <strong>COMPLETED</strong> with timestamp & your admin ID.</li>
-                <li>Instant <strong>In-App Notification</strong> delivered to the executive's page bell.</li>
-                <li>Official <strong>WhatsApp message</strong> prepared and opened to send to the executive.</li>
+              <ul className="list-disc list-inside space-y-0.5 text-gray-500">
+                <li>Database status marked as <strong>COMPLETED</strong> with timestamp.</li>
+                <li>In-App Notification delivered to assigned executive.</li>
+                <li>WhatsApp confirmation message prepared for dispatch.</li>
               </ul>
             </div>
 
@@ -822,7 +833,7 @@ export default function Followups() {
                 type="button"
                 onClick={handleComplete}
                 disabled={completing}
-                className="btn-success flex-1 sm:flex-initial py-2 sm:py-1.5 flex items-center justify-center gap-1.5"
+                className="btn-primary flex-1 sm:flex-initial py-2 sm:py-1.5 flex items-center justify-center gap-1.5"
               >
                 <CheckCircleIcon className="w-4 h-4" />
                 <span>{completing ? 'Completing...' : 'Complete & Notify'}</span>
