@@ -1,24 +1,42 @@
-# Use official lightweight Node.js LTS image
-FROM node:20-alpine
+# syntax = docker/dockerfile:1
 
-# Set working directory
+ARG NODE_VERSION=20-slim
+FROM node:${NODE_VERSION} AS base
+
+LABEL fly_launch_runtime="Node.js"
+
+# Node.js app lives here
 WORKDIR /app
 
-# Copy package configuration files
-COPY package*.json ./
+# Set production environment and port
+ENV NODE_ENV="production"
+ENV PORT=8080
 
-# Install only production dependencies
-RUN npm ci --omit=dev
+# Build stage to install dependencies & compile if needed
+FROM base AS build
 
-# Copy source code
+RUN apt-get update -qq && \
+    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+
+COPY package-lock.json package.json ./
+RUN npm ci --include=dev
+
 COPY . .
+
+# Syntax check / build
+RUN npm run build
+
+# Remove development dependencies
+RUN npm prune --omit=dev
+
+# Final stage for app image
+FROM base
+
+COPY --from=build /app /app
 
 # Ensure uploads directory exists
 RUN mkdir -p src/uploads
 
-# Cloud Run injects PORT (default 8080)
+# Expose port 8080 for Cloud Run & Fly.io
 EXPOSE 8080
-
-# Start server
-CMD ["node", "src/server.js"]
-
+CMD [ "npm", "run", "start" ]
