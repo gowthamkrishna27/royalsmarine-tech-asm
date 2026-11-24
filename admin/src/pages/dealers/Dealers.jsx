@@ -347,10 +347,9 @@ export default function Dealers() {
                             <button
                               type="button"
                               onClick={() => setSelectedDealer(dealer)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-gray-700 bg-white hover:bg-gray-50 transition border border-gray-200 shadow-2xs"
+                              className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 hover:text-gray-900"
                             >
-                              <span>Farmers &amp; Tanks</span>
-                              <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
+                              View
                             </button>
                           </td>
                         </tr>
@@ -394,9 +393,8 @@ export default function Dealers() {
                             <span className="font-mono">{dealer.total_acres} Ac</span>
                           </div>
                         </div>
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-gray-700 bg-gray-50 border border-gray-200 shrink-0">
+                        <span className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 shrink-0">
                           View
-                          <ArrowTopRightOnSquareIcon className="w-3 h-3 text-gray-400" />
                         </span>
                       </div>
                     </div>
