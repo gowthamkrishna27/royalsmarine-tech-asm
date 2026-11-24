@@ -326,7 +326,14 @@ export default function Clients() {
                   <tbody>
                     {(data?.data || []).map(c => (
                       <tr key={c.id}>
-                        <td className="font-medium text-gray-900">{c.company_name}</td>
+                        <td className="font-medium text-gray-900">
+                          <Link
+                            to={`/clients/${c.id}`}
+                            className="font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                          >
+                            {c.company_name}
+                          </Link>
+                        </td>
                         <td className="text-gray-600">{c.mobile || '—'}</td>
                         <td className="text-gray-600">{[c.village, c.area].filter(Boolean).join(', ') || c.city || '—'}</td>
                         <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>

@@ -177,18 +177,24 @@ export default function ClientDetail() {
 
             {c.alternate_mobile && <InfoRow label="Alt Phone" value={c.alternate_mobile} />}
             {c.contact_person && <InfoRow label="Contact Person" value={c.contact_person} />}
+            {c.designation && <InfoRow label="Designation" value={c.designation} />}
+            {c.water_source && <InfoRow label="Water Source" value={c.water_source} />}
             {c.email && (
               <div className="flex items-center gap-2 py-2 border-b border-gray-50">
                 <EnvelopeIcon className="w-4 h-4 text-gray-400" />
                 <a href={`mailto:${c.email}`} className="text-sm text-blue-600">{c.email}</a>
               </div>
             )}
+            {c.city && <InfoRow label="City / District" value={c.city} />}
+            {c.state && <InfoRow label="State" value={c.state} />}
+            {c.pincode && <InfoRow label="Pincode" value={c.pincode} />}
             {c.address && (
               <div className="flex items-start gap-2 py-2 border-b border-gray-50">
                 <MapPinIcon className="w-4 h-4 text-gray-400 mt-0.5" />
                 <span className="text-sm text-gray-700">{c.address}</span>
               </div>
             )}
+            {c.gps_address && <InfoRow label="GPS Address" value={c.gps_address} />}
             {c.latitude && c.longitude && (
               <div className="py-2 border-b border-gray-50">
                 <span className="text-xs text-gray-500 block mb-0.5">Farm Location</span>
@@ -203,6 +209,7 @@ export default function ClientDetail() {
               </div>
             )}
             <InfoRow label="Technical Executive" value={c.salesperson_name} />
+            <InfoRow label="Area Sales Manager (ASM)" value={c.manager_name} />
             {c.close_reason && <InfoRow label="Close Reason" value={c.close_reason} />}
             {c.notes && (
               <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
