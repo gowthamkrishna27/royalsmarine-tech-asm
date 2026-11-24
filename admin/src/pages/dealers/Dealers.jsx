@@ -347,7 +347,7 @@ export default function Dealers() {
                             <button
                               type="button"
                               onClick={() => setSelectedDealer(dealer)}
-                              className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 hover:text-gray-900"
+                              className="text-xs font-medium text-blue-500 hover:text-blue-600 hover:underline transition-colors"
                             >
                               View
                             </button>
@@ -393,7 +393,7 @@ export default function Dealers() {
                             <span className="font-mono">{dealer.total_acres} Ac</span>
                           </div>
                         </div>
-                        <span className="btn-secondary !py-1 !px-2.5 text-xs font-medium text-gray-700 shrink-0">
+                        <span className="text-xs font-medium text-blue-500 shrink-0">
                           View
                         </span>
                       </div>
