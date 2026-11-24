@@ -224,8 +224,8 @@ export default function Clients() {
                       <th>Area / Village</th>
                       <th>Extent</th>
                       <th>Tanks</th>
-                      <th>Technical Executive</th>
                       <th>Dealer</th>
+                      <th>Technical Executive</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -243,8 +243,8 @@ export default function Clients() {
                         <td className="text-gray-600">{[c.village, c.area].filter(Boolean).join(', ') || c.city || '—'}</td>
                         <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>
                         <td className="text-gray-600">{c.number_of_tanks ? `${c.number_of_tanks}` : '—'}</td>
-                        <td className="text-gray-600">{c.salesperson_name || '—'}</td>
                         <td className="text-gray-600">{c.dealer_name || '—'}</td>
+                        <td className="text-gray-600">{c.salesperson_name || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
