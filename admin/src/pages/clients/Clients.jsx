@@ -319,7 +319,7 @@ export default function Clients() {
                       <th>Extent</th>
                       <th>Tanks</th>
                       <th>Technical Executive</th>
-                      <th>Status</th>
+                      <th>Dealer</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -338,7 +338,7 @@ export default function Clients() {
                         <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>
                         <td className="text-gray-600">{c.number_of_tanks ? `${c.number_of_tanks}` : '—'}</td>
                         <td className="text-gray-600">{c.salesperson_name || '—'}</td>
-                        <td><Badge color={c.status === 'active' ? 'green' : c.status === 'forcely_closed' ? 'amber' : 'red'}>{c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}</Badge></td>
+                        <td className="text-gray-600">{c.dealer_name || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -359,9 +359,13 @@ export default function Clients() {
                           {c.number_of_tanks ? ` · ${c.number_of_tanks} Tanks` : ''}
                         </p>
                       </div>
-                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <Badge color={c.status === 'active' ? 'green' : c.status === 'forcely_closed' ? 'amber' : 'red'}>{c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}</Badge>
-                      </div>
+                      {c.dealer_name && (
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0 text-right">
+                          <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                            {c.dealer_name}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {c.salesperson_name && <p className="text-xs text-blue-600 mt-2">👤 {c.salesperson_name}</p>}
                   </Link>

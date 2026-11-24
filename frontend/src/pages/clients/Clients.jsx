@@ -225,8 +225,7 @@ export default function Clients() {
                       <th>Extent</th>
                       <th>Tanks</th>
                       <th>Technical Executive</th>
-                      <th>Status</th>
-                      <th></th>
+                      <th>Dealer</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -245,8 +244,7 @@ export default function Clients() {
                         <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>
                         <td className="text-gray-600">{c.number_of_tanks ? `${c.number_of_tanks}` : '—'}</td>
                         <td className="text-gray-600">{c.salesperson_name || '—'}</td>
-                        <td><Badge color={c.status === 'active' ? 'green' : c.status === 'forcely_closed' ? 'amber' : 'red'}>{c.status === 'forcely_closed' ? 'Forcely Closed' : c.status}</Badge></td>
-                        <td><Link to={`/clients/${c.id}`} className="text-blue-600 text-sm hover:underline">View</Link></td>
+                        <td className="text-gray-600">{c.dealer_name || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -153,6 +153,9 @@ const listClients = async (req, res) => {
   const { where, replacements } = buildClientWhere(req.query, req.user.id, req.user.role);
 
   try {
+    const docCols = await getPondDocCols();
+    const pondClientMatch = docCols.hasFarmerId ? '(p.client_id = c.id OR p.farmer_id = c.id)' : 'p.client_id = c.id';
+
     const [[{ total }]] = await sequelize.query(
       `SELECT COUNT(*) as total FROM clients c WHERE ${where}`,
       { replacements }
@@ -164,7 +167,15 @@ const listClients = async (req, res) => {
               c.area, c.village, c.farm_extent_acres, c.number_of_tanks, c.water_source,
               c.client_type, c.status, c.created_at,
               c.assigned_salesperson_id, c.assigned_manager_id, c.created_by,
-              sp.full_name as salesperson_name, m.full_name as manager_name
+              sp.full_name as salesperson_name, m.full_name as manager_name,
+              (
+                SELECT GROUP_CONCAT(DISTINCT TRIM(p.dealer_name) SEPARATOR ', ')
+                FROM ponds p
+                WHERE ${pondClientMatch}
+                  AND p.deleted_at IS NULL
+                  AND p.dealer_name IS NOT NULL
+                  AND TRIM(p.dealer_name) != ''
+              ) as dealer_name
        FROM clients c
        LEFT JOIN users sp ON c.assigned_salesperson_id = sp.id AND sp.status = 'active'
        LEFT JOIN users m ON c.assigned_manager_id = m.id AND m.status = 'active'
