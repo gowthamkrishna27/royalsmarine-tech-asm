@@ -326,12 +326,18 @@ export default function Clients() {
                     {(data?.data || []).map(c => (
                       <tr key={c.id}>
                         <td className="font-medium text-gray-900">
-                          <Link
-                            to={`/clients/${c.id}`}
-                            className="text-gray-900 hover:underline"
-                          >
-                            {c.company_name}
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                              title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
+                            />
+                            <Link
+                              to={`/clients/${c.id}`}
+                              className="text-gray-900 hover:underline"
+                            >
+                              {c.company_name}
+                            </Link>
+                          </div>
                         </td>
                         <td className="text-gray-600">{c.mobile || '—'}</td>
                         <td className="text-gray-600">{[c.village, c.area].filter(Boolean).join(', ') || c.city || '—'}</td>
@@ -351,7 +357,13 @@ export default function Clients() {
                   <Link to={`/clients/${c.id}`} key={c.id} className="block px-4 py-4 hover:bg-gray-50 active:bg-gray-100">
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{c.company_name}</p>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                            title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
+                          />
+                          <p className="font-semibold text-gray-900 truncate">{c.company_name}</p>
+                        </div>
                         <p className="text-sm text-gray-600 mt-0.5">{c.mobile || ''}</p>
                         <p className="text-xs text-gray-400 mt-1">
                           {[c.village, c.area, c.city].filter(Boolean).join(', ')}
