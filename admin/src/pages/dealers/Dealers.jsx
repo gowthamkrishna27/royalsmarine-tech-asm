@@ -29,52 +29,50 @@ export default function Dealers() {
     queryFn: () => clientService.getDealers().then((r) => r.data.data || []),
   });
 
-  // Extract all distinct regions across dealers
+  // Extract all distinct regions across dealers and their farmers
   const regions = useMemo(() => {
     const set = new Set();
     dealers.forEach((d) => {
-      (d.regions || []).forEach((r) => r && set.add(r));
-      (d.districts || []).forEach((dist) => dist && set.add(dist));
+      (d.regions || []).forEach((r) => r && set.add(String(r).trim()));
+      (d.districts || []).forEach((dist) => dist && set.add(String(dist).trim()));
+      (d.farmers || []).forEach((f) => {
+        if (f.region) set.add(String(f.region).trim());
+        if (f.district) set.add(String(f.district).trim());
+      });
     });
-    return Array.from(set).sort();
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [dealers]);
 
-  // Extract distinct areas across dealers (scoped to region if selected)
+  // Extract distinct areas across dealers (strictly scoped to region if selected)
   const areas = useMemo(() => {
     const set = new Set();
-    dealers.forEach((d) => {
-      const matchRegion = !regionFilter ||
-        d.regions?.some((r) => r.toLowerCase() === regionFilter.toLowerCase()) ||
-        d.districts?.some((dist) => dist.toLowerCase() === regionFilter.toLowerCase());
+    const rLower = (regionFilter || '').trim().toLowerCase();
 
-      if (matchRegion) {
-        (d.areas || []).forEach((a) => a && set.add(a));
-        (d.villages || []).forEach((v) => v && set.add(v));
+    dealers.forEach((d) => {
+      (d.farmers || []).forEach((f) => {
+        const farmerRegion = (f.region || f.district || '').trim().toLowerCase();
+        const dealerRegionMatches =
+          d.regions?.some((r) => r?.toLowerCase().trim() === rLower) ||
+          d.districts?.some((dist) => dist?.toLowerCase().trim() === rLower);
+
+        // If no region filter is chosen, OR the farmer belongs to this region, OR dealer belongs to this region
+        if (!rLower || farmerRegion === rLower || (!farmerRegion && dealerRegionMatches)) {
+          const a = (f.area || f.village || f.mandal || '').trim();
+          if (a) set.add(a);
+          if (f.village && f.village.trim()) set.add(f.village.trim());
+          if (f.area && f.area.trim()) set.add(f.area.trim());
+        }
+      });
+
+      // If no region filter, also include dealer top-level areas/villages
+      if (!rLower) {
+        (d.areas || []).forEach((a) => a && set.add(String(a).trim()));
+        (d.villages || []).forEach((v) => v && set.add(String(v).trim()));
       }
     });
-    return Array.from(set).sort();
+
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [dealers, regionFilter]);
-
-  // High-level KPI summary
-  const summary = useMemo(() => {
-    const totalDealers = dealers.length;
-    let totalFarmers = 0;
-    let totalTanks = 0;
-    let totalAcres = 0;
-
-    dealers.forEach((d) => {
-      totalFarmers += Number(d.farmer_count || 0);
-      totalTanks += Number(d.tank_count || 0);
-      totalAcres += Number(d.total_acres || 0);
-    });
-
-    return {
-      totalDealers,
-      totalFarmers,
-      totalTanks,
-      totalAcres: totalAcres.toFixed(1),
-    };
-  }, [dealers]);
 
   // Handle region change (resets area filter if it no longer applies)
   const handleRegionChange = (newRegion) => {
@@ -108,21 +106,64 @@ export default function Dealers() {
     }
 
     if (regionFilter) {
-      const rLower = regionFilter.toLowerCase();
+      const rLower = regionFilter.toLowerCase().trim();
       result = result.filter(
         (d) =>
-          d.regions?.some((r) => r.toLowerCase() === rLower) ||
-          d.districts?.some((dist) => dist.toLowerCase() === rLower)
+          d.regions?.some((r) => r?.toLowerCase().trim() === rLower) ||
+          d.districts?.some((dist) => dist?.toLowerCase().trim() === rLower) ||
+          d.farmers?.some((f) => (f.region || f.district || '').toLowerCase().trim() === rLower)
       );
     }
 
     if (areaFilter) {
-      const aLower = areaFilter.toLowerCase();
+      const aLower = areaFilter.toLowerCase().trim();
       result = result.filter(
         (d) =>
-          d.areas?.some((a) => a.toLowerCase() === aLower) ||
-          d.villages?.some((v) => v.toLowerCase() === aLower)
+          d.areas?.some((a) => a?.toLowerCase().trim() === aLower) ||
+          d.villages?.some((v) => v?.toLowerCase().trim() === aLower) ||
+          d.farmers?.some(
+            (f) =>
+              (f.area && f.area.toLowerCase().trim() === aLower) ||
+              (f.village && f.village.toLowerCase().trim() === aLower) ||
+              (f.mandal && f.mandal.toLowerCase().trim() === aLower)
+          )
       );
+    }
+
+    // When region or area filter is selected, recalculate dealer counts specifically for that region/area
+    if (regionFilter || areaFilter) {
+      const rLower = (regionFilter || '').toLowerCase().trim();
+      const aLower = (areaFilter || '').toLowerCase().trim();
+
+      result = result.map((d) => {
+        const scopedFarmers = (d.farmers || []).filter((f) => {
+          const matchRegion = !rLower || (f.region || f.district || '').toLowerCase().trim() === rLower;
+          const matchArea =
+            !aLower ||
+            (f.area && f.area.toLowerCase().trim() === aLower) ||
+            (f.village && f.village.toLowerCase().trim() === aLower) ||
+            (f.mandal && f.mandal.toLowerCase().trim() === aLower);
+          return matchRegion && matchArea;
+        });
+
+        if (scopedFarmers.length > 0) {
+          let scopedTanks = 0;
+          let scopedAcres = 0;
+          scopedFarmers.forEach((f) => {
+            scopedTanks += (f.tanks || []).length;
+            scopedAcres += Number(f.total_acres || 0);
+          });
+
+          return {
+            ...d,
+            farmer_count: scopedFarmers.length,
+            tank_count: scopedTanks || d.tank_count,
+            total_acres: scopedAcres > 0 ? parseFloat(scopedAcres.toFixed(1)) : d.total_acres,
+            scopedFarmers,
+          };
+        }
+        return d;
+      });
     }
 
     result = [...result].sort((a, b) => {
@@ -135,6 +176,28 @@ export default function Dealers() {
 
     return result;
   }, [dealers, search, regionFilter, areaFilter, sortBy]);
+
+  // High-level KPI summary (reflects filtered results)
+  const summary = useMemo(() => {
+    const list = filteredDealers;
+    const totalDealers = list.length;
+    let totalFarmers = 0;
+    let totalTanks = 0;
+    let totalAcres = 0;
+
+    list.forEach((d) => {
+      totalFarmers += Number(d.farmer_count || 0);
+      totalTanks += Number(d.tank_count || 0);
+      totalAcres += Number(d.total_acres || 0);
+    });
+
+    return {
+      totalDealers,
+      totalFarmers,
+      totalTanks,
+      totalAcres: totalAcres.toFixed(1),
+    };
+  }, [filteredDealers]);
 
   const handleReset = () => {
     setSearch('');
@@ -410,6 +473,8 @@ export default function Dealers() {
       {selectedDealer && (
         <DealerDetailsModal
           dealer={selectedDealer}
+          activeRegion={regionFilter}
+          activeArea={areaFilter}
           onClose={() => setSelectedDealer(null)}
         />
       )}
@@ -417,9 +482,24 @@ export default function Dealers() {
   );
 }
 
-function DealerDetailsModal({ dealer, onClose }) {
-  const farmers = dealer.farmers || [];
+function DealerDetailsModal({ dealer, activeRegion = '', activeArea = '', onClose }) {
+  const allFarmers = dealer.farmers || [];
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterByArea, setFilterByArea] = useState(Boolean(activeArea));
+
+  const farmers = useMemo(() => {
+    if (filterByArea && activeArea) {
+      const aLower = activeArea.toLowerCase().trim();
+      const scoped = allFarmers.filter(
+        (f) =>
+          (f.area && f.area.toLowerCase().trim() === aLower) ||
+          (f.village && f.village.toLowerCase().trim() === aLower) ||
+          (f.mandal && f.mandal.toLowerCase().trim() === aLower)
+      );
+      if (scoped.length > 0) return scoped;
+    }
+    return allFarmers;
+  }, [allFarmers, filterByArea, activeArea]);
 
   const filteredFarmers = useMemo(() => {
     if (!searchTerm.trim()) return farmers;
@@ -501,6 +581,20 @@ function DealerDetailsModal({ dealer, onClose }) {
               </button>
             )}
           </div>
+          {activeArea && allFarmers.length > farmers.length && (
+            <div className="flex items-center justify-between text-xs text-gray-500 mt-2 px-1">
+              <span>
+                Showing <strong>{farmers.length}</strong> {farmers.length === 1 ? 'farmer' : 'farmers'} in <strong>{activeArea}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setFilterByArea(!filterByArea)}
+                className="text-xs text-blue-500 hover:text-blue-600 hover:underline font-medium"
+              >
+                {filterByArea ? `Show all (${allFarmers.length})` : `Show only ${activeArea}`}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Farmers & Tanks List */}
