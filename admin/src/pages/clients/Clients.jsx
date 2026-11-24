@@ -329,7 +329,7 @@ export default function Clients() {
                         <td className="font-medium text-gray-900">
                           <Link
                             to={`/clients/${c.id}`}
-                            className="font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                            className="text-gray-900 hover:underline"
                           >
                             {c.company_name}
                           </Link>
