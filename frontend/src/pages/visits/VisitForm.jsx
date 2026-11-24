@@ -909,7 +909,7 @@ export default function VisitForm() {
                   />
                 </div>
                 <div>
-                  <label className="label text-[11px] mb-1">Salinity (ppt)<span className="text-red-500">*</span></label>
+                  <label className="label text-[11px] mb-1">Salinity (ppt)</label>
                   <input
                     type="number"
                     step="0.1"
@@ -920,7 +920,7 @@ export default function VisitForm() {
                   />
                 </div>
                 <div>
-                  <label className="label text-[11px] mb-1">pH <span className="text-red-500">*</span></label>
+                  <label className="label text-[11px] mb-1">pH</label>
                   <input
                     type="number"
                     step="0.01"
@@ -951,7 +951,7 @@ export default function VisitForm() {
                   />
                 </div>
                 <div>
-                  <label className="label text-[11px] mb-1">Ammonia (ppm)<span className="text-red-500">*</span></label>
+                  <label className="label text-[11px] mb-1">Ammonia (ppm)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -962,7 +962,7 @@ export default function VisitForm() {
                   />
                 </div>
                 <div>
-                  <label className="label text-[11px] mb-1">Nitrite (ppm)<span className="text-red-500">*</span></label>
+                  <label className="label text-[11px] mb-1">Nitrite (ppm)</label>
                   <input
                     type="number"
                     step="0.01"

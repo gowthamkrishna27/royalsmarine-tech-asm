@@ -670,20 +670,6 @@ export default function VisitForm() {
   const onSubmit = async (data) => {
     setLoading(true);
 
-    // Water quality mandatory field validation
-    if (showWaterQuality) {
-      const missing = [];
-      if (!waterQuality.ph) missing.push('pH');
-      if (!waterQuality.ammonia) missing.push('Ammonia');
-      if (!waterQuality.salinity) missing.push('Salinity');
-      if (!waterQuality.nitrite) missing.push('Nitrite');
-      if (missing.length > 0) {
-        toast.error(`Water quality fields are required: ${missing.join(', ')}`);
-        setLoading(false);
-        return;
-      }
-    }
-
     // Filter active partial harvests that actually have input entered
     const activePartialHarvests = partialHarvests.filter(ph => {
       return ph && (

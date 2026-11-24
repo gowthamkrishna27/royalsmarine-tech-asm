@@ -171,18 +171,6 @@ const createVisit = async (req, res) => {
     const uuid = uuidv4();
     const formattedGpsCapturedAt = gps_captured_at ? new Date(gps_captured_at).toISOString().slice(0, 19).replace('T', ' ') : null;
 
-    // Water quality mandatory field validation
-    if (meeting_type === 'water_quality' || meeting_type === 'all') {
-      const wq = water_quality || {};
-      const missing = [];
-      if (!wq.ph) missing.push('pH');
-      if (!wq.ammonia) missing.push('Ammonia');
-      if (!wq.salinity) missing.push('Salinity');
-      if (!wq.nitrite) missing.push('Nitrite');
-      if (missing.length > 0) {
-        return sendError(res, `Water quality fields are required: ${missing.join(', ')}`, 400);
-      }
-    }
     // Harvest details validations (separated for partial_harvest, final_harvest, and harvest_details)
     if (meeting_type === 'partial_harvest') {
       const hd = harvest_details || {};
