@@ -235,8 +235,8 @@ export default function Clients() {
             value={region}
             onChange={(e) => handleRegionChange(e.target.value)}
             className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${region
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
               }`}
           >
             <option value="">All Regions</option>
@@ -252,8 +252,8 @@ export default function Clients() {
             value={asmId}
             onChange={(e) => handleAsmChange(e.target.value)}
             className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${asmId
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
               }`}
           >
             <option value="">All ASMs</option>
@@ -269,8 +269,8 @@ export default function Clients() {
             value={techId}
             onChange={(e) => handleTechChange(e.target.value)}
             className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[115px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${techId
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
               }`}
           >
             <option value="">All Techs</option>
@@ -289,8 +289,8 @@ export default function Clients() {
               setPage(1);
             }}
             className={`h-[38px] px-2.5 py-1.5 text-xs font-medium rounded-lg border transition cursor-pointer flex-1 min-w-[110px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 ${status
-                ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
-                : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+              ? 'bg-blue-50/60 text-blue-900 border-blue-300 font-semibold'
+              : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
               }`}
           >
             <option value="">All Status</option>
@@ -310,78 +310,128 @@ export default function Clients() {
             <>
               {/* Desktop Table */}
               <div className="hidden sm:block table-container">
-                <table className="table">
+                <table className="table min-w-[760px]">
                   <thead>
                     <tr>
-                      <th>Farmer Name</th>
-                      <th>Phone</th>
-                      <th>Area / Village</th>
-                      <th>Extent</th>
-                      <th>Tanks</th>
-                      <th>Dealer</th>
-                      <th>Technical Executive</th>
+                      <th className="py-2.5 px-3">Farmer</th>
+                      <th className="py-2.5 px-3">Phone</th>
+                      <th className="py-2.5 px-3">Location</th>
+                      <th className="py-2.5 px-3">Extent</th>
+                      <th className="py-2.5 px-3">Tanks</th>
+                      <th className="py-2.5 px-3">Dealer</th>
+                      <th className="py-2.5 px-3">Technitians</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(data?.data || []).map(c => (
-                      <tr key={c.id}>
-                        <td className="font-medium text-gray-900">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                              title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
-                            />
-                            <Link
-                              to={`/clients/${c.id}`}
-                              className="text-gray-900 hover:underline"
-                            >
-                              {c.company_name}
-                            </Link>
-                          </div>
-                        </td>
-                        <td className="text-gray-600">{c.mobile || '—'}</td>
-                        <td className="text-gray-600">{[c.village, c.area].filter(Boolean).join(', ') || c.city || '—'}</td>
-                        <td className="text-gray-600">{c.farm_extent_acres ? `${c.farm_extent_acres} Ac` : '—'}</td>
-                        <td className="text-gray-600">{c.number_of_tanks ? `${c.number_of_tanks}` : '—'}</td>
-                        <td className="text-gray-600">{c.dealer_name || '—'}</td>
-                        <td className="text-gray-600">{c.salesperson_name || '—'}</td>
-                      </tr>
-                    ))}
+                    {(data?.data || []).map(c => {
+                      const loc = [
+                        c.village,
+                        c.area && c.area.toLowerCase() !== (c.village || '').toLowerCase() ? c.area : null
+                      ].filter(Boolean).join(', ') || c.city || '—';
+
+                      return (
+                        <tr key={c.id} className="hover:bg-blue-50/20 transition-colors">
+                          <td className="py-2.5 px-3 font-medium text-gray-900 max-w-[210px]">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
+                              />
+                              <Link
+                                to={`/clients/${c.id}`}
+                                className="text-gray-900 hover:text-blue-600 hover:underline truncate block"
+                                title={c.company_name}
+                              >
+                                {c.company_name}
+                              </Link>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-500 whitespace-nowrap font-mono">
+                            {c.mobile ? (
+                              <a href={`tel:${c.mobile}`} className="hover:text-blue-600 hover:underline">
+                                {c.mobile}
+                              </a>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-600 max-w-[150px] truncate" title={loc}>
+                            {loc}
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-700 whitespace-nowrap">
+                            {c.farm_extent_acres ? (
+                              <span>{c.farm_extent_acres} <span className="text-[10px] text-gray-400">Ac</span></span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            {c.number_of_tanks ? (
+                              <span className="inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700">
+                                {c.number_of_tanks}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-600 max-w-[160px] truncate" title={c.dealer_name || ''}>
+                            {c.dealer_name || <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-600 max-w-[150px] truncate" title={c.salesperson_name || ''}>
+                            {c.salesperson_name || <span className="text-gray-300">—</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
 
               {/* Mobile Cards */}
               <div className="sm:hidden divide-y divide-gray-100">
-                {(data?.data || []).map(c => (
-                  <Link to={`/clients/${c.id}`} key={c.id} className="block px-4 py-4 hover:bg-gray-50 active:bg-gray-100">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                            title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
-                          />
-                          <p className="font-semibold text-gray-900 truncate">{c.company_name}</p>
+                {(data?.data || []).map(c => {
+                  const loc = [
+                    c.village,
+                    c.area && c.area.toLowerCase() !== (c.village || '').toLowerCase() ? c.area : null
+                  ].filter(Boolean).join(', ') || c.city || '';
+
+                  return (
+                    <Link to={`/clients/${c.id}`} key={c.id} className="block px-3.5 py-3 hover:bg-gray-50 active:bg-gray-100 transition">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${c.status === 'active' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                              title={c.status === 'active' ? 'Active' : (c.status === 'forcely_closed' ? 'Forcely Closed' : 'Inactive')}
+                            />
+                            <p className="font-semibold text-sm text-gray-900 truncate">{c.company_name}</p>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                            {c.mobile && <span className="font-mono">{c.mobile}</span>}
+                            {c.mobile && loc && <span className="text-gray-300">·</span>}
+                            {loc && <span className="truncate">{loc}</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-500">
+                            {c.farm_extent_acres && <span>{c.farm_extent_acres} Ac</span>}
+                            {c.number_of_tanks && (
+                              <span className="bg-gray-100 px-1.5 py-0.5 rounded font-medium text-gray-700">
+                                {c.number_of_tanks} {c.number_of_tanks === 1 ? 'Tank' : 'Tanks'}
+                              </span>
+                            )}
+                            {c.salesperson_name && (
+                              <span className="text-gray-400 truncate">👤 {c.salesperson_name}</span>
+                            )}
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 mt-0.5">{c.mobile || ''}</p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {[c.village, c.area, c.city].filter(Boolean).join(', ')}
-                          {c.farm_extent_acres ? ` · ${c.farm_extent_acres} Acres` : ''}
-                          {c.number_of_tanks ? ` · ${c.number_of_tanks} Tanks` : ''}
-                        </p>
-                      </div>
-                      {c.dealer_name && (
-                        <div className="flex flex-col items-end gap-1 flex-shrink-0 text-right">
-                          <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                        {c.dealer_name && (
+                          <span className="text-[11px] font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded shrink-0 max-w-[120px] truncate" title={c.dealer_name}>
                             {c.dealer_name}
                           </span>
-                        </div>
-                      )}
-                    </div>
-                    {c.salesperson_name && <p className="text-xs text-blue-600 mt-2">👤 {c.salesperson_name}</p>}
-                  </Link>
-                ))}
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
 
               <Pagination meta={data.pagination} onPageChange={setPage} />
