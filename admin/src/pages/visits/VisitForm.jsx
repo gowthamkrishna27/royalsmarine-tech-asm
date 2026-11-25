@@ -494,25 +494,20 @@ export default function VisitForm() {
       const copy = [...prev];
       const updated = { ...copy[index], [field]: value };
 
-      if (field === 'count' && value) {
+      if (field === 'count') {
         const countVal = parseFloat(value);
-        if (!isNaN(countVal) && countVal > 0 && (!updated.abw || updated.abw === '')) {
+        if (!isNaN(countVal) && countVal > 0) {
           updated.abw = (1000 / countVal).toFixed(2);
-        }
-      }
-      if (field === 'abw' && value) {
-        const abwVal = parseFloat(value);
-        if (!isNaN(abwVal) && abwVal > 0 && (!updated.count || updated.count === '')) {
-          updated.count = (1000 / abwVal).toFixed(1).replace(/\.0$/, '');
+        } else {
+          updated.abw = '';
         }
       }
 
-      if (field === 'harvested_quantity' || field === 'abw' || field === 'count') {
-        const qty = parseFloat(field === 'harvested_quantity' ? value : updated.harvested_quantity);
-        const abwVal = parseFloat(field === 'abw' ? value : updated.abw);
-        if (!isNaN(qty) && !isNaN(abwVal) && qty > 0 && abwVal > 0) {
-          updated.harvested_biomass = ((qty * abwVal) / 1000).toFixed(2);
-        }
+      // In partial harvest, quantity is entered in kg, so biomass is synchronized in kg
+      if (field === 'harvested_quantity') {
+        updated.harvested_biomass = value;
+      } else if (field === 'harvested_biomass') {
+        updated.harvested_quantity = value;
       }
 
       copy[index] = updated;
@@ -534,16 +529,12 @@ export default function VisitForm() {
     if (typeof isLocked !== 'undefined' && isLocked) return;
     setFinalHarvest(prev => {
       const updated = { ...prev, [field]: value };
-      if (field === 'count' && value) {
+      if (field === 'count') {
         const countVal = parseFloat(value);
-        if (!isNaN(countVal) && countVal > 0 && (!updated.abw || updated.abw === '')) {
+        if (!isNaN(countVal) && countVal > 0) {
           updated.abw = (1000 / countVal).toFixed(2);
-        }
-      }
-      if (field === 'abw' && value) {
-        const abwVal = parseFloat(value);
-        if (!isNaN(abwVal) && abwVal > 0 && (!updated.count || updated.count === '')) {
-          updated.count = (1000 / abwVal).toFixed(1).replace(/\.0$/, '');
+        } else {
+          updated.abw = '';
         }
       }
       if (field === 'harvested_quantity') {
@@ -1389,10 +1380,10 @@ export default function VisitForm() {
                         <input
                           type="number"
                           step="0.01"
+                          readOnly
                           value={ph.abw ?? ''}
-                          onChange={e => updatePartialHarvest(idx, 'abw', e.target.value)}
-                          placeholder="ABW (g)"
-                          className="input text-xs py-1 w-full"
+                          placeholder="Auto (1000/count)"
+                          className="input text-xs py-1 w-full bg-gray-100 text-gray-700 cursor-not-allowed font-mono"
                         />
                       </div>
                       <div>
@@ -1476,10 +1467,10 @@ export default function VisitForm() {
                     <input
                       type="number"
                       step="0.01"
+                      readOnly
                       value={finalHarvest.abw ?? ''}
-                      onChange={e => updateFinalHarvest('abw', e.target.value)}
-                      placeholder="ABW (g)"
-                      className="input text-xs py-1 w-full"
+                      placeholder="Auto (1000/count)"
+                      className="input text-xs py-1 w-full bg-gray-100 text-gray-700 cursor-not-allowed font-mono"
                     />
                   </div>
                   <div>
