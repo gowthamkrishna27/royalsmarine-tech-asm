@@ -912,42 +912,62 @@ export default function Reports() {
                         <th className="py-2.5">Farmer</th>
                         <th className="py-2.5">Title</th>
                         <th className="py-2.5">Technical Executive</th>
+                        <th className="py-2.5">Done By</th>
                         <th className="py-2.5">Priority</th>
                         <th className="py-2.5 text-right">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {detailedFollowups.map((f) => (
-                        <tr key={f.id} className="hover:bg-gray-50/70 transition">
-                          <td className="py-2.5 font-mono text-gray-600">
-                            {f.followup_date || '—'}
-                          </td>
-                          <td className="py-2.5 font-medium text-gray-900">
-                            {f.company_name || f.client_name || `Farmer #${f.client_id}`}
-                          </td>
-                          <td className="py-2.5 text-gray-700">
-                            {f.title || '—'}
-                          </td>
-                          <td className="py-2.5 text-gray-800 font-medium">
-                            {f.assigned_salesperson_name || f.salesperson_name || '—'}
-                          </td>
-                          <td className="py-2.5 capitalize text-gray-500">
-                            {f.priority || 'medium'}
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${f.status === 'completed'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : f.status === 'overdue'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}
-                            >
-                              {f.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {detailedFollowups.map((f) => {
+                        const isCompleted = String(f.status || '').toLowerCase() === 'completed' || Boolean(f.completed_date);
+                        const noteMatch = typeof f.completion_notes === 'string' && f.completion_notes.match(/completed by ([^,\n\r]+)/i);
+                        const extractedNoteUser = noteMatch ? noteMatch[1].trim() : null;
+                        const doneByUser = f.completed_by_name || (isCompleted ? (extractedNoteUser || f.salesperson_name || f.assigned_salesperson_name) : null);
+                        return (
+                          <tr key={f.id} className="hover:bg-gray-50/70 transition">
+                            <td className="py-2.5 font-mono text-gray-600">
+                              {f.followup_date || '—'}
+                            </td>
+                            <td className="py-2.5 font-medium text-gray-900">
+                              {f.company_name || f.client_name || `Farmer #${f.client_id}`}
+                            </td>
+                            <td className="py-2.5 text-gray-700">
+                              {f.title || '—'}
+                            </td>
+                            <td className="py-2.5 text-gray-800 font-medium">
+                              {f.assigned_salesperson_name || f.salesperson_name || '—'}
+                            </td>
+                            <td className="py-2.5 text-gray-800">
+                              {doneByUser ? (
+                                <span className="font-medium text-emerald-700">
+                                  {doneByUser}
+                                </span>
+                              ) : isCompleted ? (
+                                <span className="font-medium text-emerald-700">
+                                  {f.salesperson_name || 'Completed'}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 capitalize text-gray-500">
+                              {f.priority || 'medium'}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <span
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ${isCompleted
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : String(f.status || '').toLowerCase() === 'overdue'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}
+                              >
+                                {f.status}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -810,7 +810,14 @@ export default function Followups() {
                           {/* Status */}
                           <td className="whitespace-nowrap text-xs font-medium py-3 px-4">
                             {f.status === 'completed' ? (
-                              <Badge variant="success">Completed</Badge>
+                              <div>
+                                <Badge variant="success">Completed</Badge>
+                                {(f.completed_by_name || f.salesperson_name) && (
+                                  <span className="block text-[11px] text-gray-500 font-normal mt-0.5">
+                                    by {f.completed_by_name || f.salesperson_name}
+                                  </span>
+                                )}
+                              </div>
                             ) : f.status === 'cancelled' ? (
                               <Badge variant="gray">Cancelled</Badge>
                             ) : isOverdue ? (

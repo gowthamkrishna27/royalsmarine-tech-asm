@@ -957,6 +957,7 @@ const exportReport = async (req, res) => {
         'District',
         'Followup Title',
         'Technical Executive',
+        'Done By',
         'Priority',
         'Status',
         'Remarks / Notes'
@@ -1023,11 +1024,23 @@ const exportReport = async (req, res) => {
         `SELECT f.id, f.title, f.followup_date, f.priority, f.status, f.remarks, f.completion_notes,
                 COALESCE(c.company_name, c.contact_person, '—') as company_name,
                 c.mobile as farmer_mobile, c.village, c.district,
-                COALESCE(sp.full_name, '—') as salesperson_name
+                COALESCE(sp.full_name, '—') as salesperson_name,
+                COALESCE(
+                  admin_user.full_name,
+                  v_sp.full_name,
+                  v_cb.full_name,
+                  CASE WHEN LOWER(f.status) = 'completed' THEN sp.full_name ELSE NULL END,
+                  CASE WHEN LOWER(f.status) = 'completed' THEN cr.full_name ELSE NULL END
+                ) as completed_by_name
          FROM followups f
          LEFT JOIN clients c ON f.client_id = c.id
          LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
          LEFT JOIN users m ON sp.manager_id = m.id
+         LEFT JOIN users admin_user ON f.completed_by = admin_user.id
+         LEFT JOIN visits v ON f.visit_id = v.id
+         LEFT JOIN users v_sp ON v.salesperson_id = v_sp.id
+         LEFT JOIN users v_cb ON v.created_by = v_cb.id
+         LEFT JOIN users cr ON f.created_by = cr.id
          WHERE ${where}
          ORDER BY f.followup_date DESC, f.id DESC`,
         { replacements: fuReplacements }
@@ -1041,6 +1054,7 @@ const exportReport = async (req, res) => {
         r.district || '—',
         r.title || '—',
         r.salesperson_name,
+        r.completed_by_name || (r.status === 'completed' ? r.salesperson_name : '—'),
         (r.priority || 'medium').toUpperCase(),
         (r.status || 'pending').toUpperCase(),
         r.completion_notes || r.remarks || '—'

@@ -22,6 +22,9 @@ async function ensureFollowupCols() {
     if (!names.includes('test_week')) {
       await sequelize.query('ALTER TABLE followups ADD COLUMN test_week VARCHAR(20) NULL;');
     }
+    if (!names.includes('completed_by')) {
+      await sequelize.query('ALTER TABLE followups ADD COLUMN completed_by INT NULL;');
+    }
     followupColsChecked = true;
   } catch (e) {
     console.warn('ensureFollowupCols note:', e.message);
@@ -333,13 +336,23 @@ const listFollowups = async (req, res) => {
               c.village, c.village as client_village, c.district, c.district as client_district,
               sp.id as salesperson_id, sp.full_name as salesperson_name, sp.mobile as salesperson_mobile,
               r.name as salesperson_role, r.display_name as salesperson_role_name,
-              admin_user.full_name as completed_by_name,
+              COALESCE(
+                admin_user.full_name,
+                v_sp.full_name,
+                v_cb.full_name,
+                CASE WHEN LOWER(f.status) = 'completed' THEN sp.full_name ELSE NULL END,
+                CASE WHEN LOWER(f.status) = 'completed' THEN cr.full_name ELSE NULL END
+              ) as completed_by_name,
               DATEDIFF(CURDATE(), f.followup_date) as days_overdue
        FROM followups f
        LEFT JOIN clients c ON f.client_id = c.id
        LEFT JOIN users sp ON f.assigned_salesperson_id = sp.id
        LEFT JOIN roles r ON sp.role_id = r.id
        LEFT JOIN users admin_user ON f.completed_by = admin_user.id
+       LEFT JOIN visits v ON f.visit_id = v.id
+       LEFT JOIN users v_sp ON v.salesperson_id = v_sp.id
+       LEFT JOIN users v_cb ON v.created_by = v_cb.id
+       LEFT JOIN users cr ON f.created_by = cr.id
        LEFT JOIN ponds p ON f.tank_id = p.id
        WHERE ${where}
        ORDER BY 

@@ -280,9 +280,11 @@ const createVisit = async (req, res) => {
           await sequelize.query(
             `UPDATE followups 
              SET status = 'completed', completed_date = NOW(), updated_at = NOW(),
+                 completed_by = ?,
+                 visit_id = ?,
                  completion_notes = CONCAT('Completed via water test visit #', ?)
              WHERE tank_id = ? AND test_week = ? AND status IN ('pending', 'overdue') AND deleted_at IS NULL`,
-            { replacements: [visitId, tank_id, String(ywRow.yw)], transaction: t }
+            { replacements: [req.user.id, visitId, visitId, tank_id, String(ywRow.yw)], transaction: t }
           );
         }
       } catch (ywErr) {
