@@ -294,6 +294,7 @@ export default function Followups() {
   const urlStatus = searchParams.get('status');
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState(urlStatus !== null ? urlStatus : '');
+  const [region, setRegion] = useState('');
   const [asmId, setAsmId] = useState('');
   const [techId, setTechId] = useState('');
   const [date, setDate] = useState('');
@@ -312,35 +313,74 @@ export default function Followups() {
     }
   }, [searchParams]);
 
-  // Fetch filter metadata (ASMs, techs)
+  // Fetch filter metadata (regions, ASMs, techs)
   const { data: filterMeta } = useQuery({
     queryKey: ['visit-filters'],
     queryFn: () => visitApi.getFilters().then((r) => r.data.data),
     staleTime: 60000,
   });
 
+  const regionOptions = useMemo(() => {
+    return (filterMeta?.regions || []).map((r) => ({
+      value: r,
+      label: r,
+    }));
+  }, [filterMeta?.regions]);
+
   const asmOptions = useMemo(() => {
     const list = (filterMeta?.asms || []).filter((a) => (a.status ? a.status === 'active' : true));
-    return list.map((a) => ({
+    const filtered = region
+      ? list.filter((a) => (a.region || '').toLowerCase() === region.toLowerCase())
+      : list;
+    return filtered.map((a) => ({
       value: String(a.id),
-      label: a.name + (a.region ? ` (${a.region})` : ''),
+      label: a.name + (!region && a.region ? ` (${a.region})` : ''),
     }));
-  }, [filterMeta?.asms]);
+  }, [filterMeta?.asms, region]);
 
   const techOptions = useMemo(() => {
     let list = (filterMeta?.techs || []).filter((t) => (t.status ? t.status === 'active' : true));
     if (asmId) {
       list = list.filter((t) => String(t.manager_id) === String(asmId));
+    } else if (region) {
+      list = list.filter((t) => (t.region || '').toLowerCase() === region.toLowerCase());
     }
     return list.map((t) => ({
       value: String(t.id),
       label: t.name,
     }));
-  }, [filterMeta?.techs, asmId]);
+  }, [filterMeta?.techs, asmId, region]);
+
+  const handleRegionChange = (newRegion) => {
+    setRegion(newRegion);
+    setPage(1);
+
+    if (asmId && newRegion) {
+      const currentAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(asmId));
+      if (currentAsm && (currentAsm.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setAsmId('');
+        setTechId('');
+        return;
+      }
+    }
+    if (techId && newRegion) {
+      const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
+      if (currentTech && (currentTech.region || '').toLowerCase() !== newRegion.toLowerCase()) {
+        setTechId('');
+      }
+    }
+  };
 
   const handleAsmChange = (newAsmId) => {
     setAsmId(newAsmId);
     setPage(1);
+
+    if (newAsmId) {
+      const chosenAsm = (filterMeta?.asms || []).find((a) => String(a.id) === String(newAsmId));
+      if (chosenAsm?.region && !region) {
+        setRegion(chosenAsm.region);
+      }
+    }
 
     if (techId && newAsmId) {
       const currentTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(techId));
@@ -356,8 +396,13 @@ export default function Followups() {
 
     if (newTechId) {
       const chosenTech = (filterMeta?.techs || []).find((t) => String(t.id) === String(newTechId));
-      if (chosenTech && chosenTech.manager_id && !asmId) {
-        setAsmId(String(chosenTech.manager_id));
+      if (chosenTech) {
+        if (chosenTech.manager_id && !asmId) {
+          setAsmId(String(chosenTech.manager_id));
+        }
+        if (chosenTech.region && !region) {
+          setRegion(chosenTech.region);
+        }
       }
     }
   };
@@ -374,6 +419,7 @@ export default function Followups() {
   };
 
   const handleResetFilters = () => {
+    setRegion('');
     setAsmId('');
     setTechId('');
     setDate('');
@@ -382,17 +428,18 @@ export default function Followups() {
     setSearchParams({});
   };
 
-  const hasActiveFilters = Boolean(asmId || techId || date || status);
+  const hasActiveFilters = Boolean(region || asmId || techId || date || status);
 
   // Queries
   const { data, isLoading } = useQuery({
-    queryKey: ['followups', page, status, asmId, techId, date],
+    queryKey: ['followups', page, status, region, asmId, techId, date],
     queryFn: () =>
       followupApi
         .list({
           page,
           limit: 20,
           status: status || undefined,
+          region: region || undefined,
           asm_id: asmId || undefined,
           tech_id: techId || undefined,
           date: date || undefined,
@@ -401,10 +448,11 @@ export default function Followups() {
   });
 
   const { data: duesData } = useQuery({
-    queryKey: ['followups-dues', asmId, techId],
+    queryKey: ['followups-dues', region, asmId, techId],
     queryFn: () =>
       followupApi
         .dues({
+          region: region || undefined,
           asm_id: asmId || undefined,
           tech_id: techId || undefined,
         })
@@ -412,10 +460,11 @@ export default function Followups() {
   });
 
   const { data: overdueData } = useQuery({
-    queryKey: ['followups-overdue', asmId, techId],
+    queryKey: ['followups-overdue', region, asmId, techId],
     queryFn: () =>
       followupApi
         .overdue({
+          region: region || undefined,
           asm_id: asmId || undefined,
           tech_id: techId || undefined,
         })
@@ -423,10 +472,11 @@ export default function Followups() {
   });
 
   const { data: statsData } = useQuery({
-    queryKey: ['followups-stats', asmId, techId],
+    queryKey: ['followups-stats', region, asmId, techId],
     queryFn: () =>
       followupApi
         .stats({
+          region: region || undefined,
           asm_id: asmId || undefined,
           tech_id: techId || undefined,
         })
@@ -558,6 +608,20 @@ export default function Followups() {
       {/* Filter Toolbar */}
       <div className="bg-white rounded-xl border border-gray-200 p-2.5">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:items-center gap-2 w-full text-xs">
+          {/* Region select */}
+          <select
+            value={region}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="h-8 px-2.5 rounded-lg border border-gray-200 text-gray-700 bg-white hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-gray-400 w-full lg:flex-1 cursor-pointer"
+          >
+            <option value="">All Regions</option>
+            {regionOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+
           {/* ASM select */}
           <select
             value={asmId}
