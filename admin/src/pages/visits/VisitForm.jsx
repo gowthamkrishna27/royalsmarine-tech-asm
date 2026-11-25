@@ -16,6 +16,7 @@ const WATER_COLOUR_OPTIONS = [
   'Clear',
   'Turbid',
   'Golden Brown',
+  'Microcystis',
   'Other',
 ];
 
